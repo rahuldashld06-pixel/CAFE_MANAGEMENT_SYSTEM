@@ -1,0 +1,10 @@
+config.py
+.env
+__pycache__/
+*.pyc
+*.pyo
+static/uploads/*
+!static/uploads/branding/
+!static/uploads/branding/cafe_logo.png
+.venv/
+venv/

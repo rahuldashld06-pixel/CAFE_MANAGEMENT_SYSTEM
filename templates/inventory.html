@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Management · Cafe Manager{% endblock %}
+
+{% block content %}
+
+    <div class="page-header">
+        <div>
+            <h1><i class="bi bi-boxes"></i> Inventory Management</h1>
+            <p class="page-subtitle">Keep an eye on stock levels across the menu</p>
+        </div>
+
+        <div class="page-header__actions">
+            <a href="{{ url_for('home') }}" class="btn btn--ghost">
+                <i class="bi bi-arrow-left"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="toast-success">
+                    <i class="bi bi-check-circle-fill"></i> {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Inventory Table -->
+    <div class="panel">
+        <div class="table-wrap">
+            <table class="data-table">
+
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Food Name</th>
+                        <th>Category</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Minimum Stock</th>
+                        <th>Status</th>
+                        <th>Availability</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                {% for item in inventory %}
+                    <tr>
+                        <td>{{ item.inventory_id }}</td>
+                        <td class="cell-strong">{{ item.food_name }}</td>
+                        <td>{{ item.category_name }}</td>
+                        <td>₹{{ item.price }}</td>
+                        <td>{{ item.quantity }}</td>
+                        <td>{{ item.minimum_stock }}</td>
+
+                        <!-- Stock Status -->
+                        <td>
+                            {% if item.quantity == 0 %}
+                                <span class="badge badge--out-stock">
+                                    <i class="bi bi-x-octagon-fill"></i> OUT OF STOCK
+                                </span>
+                            {% elif item.quantity <= item.minimum_stock %}
+                                <span class="badge badge--low-stock">
+                                    <i class="bi bi-exclamation-triangle-fill"></i> LOW STOCK
+                                </span>
+                            {% else %}
+                                <span class="badge badge--in-stock">
+                                    <i class="bi bi-check-circle-fill"></i> IN STOCK
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Food Availability -->
+                        <td>
+                            {% if item.quantity == 0 %}
+                                <span class="badge badge--unavailable">
+                                    <i class="bi bi-x-circle-fill"></i> Unavailable
+                                </span>
+                            {% elif item.quantity <= item.minimum_stock %}
+                                <span class="badge badge--low-stock">
+                                    <i class="bi bi-exclamation-triangle-fill"></i> Low Stock
+                                </span>
+                            {% else %}
+                                <span class="badge badge--available">
+                                    <i class="bi bi-check-circle-fill"></i> Available
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Update -->
+                        <td class="cell-actions">
+                            <a class="btn btn--sm btn--edit"
+                               href="{{ url_for('update_stock', food_id=item.food_id) }}">
+                                <i class="bi bi-arrow-repeat"></i> Update Stock
+                            </a>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="9" class="empty-row">
+                            <i class="bi bi-inbox"></i>
+                            No inventory records found.
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+
+            </table>
+        </div>
+    </div>
+
+{% endblock %}

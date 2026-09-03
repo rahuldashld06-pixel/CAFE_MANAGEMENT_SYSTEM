@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Online Payment · Cafe Manager{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-shield-lock"></i> Secure Online Payment</h1>
+        <p class="page-subtitle">Bill #{{ bill.bill_id }} · Order #{{ bill.order_id }}</p>
+    </div>
+</div>
+
+<div class="panel" style="max-width:720px;margin:30px auto;text-align:center;">
+    <div style="font-size:48px;margin-bottom:12px;"><i class="bi bi-credit-card"></i></div>
+    <h2>Pay ₹{{ bill.total_amount }}</h2>
+    <p class="panel-subtitle">
+        Your payment is processed securely by Razorpay. This café system will mark the bill
+        <strong>Paid</strong> only after server-side verification.
+    </p>
+
+    <button id="pay-button" class="btn btn--primary" style="margin-top:18px;padding:12px 28px;">
+        <i class="bi bi-lock-fill"></i> Pay Online
+    </button>
+
+    <a href="{{ url_for('billing') }}" class="btn btn--ghost" style="margin-top:18px;">
+        Cancel
+    </a>
+</div>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+document.getElementById("pay-button").addEventListener("click", function () {
+    const options = {
+        key: {{ razorpay_key_id|tojson }},
+        amount: {{ amount_paise }},
+        currency: "INR",
+        name: {{ config.get("CAFE_NAME", "Coffeehouse")|tojson }},
+        description: "Bill #{{ bill.bill_id }}",
+        order_id: {{ gateway_order_id|tojson }},
+        theme: { color: "#8b5e3c" },
+        handler: function (response) {
+            const form = document.createElement("form");
+            form.method = "POST";
+            form.action = {{ url_for("verify_online_payment")|tojson }};
+
+            const fields = {
+                "_csrf_token": {{ csrf_token_value|tojson }},
+                "bill_id": {{ bill.bill_id|tojson }},
+                "razorpay_order_id": response.razorpay_order_id,
+                "razorpay_payment_id": response.razorpay_payment_id,
+                "razorpay_signature": response.razorpay_signature
+            };
+
+            Object.entries(fields).forEach(([name, value]) => {
+                const input = document.createElement("input");
+                input.type = "hidden";
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            });
+
+            document.body.appendChild(form);
+            form.submit();
+        },
+        modal: {
+            ondismiss: function () {
+                // The bill remains Pending until a verified payment arrives.
+            }
+        }
+    };
+
+    const rzp = new Razorpay(options);
+    rzp.on("payment.failed", function () {
+        alert("Payment failed or was cancelled. The bill remains Pending.");
+    });
+    rzp.open();
+});
+</script>
+{% endblock %}

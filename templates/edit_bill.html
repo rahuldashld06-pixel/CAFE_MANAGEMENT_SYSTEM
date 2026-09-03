@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Payment · Cafe Manager{% endblock %}
+
+{% block content %}
+
+
+<!-- ==========================================
+     PAGE HEADER
+     ========================================== -->
+
+<div class="page-header">
+
+    <div>
+
+        <h1>
+
+            <i class="bi bi-credit-card-2-front"></i>
+
+            Edit Payment
+
+        </h1>
+
+        <p class="page-subtitle">
+
+            Update payment information for Bill
+            #{{ bill.bill_id }}
+
+        </p>
+
+    </div>
+
+
+    <div class="page-header__actions">
+
+        <a
+            href="{{ url_for('billing') }}"
+            class="btn btn--ghost">
+
+            <i class="bi bi-arrow-left"></i>
+
+            Back to Billing
+
+        </a>
+
+    </div>
+
+</div>
+
+
+
+<!-- ==========================================
+     BILL SUMMARY
+     ========================================== -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <h2>
+
+            <i class="bi bi-receipt"></i>
+
+            Bill Information
+
+        </h2>
+
+    </div>
+
+
+    <div class="order-meta">
+
+        <span>
+
+            <i class="bi bi-receipt-cutoff"></i>
+
+            Bill:
+
+            <strong>
+                #{{ bill.bill_id }}
+            </strong>
+
+        </span>
+
+
+        <span>
+
+            <i class="bi bi-cart"></i>
+
+            Order:
+
+            <strong>
+                #{{ bill.order_id }}
+            </strong>
+
+        </span>
+
+
+        <span>
+
+            <i class="bi bi-cash-stack"></i>
+
+            Total:
+
+            <strong>
+                ₹{{ bill.total_amount }}
+            </strong>
+
+        </span>
+
+    </div>
+
+</div>
+
+
+
+<!-- ==========================================
+     PAYMENT FORM
+     ========================================== -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <h2>
+
+            <i class="bi bi-wallet2"></i>
+
+            Payment Information
+
+        </h2>
+
+    </div>
+
+
+    <form
+        method="POST">
+
+
+        <!-- ======================================
+             PAYMENT METHOD
+             ====================================== -->
+
+        <div class="form-group">
+
+            <label for="payment_method">
+
+                Payment Method
+
+            </label>
+
+
+            <select
+                name="payment_method"
+                id="payment_method"
+                required>
+
+
+                <option
+                    value="Cash"
+                    {% if bill.payment_method == "Cash" %}
+                        selected
+                    {% endif %}>
+
+                    Cash
+
+                </option>
+
+
+                <option
+                    value="UPI"
+                    {% if bill.payment_method == "UPI" %}
+                        selected
+                    {% endif %}>
+
+                    UPI
+
+                </option>
+
+
+                <option
+                    value="Card"
+                    {% if bill.payment_method == "Card" %}
+                        selected
+                    {% endif %}>
+
+                    Card
+
+                </option>
+
+
+            </select>
+
+        </div>
+
+
+
+        <!-- ======================================
+             PAYMENT STATUS
+             ====================================== -->
+
+        <div class="form-group">
+
+            <label for="payment_status">
+
+                Payment Status
+
+            </label>
+
+
+            <select
+                name="payment_status"
+                id="payment_status"
+                required>
+
+
+                <option
+                    value="Pending"
+                    {% if bill.payment_status == "Pending" %}
+                        selected
+                    {% endif %}>
+
+                    Pending
+
+                </option>
+
+
+                <option
+                    value="Paid"
+                    {% if bill.payment_status == "Paid" %}
+                        selected
+                    {% endif %}>
+
+                    Paid
+
+                </option>
+
+
+            </select>
+
+            <small id="auto_paid_note" style="display:none; color: var(--cream-faint); margin-top:6px;">
+                UPI and Card payments are confirmed automatically once that method is selected.
+            </small>
+
+        </div>
+
+
+
+        <!-- ======================================
+             BUTTONS
+             ====================================== -->
+
+        <div class="form-actions">
+
+
+            <button
+                type="submit"
+                class="btn btn--primary">
+
+                <i class="bi bi-check-lg"></i>
+
+                Save Payment
+
+            </button>
+
+
+            <a
+                href="{{ url_for('billing') }}"
+                class="btn btn--ghost">
+
+                <i class="bi bi-x-lg"></i>
+
+                Cancel
+
+            </a>
+
+
+        </div>
+
+
+    </form>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const methodSelect = document.getElementById("payment_method");
+    const statusSelect = document.getElementById("payment_status");
+    const note = document.getElementById("auto_paid_note");
+
+    function syncStatus() {
+        const auto = methodSelect.value === "UPI" || methodSelect.value === "Card";
+        statusSelect.disabled = auto;
+        note.style.display = auto ? "block" : "none";
+        if (auto) {
+            statusSelect.value = "Paid";
+        }
+    }
+
+    methodSelect.addEventListener("change", syncStatus);
+    syncStatus();
+
+    // Disabled selects don't submit their value, so mirror it into a
+    // hidden field right before the form posts.
+    methodSelect.closest("form").addEventListener("submit", function () {
+        if (statusSelect.disabled) {
+            const hidden = document.createElement("input");
+            hidden.type = "hidden";
+            hidden.name = "payment_status";
+            hidden.value = "Paid";
+            this.appendChild(hidden);
+        }
+    });
+});
+</script>
+
+{% endblock %}

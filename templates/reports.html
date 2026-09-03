@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-bar-chart-line"></i> Reports Management</h1>
+        <p class="page-subtitle">Analyze cafe sales, orders, billing and inventory</p>
+    </div>
+
+    <div class="page-header__actions">
+        <button onclick="window.print()" class="btn btn--ghost">
+            <i class="bi bi-printer-fill"></i> Print Report
+        </button>
+    </div>
+</div>
+
+
+<!-- DATE FILTER -->
+
+<div class="panel">
+
+    <div class="panel-header">
+        <h2><i class="bi bi-calendar3"></i> Report Period</h2>
+    </div>
+
+    <form method="GET" action="{{ url_for('reports') }}" class="filter-form">
+
+        <div>
+            <label>From Date</label>
+            <input
+                type="date"
+                name="from_date"
+                value="{{ from_date or '' }}"
+            >
+        </div>
+
+        <div>
+            <label>To Date</label>
+            <input
+                type="date"
+                name="to_date"
+                value="{{ to_date or '' }}"
+            >
+        </div>
+
+        <div class="filter-actions">
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-search"></i> Generate Report
+            </button>
+
+            <a href="{{ url_for('reports') }}" class="btn btn--ghost">
+                <i class="bi bi-arrow-counterclockwise"></i> Reset
+            </a>
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- SUMMARY -->
+
+<div class="stats-grid">
+
+    <div class="stat-card">
+        <div class="stat-icon">🛒</div>
+        <div>
+            <h3>{{ total_orders }}</h3>
+            <p>Total Orders</p>
+        </div>
+    </div>
+
+
+    <div class="stat-card">
+        <div class="stat-icon">🧾</div>
+        <div>
+            <h3>{{ total_bills }}</h3>
+            <p>Total Bills</p>
+        </div>
+    </div>
+
+
+    <div class="stat-card">
+        <div class="stat-icon">💰</div>
+        <div>
+            <h3>₹{{ "%.2f"|format(total_sales|float) }}</h3>
+            <p>Total Sales</p>
+        </div>
+    </div>
+
+
+    <div class="stat-card">
+        <div class="stat-icon">❌</div>
+        <div>
+            <h3>{{ cancelled_orders }}</h3>
+            <p>Cancelled Orders</p>
+        </div>
+    </div>
+
+</div>
+
+
+<!-- PAYMENT SUMMARY -->
+
+<div class="panel">
+
+    <h2>💳 Payment Summary</h2>
+
+    <table class="data-table">
+
+        <thead>
+            <tr>
+                <th>Payment Method</th>
+                <th>Number of Bills</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            {% for payment in payment_summary %}
+
+            <tr>
+                <td>{{ payment.payment_method }}</td>
+
+                <td>
+                    {{ payment.bill_count }}
+                </td>
+
+                <td>
+                    ₹{{ "%.2f"|format(payment.amount|float) }}
+                </td>
+            </tr>
+
+            {% else %}
+
+            <tr>
+                <td colspan="3">
+                    No payment data available.
+                </td>
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+<!-- TOP FOOD ITEMS -->
+
+<div class="panel">
+
+    <h2>🍔 Food Sales Report</h2>
+
+    <table class="data-table">
+
+        <thead>
+            <tr>
+                <th>Food</th>
+                <th>Quantity Sold</th>
+                <th>Sales</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            {% for food in food_sales %}
+
+            <tr>
+
+                <td>
+                    {{ food.food_name }}
+                </td>
+
+                <td>
+                    {{ food.quantity_sold }}
+                </td>
+
+                <td>
+                    ₹{{ "%.2f"|format(food.sales|float) }}
+                </td>
+
+            </tr>
+
+            {% else %}
+
+            <tr>
+                <td colspan="3">
+                    No food sales found.
+                </td>
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+<!-- INVENTORY REPORT -->
+
+<div class="panel">
+
+    <h2>📦 Inventory Report</h2>
+
+    <table class="data-table">
+
+        <thead>
+            <tr>
+                <th>Food</th>
+                <th>Current Stock</th>
+                <th>Minimum Stock</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            {% for item in inventory_report %}
+
+            <tr>
+
+                <td>
+                    {{ item.food_name }}
+                </td>
+
+                <td>
+                    {{ item.quantity }}
+                </td>
+
+                <td>
+                    {{ item.minimum_stock }}
+                </td>
+
+                <td>
+
+                    {% if item.quantity == 0 %}
+
+                        <span class="status cancelled">
+                            Unavailable
+                        </span>
+
+                    {% elif item.quantity <= item.minimum_stock %}
+
+                        <span class="status pending">
+                            Low Stock
+                        </span>
+
+                    {% else %}
+
+                        <span class="status paid">
+                            Available
+                        </span>
+
+                    {% endif %}
+
+                </td>
+
+            </tr>
+
+            {% else %}
+
+            <tr>
+                <td colspan="4">
+                    No inventory data found.
+                </td>
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+<!-- CANCELLED ORDERS -->
+
+<div class="panel">
+
+    <h2>❌ Cancelled Orders</h2>
+
+    <table class="data-table">
+
+        <thead>
+            <tr>
+                <th>Order ID</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            {% for order in cancelled_order_list %}
+
+            <tr>
+
+                <td>
+                    #{{ order.order_id }}
+                </td>
+
+                <td>
+                    {{ order.order_date }}
+                </td>
+
+                <td>
+                    ₹{{ "%.2f"|format(order.total_amount|float) }}
+                </td>
+
+                <td>
+                    <span class="status cancelled">
+                        Cancelled
+                    </span>
+                </td>
+
+            </tr>
+
+            {% else %}
+
+            <tr>
+                <td colspan="4">
+                    No cancelled orders found.
+                </td>
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+{% endblock %}

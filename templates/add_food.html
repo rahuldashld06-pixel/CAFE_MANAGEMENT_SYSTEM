@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Add Food · Cafe Manager{% endblock %}
+
+{% block content %}
+
+    <div class="page-header">
+        <div>
+            <h1 style="margin-bottom:4px;"><i class="bi bi-egg-fried"></i> Add New Food</h1>
+            <p class="page-subtitle">Add a new dish to the menu</p>
+        </div>
+    </div>
+
+    <div class="form-card">
+
+        <form method="POST" enctype="multipart/form-data">
+
+            <!-- Food Name -->
+            <div class="field">
+                <label>Food Name</label>
+                <input
+                    type="text"
+                    name="food_name"
+                    placeholder="Enter food name"
+                    required>
+            </div>
+
+            <!-- Category -->
+            <div class="field">
+                <label>Category</label>
+                <select name="category_id" required>
+                    <option value="">Select Category</option>
+                    {% for category in categories %}
+                        <option value="{{ category.category_id }}">
+                            {{ category.category_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Food Photo -->
+            <div class="field">
+                <label>Food Photo</label>
+                <input
+                    type="file"
+                    name="food_image"
+                    accept="image/jpeg,image/png,image/webp,image/gif">
+                <small>Optional · JPG, PNG, WEBP or GIF</small>
+            </div>
+
+            <!-- Description -->
+            <div class="field">
+                <label>Description</label>
+                <textarea
+                    name="description"
+                    placeholder="Enter food description"></textarea>
+            </div>
+
+            <!-- Price -->
+            <div class="field">
+                <label>Price (₹)</label>
+                <input
+                    type="number"
+                    name="price"
+                    step="0.01"
+                    min="0"
+                    placeholder="Enter price"
+                    required>
+            </div>
+
+            <!-- Quantity -->
+            <div class="field">
+                <label>Stock Quantity</label>
+                <input
+                    type="number"
+                    name="quantity"
+                    min="0"
+                    value="0"
+                    required>
+            </div>
+
+            <!-- Minimum Stock -->
+            <div class="field">
+                <label>Minimum Stock Level</label>
+                <input
+                    type="number"
+                    name="minimum_stock"
+                    min="0"
+                    value="5"
+                    required>
+            </div>
+
+            <div class="field">
+                <small>Availability is automatic: stock above 0 = Available; stock at 0 = Unavailable.</small>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">
+                    <i class="bi bi-check-lg"></i> Add Food
+                </button>
+
+                <a href="{{ url_for('foods') }}">
+                    Cancel
+                </a>
+            </div>
+
+        </form>
+
+    </div>
+
+{% endblock %}

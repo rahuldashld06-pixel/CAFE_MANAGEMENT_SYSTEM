@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}User Management{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="eyebrow">Security</div>
+    <h1>User Management</h1>
+    <p>Create and manage individual staff accounts.</p>
+  </div>
+  <a href="{{ url_for('add_user') }}" class="btn btn--primary">+ Add User</a>
+</div>
+
+<div class="panel">
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>User</th><th>Username</th><th>Role</th><th>Mobile</th>
+          <th>Status</th><th>Created</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for u in users %}
+        <tr>
+          <td><strong>{{ u.full_name }}</strong></td>
+          <td>{{ u.username }}</td>
+          <td>{{ u.role|capitalize }}</td>
+          <td>
+            {% if u.phone_number %}
+              {{ u.phone_number }}
+            {% elif u.role == 'admin' %}
+              <span class="status-badge status-badge--danger">Not set</span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td>
+            {% if u.is_active %}
+              <span class="status-badge status-badge--success">Active</span>
+            {% else %}
+              <span class="status-badge status-badge--danger">Inactive</span>
+            {% endif %}
+          </td>
+          <td>{{ u.created_at }}</td>
+          <td>
+            <a class="btn btn--small" href="{{ url_for('edit_user', user_id=u.user_id) }}">Edit</a>
+            {% if u.user_id != session.get('user_id') %}
+            <form method="POST" action="{{ url_for('toggle_user', user_id=u.user_id) }}" style="display:inline;">
+              <button class="btn btn--small" type="submit">
+                {% if u.is_active %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7">No users found.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

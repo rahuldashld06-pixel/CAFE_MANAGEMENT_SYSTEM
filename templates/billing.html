@@ -1,0 +1,807 @@
+{% extends "base.html" %}
+
+{% block title %}Billing Management · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<style>
+    .billing-page { width: 100%; }
+
+    .billing-table-panel {
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .billing-table {
+        width: 100%;
+        table-layout: fixed;
+        font-size: 12px;
+    }
+
+    .billing-table th,
+    .billing-table td {
+        vertical-align: middle;
+        padding: 10px 7px;
+        overflow-wrap: anywhere;
+    }
+
+    /* Keep the complete billing module inside a normal laptop viewport. */
+    .billing-table th:nth-child(1)  { width: 5%; }
+    .billing-table th:nth-child(2)  { width: 5%; }
+    .billing-table th:nth-child(3)  { width: 8%; }
+    .billing-table th:nth-child(4)  { width: 7%; }
+    .billing-table th:nth-child(5)  { width: 5%; }
+    .billing-table th:nth-child(6)  { width: 7%; }
+    .billing-table th:nth-child(7)  { width: 7%; }
+    .billing-table th:nth-child(8)  { width: 15%; }
+    .billing-table th:nth-child(9)  { width: 9%; }
+    .billing-table th:nth-child(10) { width: 10%; }
+    .billing-table th:nth-child(11) { width: 10%; }
+    .billing-table th:nth-child(12) { width: 12%; }
+
+
+    .billing-table .payment-select {
+        min-width: 0;
+        width: 100%;
+        height: 34px;
+        padding: 5px 5px;
+        font-size: 11px;
+    }
+
+    .billing-table .payment-form {
+        gap: 4px;
+    }
+
+    .billing-table .save-payment-btn {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+
+    .billing-table .btn--sm {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+
+    .bill-id {
+        font-weight: 700;
+        color: var(--copper-light);
+    }
+
+    .amount { font-weight: 600; }
+
+    .total-amount {
+        font-weight: 700;
+        color: var(--copper-light);
+    }
+
+    .payment-form {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-wrap: wrap;
+    }
+
+    .payment-select {
+        min-width: 105px;
+        height: 36px;
+        padding: 5px 28px 5px 9px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 6px;
+        background: var(--espresso-900);
+        color: var(--cream);
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+    .payment-select:focus {
+        outline: none;
+        border-color: var(--copper);
+    }
+
+    .payment-select option {
+        background: var(--espresso-900);
+        color: var(--cream);
+    }
+
+    .save-payment-btn {
+        height: 36px;
+        padding: 5px 11px;
+        border: 1px solid var(--copper);
+        border-radius: 6px;
+        background: var(--copper);
+        color: white;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .save-payment-btn:hover {
+        background: var(--copper-light);
+    }
+
+
+    .payment-toggle-form {
+        margin: 0;
+    }
+
+    .payment-status-toggle {
+        width: 100%;
+        min-width: 82px;
+        height: 34px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        transition: transform .15s ease, opacity .15s ease, background .15s ease;
+    }
+
+    .payment-status-toggle:hover {
+        transform: translateY(-1px);
+    }
+
+        .payment-method-select {
+        min-width: 100px;
+        padding: 7px 30px 7px 10px;
+        border: 1px solid rgba(255,255,255,.2);
+        border-radius: 8px;
+        background: rgba(255,255,255,.06);
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+    }
+    .payment-method-select option {
+        background: #1b1b1b;
+        color: #fff;
+    }
+
+    .return-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 100px;
+    }
+
+    .cash-received-input {
+        width: 100%;
+        height: 32px;
+        padding: 4px 8px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 6px;
+        background: var(--espresso-900);
+        color: var(--cream);
+        font-size: 12px;
+    }
+
+    .cash-received-input:focus {
+        outline: none;
+        border-color: var(--copper);
+    }
+
+    .return-amount {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--cream-faint);
+    }
+
+    .return-amount--positive {
+        color: var(--sage);
+    }
+
+    .return-amount--negative {
+        color: #e07a5f;
+    }
+
+    .return-not-applicable {
+        font-size: 11px;
+        color: var(--cream-faint);
+        opacity: .6;
+    }
+
+    .billing-toast-stack {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 2000;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .billing-toast-stack .toast-success,
+    .billing-toast-stack .toast-error {
+        box-shadow: 0 6px 18px rgba(0,0,0,.35);
+        animation: billingToastIn .18s ease;
+    }
+
+    .toast-error {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        background: rgba(224, 122, 95, .16);
+        border: 1px solid #e07a5f;
+        color: #e07a5f;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    @keyframes billingToastIn {
+        from { opacity: 0; transform: translateY(-6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+.payment-status-toggle--paid {
+        background: #111;
+        color: #fff;
+        border: 1px solid #111;
+    }
+
+    .payment-status-toggle--pending {
+        background: rgba(143, 187, 153, .15);
+        color: var(--sage);
+        border-color: rgba(143, 187, 153, .45);
+    }
+
+    .payment-status-toggle--pending:hover {
+        background: rgba(143, 187, 153, .28);
+    }
+
+
+    .payment-mode-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 32px;
+        padding: 5px 9px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 999px;
+        background: var(--espresso-850);
+        color: var(--cream-dim);
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .payment-status-toggle--paid:disabled {
+        background: #111;
+        color: #fff;
+        border-color: #111;
+        opacity: 1;
+        cursor: not-allowed;
+    }
+
+    .payment-status-toggle--disabled {
+        opacity: .55;
+        cursor: default;
+    }
+
+    .history-filter {
+        display: flex;
+        align-items: end;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 18px 0 2px;
+    }
+
+    .filter-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .filter-field label {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--cream-faint);
+    }
+
+    .filter-field input {
+        height: 38px;
+        padding: 7px 10px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 6px;
+        background: var(--espresso-900);
+        color: var(--cream);
+    }
+
+    .filter-field input:focus {
+        outline: none;
+        border-color: var(--copper);
+    }
+
+    .cancelled-row {
+        opacity: 0.82;
+    }
+
+    @media (max-width: 900px) {
+        .billing-table-panel { overflow-x: auto; }
+        .billing-table {
+            min-width: 1150px;
+            table-layout: auto;
+        }
+    }
+</style>
+
+<div class="billing-page">
+
+    <div class="page-header">
+        <div>
+            <h1><i class="bi bi-credit-card-2-front"></i> Billing Management</h1>
+            <p class="page-subtitle">Manage bills, payments and saved billing history</p>
+        </div>
+
+        <div class="page-header__actions">
+            <a href="{{ url_for('orders') }}" class="btn btn--ghost">
+                <i class="bi bi-cart"></i> Orders
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="toast-success">
+                    <i class="bi bi-check-circle-fill"></i> {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- BILLING HISTORY PERIOD -->
+    <div class="panel">
+        <div class="panel-header">
+            <div>
+                <h2><i class="bi bi-calendar3"></i> Billing History Period</h2>
+                <p class="panel-subtitle">
+                    Choose the period you want to view. Filtering does not delete any saved bills.
+                </p>
+            </div>
+        </div>
+
+        <form method="GET" action="{{ url_for('billing') }}" class="history-filter">
+            <div class="filter-field">
+                <label for="from_date">From Date</label>
+                <input type="date" id="from_date" name="from_date" value="{{ from_date }}">
+            </div>
+
+            <div class="filter-field">
+                <label for="to_date">To Date</label>
+                <input type="date" id="to_date" name="to_date" value="{{ to_date }}">
+            </div>
+
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-funnel-fill"></i> Apply Period
+            </button>
+
+            <a href="{{ url_for('billing') }}" class="btn btn--ghost">
+                <i class="bi bi-arrow-counterclockwise"></i> All History
+            </a>
+        </form>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="stats-grid">
+
+        <div class="stat-card">
+            <div class="stat-card__icon"><i class="bi bi-receipt-cutoff"></i></div>
+            <div class="stat-card__body">
+                <div class="stat-card__label">Bills in Period</div>
+                <div class="stat-card__value" id="stat-bills-total">{{ bills_today }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-card__icon"><i class="bi bi-check-circle-fill"></i></div>
+            <div class="stat-card__body">
+                <div class="stat-card__label">Paid Bills</div>
+                <div class="stat-card__value" id="stat-paid-bills">{{ paid_today }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-card__icon"><i class="bi bi-clock-fill"></i></div>
+            <div class="stat-card__body">
+                <div class="stat-card__label">Pending Bills</div>
+                <div class="stat-card__value" id="stat-pending-bills">{{ pending_today }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-card__icon"><i class="bi bi-x-circle-fill"></i></div>
+            <div class="stat-card__body">
+                <div class="stat-card__label">Cancelled Orders</div>
+                <div class="stat-card__value">{{ cancelled_count }}</div>
+            </div>
+        </div>
+
+        {% if session.get('role') == 'admin' %}
+        <div class="stat-card">
+            <div class="stat-card__icon"><i class="bi bi-currency-rupee"></i></div>
+            <div class="stat-card__body">
+                <div class="stat-card__label">Revenue</div>
+                <div class="stat-card__value">₹<span id="stat-revenue">{{ revenue_today }}</span></div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <!-- ALL BILLS -->
+    <div class="panel billing-table-panel">
+
+        <div class="panel-header">
+            <div>
+                <h2><i class="bi bi-receipt"></i> Billing History</h2>
+                <p class="panel-subtitle">
+                    Cancelled orders remain here so the order and bill history is preserved.
+                </p>
+            </div>
+
+            <span class="badge">{{ bills|length }} Bills</span>
+        </div>
+
+        <div class="table-wrap">
+            <table class="data-table billing-table">
+                <thead>
+                    <tr>
+                        <th>Bill ID</th>
+                        <th>Order ID</th>
+                        <th>Date</th>
+                        <th>Subtotal</th>
+                        <th>Tax</th>
+                        <th>Discount</th>
+                        <th>Total</th>
+                        <th>Order Items</th>
+                        <th>Order Status</th>
+                        <th>Payment Mode</th>
+                        <th>Return</th>
+                        <th>Payment Status</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                {% for bill in bills %}
+                    <tr class="{% if bill.order_status == 'Cancelled' %}cancelled-row{% endif %}"
+                        data-bill-id="{{ bill.bill_id }}"
+                        data-total-amount="{{ bill.total_amount }}"
+                        data-order-status="{{ bill.order_status }}">
+
+                        <td class="bill-id">#{{ bill.bill_id }}</td>
+
+                        <td>
+                            <a href="{{ url_for('order_details', order_id=bill.order_id) }}"
+                               style="color: var(--copper-light); font-weight:600;">
+                                #{{ bill.order_id }}
+                            </a>
+                        </td>
+
+                        <td>{{ bill.bill_date }}</td>
+                        <td class="amount">₹{{ bill.subtotal }}</td>
+                        <td>₹{{ bill.tax }}</td>
+                        <td>₹{{ bill.discount }}</td>
+                        <td class="total-amount">₹{{ bill.total_amount }}</td>
+
+                        <td>
+                            <div style="display:flex; flex-direction:column; gap:4px; min-width:190px;">
+                                {% for item in bill['items'] %}
+                                    <span>
+                                        <strong>{{ item.food_name }}</strong>
+                                        × {{ item.quantity }}
+                                        <small style="color:var(--cream-faint);">₹{{ item.subtotal }}</small>
+                                    </span>
+                                {% else %}
+                                    <span style="color:var(--cream-faint);">No item details</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+
+                        <td>
+                            {% if bill.order_status == 'Cancelled' %}
+                                <span class="status-dot status-dot--red" title="Cancelled"></span>
+                            {% elif bill.order_status == 'Completed' %}
+                                <span class="status-dot status-dot--green" title="Completed"></span>
+                            {% else %}
+                                <span class="status-dot status-dot--yellow" title="{{ bill.order_status }}"></span>
+                            {% endif %}
+                        </td>
+
+                        <!-- The selects are associated with the form in the Action cell below. -->
+                        <td>
+                            <form method="POST"
+                                  action="{{ url_for('edit_bill', bill_id=bill.bill_id) }}"
+                                  class="payment-method-form"
+                                  data-bill-id="{{ bill.bill_id }}"
+                                  style="margin:0;">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                                <select name="payment_method"
+                                        class="payment-method-select"
+                                        aria-label="Payment mode for Bill #{{ bill.bill_id }}">
+                                    <option value="Cash" {% if (bill.payment_method or 'Cash') == 'Cash' %}selected{% endif %}>Cash</option>
+                                    <option value="UPI" {% if bill.payment_method == 'UPI' %}selected{% endif %}>UPI</option>
+                                    <option value="Card" {% if bill.payment_method == 'Card' %}selected{% endif %}>Card</option>
+                                </select>
+                            </form>
+                        </td>
+
+                        <td class="return-cell-wrap" id="return-cell-{{ bill.bill_id }}">
+                            {% if (bill.payment_method or 'Cash') == 'Cash' %}
+                                <div class="return-cell">
+                                    <input type="number"
+                                           step="0.01"
+                                           min="0"
+                                           inputmode="decimal"
+                                           class="cash-received-input"
+                                           id="cash-received-{{ bill.bill_id }}"
+                                           placeholder="Amount received"
+                                           aria-label="Cash received for Bill #{{ bill.bill_id }}"
+                                           oninput="calculateReturn({{ bill.bill_id }}, {{ bill.total_amount }})">
+                                    <span class="return-amount" id="return-amount-{{ bill.bill_id }}">—</span>
+                                </div>
+                            {% else %}
+                                <span class="return-not-applicable">N/A</span>
+                            {% endif %}
+                        </td>
+
+                        <td class="payment-status-cell" id="payment-status-cell-{{ bill.bill_id }}">
+                            {% if bill.payment_status == 'Paid' %}
+                                <button type="button"
+                                        class="payment-status-toggle payment-status-toggle--paid"
+                                        disabled
+                                        title="This bill is already paid">
+                                    <i class="bi bi-check-circle-fill"></i> Paid
+                                </button>
+                            {% elif bill.order_status == 'Cancelled' %}
+                                <span class="payment-status-toggle payment-status-toggle--disabled">
+                                    <i class="bi bi-dash-circle"></i> Pending
+                                </span>
+                            {% else %}
+                                <form method="POST"
+                                      action="{{ url_for('mark_bill_paid', bill_id=bill.bill_id) }}"
+                                      class="payment-toggle-form"
+                                      data-bill-id="{{ bill.bill_id }}">
+                                    <button type="submit"
+                                            class="payment-status-toggle payment-status-toggle--pending"
+                                            title="Click once to mark this bill as Paid">
+                                        <i class="bi bi-check-circle-fill"></i> Paid
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </td>
+
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="12" class="empty-row">
+                            <i class="bi bi-receipt"></i>
+                            <p>No bills found for the selected period.</p>
+                            <a href="{{ url_for('orders') }}" class="btn btn--sm btn--primary">
+                                <i class="bi bi-cart-plus"></i> Create Order
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-header">
+            <h2><i class="bi bi-shield-check"></i> Billing History</h2>
+        </div>
+
+        <div class="order-meta">
+            <span><i class="bi bi-database-check"></i> Bills are retained in the database.</span>
+            <span><i class="bi bi-calendar-range"></i> Use the date filter to view any period.</span>
+            <span><i class="bi bi-x-circle"></i> Cancelled orders remain linked to their bills.</span>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // Live "change to return" calculator for Cash payments only.
+    // Purely client-side: reads the amount the cashier types in, subtracts
+    // that specific bill's total_amount, and shows the change due.
+    function calculateReturn(billId, totalAmount) {
+        const input = document.getElementById('cash-received-' + billId);
+        const display = document.getElementById('return-amount-' + billId);
+        if (!input || !display) return;
+
+        const receivedRaw = input.value.trim();
+        if (receivedRaw === '') {
+            display.textContent = '—';
+            display.classList.remove('return-amount--positive', 'return-amount--negative');
+            return;
+        }
+
+        const received = parseFloat(receivedRaw);
+        const total = parseFloat(totalAmount);
+
+        if (isNaN(received)) {
+            display.textContent = '—';
+            display.classList.remove('return-amount--positive', 'return-amount--negative');
+            return;
+        }
+
+        const change = received - total;
+
+        if (change < 0) {
+            display.textContent = '₹' + Math.abs(change).toFixed(2) + ' short';
+            display.classList.add('return-amount--negative');
+            display.classList.remove('return-amount--positive');
+        } else {
+            display.textContent = 'Return ₹' + change.toFixed(2);
+            display.classList.add('return-amount--positive');
+            display.classList.remove('return-amount--negative');
+        }
+    }
+
+    // ==========================================
+    // AJAX billing actions — no full page refresh
+    // ==========================================
+    // Both the "Paid" button and the Payment Mode dropdown used to be plain
+    // <form> submits, which reload the whole Billing page. They now submit
+    // via fetch() with X-Requested-With so the server hands back JSON, and
+    // only the affected row/stat cards are updated in place.
+
+    function getBillingToastStack() {
+        let stack = document.getElementById('billing-toast-stack');
+        if (!stack) {
+            stack = document.createElement('div');
+            stack.id = 'billing-toast-stack';
+            stack.className = 'billing-toast-stack';
+            document.body.appendChild(stack);
+        }
+        return stack;
+    }
+
+    function showBillingToast(message, isError) {
+        const stack = getBillingToastStack();
+        const toast = document.createElement('div');
+        toast.className = isError ? 'toast-error' : 'toast-success';
+        toast.innerHTML =
+            '<i class="bi ' + (isError ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill') + '"></i> ' +
+            message;
+        stack.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
+    function adjustStatCount(id, delta) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const current = parseInt(el.textContent, 10) || 0;
+        el.textContent = current + delta;
+    }
+
+    function adjustRevenue(amount) {
+        const el = document.getElementById('stat-revenue');
+        if (!el) return;
+        const current = parseFloat(el.textContent.replace(/,/g, '')) || 0;
+        el.textContent = (current + amount).toFixed(2);
+    }
+
+    async function submitBillingForm(form) {
+        const response = await fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            cache: 'no-store',
+        });
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (err) {
+            data = { success: false, message: 'Unexpected server response.' };
+        }
+        data.ok = response.ok;
+        return data;
+    }
+
+    document.addEventListener('submit', async function (event) {
+        const form = event.target;
+
+        // ---- Mark bill Paid ----
+        if (form.classList.contains('payment-toggle-form')) {
+            event.preventDefault();
+            const billId = form.dataset.billId;
+            const button = form.querySelector('button');
+            if (button) button.disabled = true;
+
+            try {
+                const data = await submitBillingForm(form);
+
+                if (data.ok && data.success) {
+                    const cell = document.getElementById('payment-status-cell-' + billId);
+                    if (cell) {
+                        cell.innerHTML =
+                            '<button type="button" class="payment-status-toggle payment-status-toggle--paid" disabled title="This bill is already paid">' +
+                            '<i class="bi bi-check-circle-fill"></i> Paid</button>';
+                    }
+                    adjustStatCount('stat-paid-bills', 1);
+                    adjustStatCount('stat-pending-bills', -1);
+                    if (typeof data.total_amount === 'number') {
+                        adjustRevenue(data.total_amount);
+                    }
+                    showBillingToast(data.message, false);
+                } else {
+                    if (button) button.disabled = false;
+                    showBillingToast(data.message || 'Could not update payment status.', true);
+                }
+            } catch (err) {
+                if (button) button.disabled = false;
+                showBillingToast('Network error — payment status was not updated.', true);
+            }
+            return;
+        }
+
+        // ---- Change payment mode ----
+        if (form.classList.contains('payment-method-form')) {
+            event.preventDefault();
+            const billId = form.dataset.billId;
+            const select = form.querySelector('select[name="payment_method"]');
+            const previousValue = select ? select.dataset.previousValue || select.value : null;
+
+            try {
+                const data = await submitBillingForm(form);
+
+                if (data.ok && data.success) {
+                    if (select) select.dataset.previousValue = data.payment_method;
+
+                    const returnCell = document.getElementById('return-cell-' + billId);
+                    if (returnCell) {
+                        if (data.payment_method === 'Cash') {
+                            const totalAttr = form.closest('tr')
+                                ? form.closest('tr').dataset.totalAmount
+                                : '0';
+                            returnCell.innerHTML =
+                                '<div class="return-cell">' +
+                                '<input type="number" step="0.01" min="0" inputmode="decimal" class="cash-received-input" ' +
+                                'id="cash-received-' + billId + '" placeholder="Amount received" ' +
+                                'aria-label="Cash received for Bill #' + billId + '" ' +
+                                'oninput="calculateReturn(' + billId + ', ' + totalAttr + ')">' +
+                                '<span class="return-amount" id="return-amount-' + billId + '">—</span>' +
+                                '</div>';
+                        } else {
+                            returnCell.innerHTML = '<span class="return-not-applicable">N/A</span>';
+                        }
+                    }
+                    showBillingToast(data.message, false);
+                } else {
+                    if (select && previousValue) select.value = previousValue;
+                    showBillingToast(data.message || 'Could not update payment mode.', true);
+                }
+            } catch (err) {
+                if (select && previousValue) select.value = previousValue;
+                showBillingToast('Network error — payment mode was not updated.', true);
+            }
+        }
+    });
+
+    // Submit the payment-mode form on change (replaces the old inline onchange).
+    document.addEventListener('change', function (event) {
+        const select = event.target;
+        if (select.matches('.payment-method-select')) {
+            select.dataset.previousValue = select.dataset.previousValue || select.value;
+            select.closest('form').requestSubmit();
+        }
+    });
+
+    // Capture each dropdown's server-rendered value up front, so a failed
+    // first change can be reverted correctly (the DOM value already flips
+    // to the new choice before the 'change' event fires).
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.payment-method-select').forEach(function (select) {
+            select.dataset.previousValue = select.value;
+        });
+    });
+</script>
+
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Order Management · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-receipt-cutoff"></i> Order Management</h1>
+        <p class="page-subtitle">Track and manage customer orders while preserving billing history</p>
+    </div>
+
+    <div class="page-header__actions">
+        <a href="{{ url_for('home') }}" class="btn btn--ghost">
+            <i class="bi bi-arrow-left"></i> Dashboard
+        </a>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        {% for message in messages %}
+            <div class="toast-success">
+                <i class="bi bi-check-circle-fill"></i> {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="panel">
+    <div class="table-wrap">
+        <table class="data-table">
+
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Date</th>
+                    <th>Total Amount</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+
+            <tbody>
+            {% for order in orders %}
+                <tr>
+                    <td class="cell-strong">#{{ order.order_id }}</td>
+                    <td>{{ order.order_date }}</td>
+                    <td>₹{{ order.total_amount }}</td>
+
+                    <td>
+                        {% if order.order_status == 'Cancelled' %}
+                            <span class="status-dot status-dot--red" title="Cancelled"></span>
+                        {% elif order.order_status == 'Completed' %}
+                            <span class="status-dot status-dot--green" title="Completed"></span>
+                        {% else %}
+                            <span class="status-dot status-dot--yellow" title="{{ order.order_status }}"></span>
+                        {% endif %}
+                    </td>
+
+                    <td class="cell-actions">
+                        <a class="btn btn--sm btn--edit"
+                           href="{{ url_for('order_details', order_id=order.order_id) }}">
+                            <i class="bi bi-eye-fill"></i> View
+                        </a>
+
+                        {% if order.order_status not in ['Cancelled', 'Completed'] %}
+                            <form method="POST"
+                                  action="{{ url_for('complete_order', order_id=order.order_id) }}"
+                                  style="display:inline;"
+                                  onsubmit="return confirm('Mark Order #{{ order.order_id }} as done?');">
+                                <button type="submit" class="btn btn--sm btn--primary">
+                                    <i class="bi bi-check-circle-fill"></i> Done
+                                </button>
+                            </form>
+                        {% endif %}
+
+                        {% if order.order_status not in ['Cancelled', 'Completed'] %}
+                            <form method="POST"
+                                  action="{{ url_for('cancel_order', order_id=order.order_id) }}"
+                                  style="display:inline;"
+                                  onsubmit="return confirm('Cancel Order #{{ order.order_id }}? The order will remain in billing history, its items will be preserved, and inventory will be restored.');">
+                                <button type="submit" class="btn btn--sm btn--delete">
+                                    <i class="bi bi-x-circle-fill"></i> Cancel
+                                </button>
+                            </form>
+                        {% else %}
+                            <span class="badge">
+                                <i class="bi bi-archive"></i> In History
+                            </span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="5" class="empty-row">
+                        <i class="bi bi-inbox"></i>
+                        No orders found.
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+
+        </table>
+    </div>
+</div>
+
+{% endblock %}

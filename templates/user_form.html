@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}{{ "Edit User" if user else "Add User" }} · Cafe Manager{% endblock %}
+
+{% block content %}
+
+    <div class="page-header">
+        <div>
+            <h1 style="margin-bottom:4px;">
+                <i class="bi {{ 'bi-person-gear' if user else 'bi-person-plus-fill' }}"></i>
+                {{ "Edit User" if user else "Add User" }}
+            </h1>
+            <p class="page-subtitle">
+                {{ "Update staff access and optionally reset the password." if user else "Create a separate login for a staff member." }}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-card">
+
+        <form method="POST">
+
+            <!-- Username -->
+            {% if not user %}
+            <div class="field">
+                <label>Username</label>
+                <input
+                    type="text"
+                    name="username"
+                    placeholder="e.g. cashier01"
+                    required
+                    maxlength="80"
+                    autocomplete="username">
+            </div>
+            {% else %}
+            <div class="field">
+                <label>Username</label>
+                <input type="text" value="{{ user.username }}" disabled>
+                <small>Usernames can't be changed after the account is created.</small>
+            </div>
+            {% endif %}
+
+            <!-- Full Name -->
+            <div class="field">
+                <label>Full Name</label>
+                <input
+                    type="text"
+                    name="full_name"
+                    placeholder="Enter full name"
+                    required
+                    maxlength="120"
+                    value="{{ user.full_name if user else '' }}">
+            </div>
+
+            <!-- Role -->
+            <div class="field">
+                <label>Role</label>
+                <select name="role" required id="userRoleSelect" onchange="togglePhoneHint()">
+                    {% for role in ['cashier','staff','manager','admin'] %}
+                    <option value="{{ role }}" {% if user and user.role == role %}selected{% endif %}>
+                        {{ role|capitalize }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>Cashiers, staff and managers only see New Order, Food Management, Inventory &amp; Billing. Admins see everything.</small>
+            </div>
+
+            <!-- Mobile Number -->
+            <div class="field">
+                <label>Mobile Number</label>
+                <input
+                    type="tel"
+                    name="phone_number"
+                    placeholder="e.g. +91 98765 43210"
+                    maxlength="20"
+                    value="{{ user.phone_number if user else '' }}">
+                <small id="phoneHint">Required for admin accounts to receive a one-time login code by SMS.</small>
+            </div>
+
+            <script>
+                function togglePhoneHint() {
+                    var role = document.getElementById("userRoleSelect").value;
+                    var hint = document.getElementById("phoneHint");
+                    if (!hint) return;
+                    hint.textContent = role === "admin"
+                        ? "Required for admin accounts to receive a one-time login code by SMS."
+                        : "Optional for this role — only admin logins ask for a one-time code.";
+                }
+                document.addEventListener("DOMContentLoaded", togglePhoneHint);
+            </script>
+
+            <!-- Password -->
+            <div class="field">
+                <label>{{ "New Password (leave blank to keep current)" if user else "Password" }}</label>
+                <input
+                    type="password"
+                    name="password"
+                    placeholder="{{ '••••••••' if user else 'Create a password' }}"
+                    minlength="8"
+                    autocomplete="new-password"
+                    {% if not user %}required{% endif %}>
+                <small>Use at least 8 characters.</small>
+            </div>
+
+            <!-- Active toggle -->
+            {% if user %}
+            <label class="switch-field">
+                <input type="checkbox" name="is_active" value="1" {% if user.is_active %}checked{% endif %}>
+                <span class="switch-slider"></span>
+                Active account
+            </label>
+            {% endif %}
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">
+                    <i class="bi bi-check-lg"></i> Save User
+                </button>
+
+                <a href="{{ url_for('users') }}">
+                    Cancel
+                </a>
+            </div>
+
+        </form>
+
+    </div>
+
+{% endblock %}
