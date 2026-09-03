@@ -4,17 +4,53 @@ import secrets
 import hmac
 import time
 from datetime import datetime
+from config import DB_CONFIG, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import mysql.connector
 from decimal import Decimal
-from config import DB_CONFIG, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET
 try:
     import razorpay
 except ImportError:
     razorpay = None
+
+# --- App configuration (DB + Razorpay) -------------------------------
+# Works two ways so nothing breaks anywhere:
+#   1) Locally: if a config.py file exists (it's gitignored and never
+#      pushed), its values are used automatically, same as before.
+#   2) On any host (Railway, Render, etc.): config.py won't exist there,
+#      so we fall back to reading everything from environment variables
+#      that you set in that host's dashboard.
+# Environment variables always win if both are present.
+try:
+    from config import (
+        DB_CONFIG as _FILE_DB_CONFIG,
+        RAZORPAY_KEY_ID as _FILE_RAZORPAY_KEY_ID,
+        RAZORPAY_KEY_SECRET as _FILE_RAZORPAY_KEY_SECRET,
+        RAZORPAY_WEBHOOK_SECRET as _FILE_RAZORPAY_WEBHOOK_SECRET,
+    )
+except ImportError:
+    _FILE_DB_CONFIG = {}
+    _FILE_RAZORPAY_KEY_ID = ""
+    _FILE_RAZORPAY_KEY_SECRET = ""
+    _FILE_RAZORPAY_WEBHOOK_SECRET = ""
+
+DB_CONFIG = {
+    "host": os.environ.get("DB_HOST", _FILE_DB_CONFIG.get("host", "localhost")),
+    "user": os.environ.get("DB_USER", _FILE_DB_CONFIG.get("user", "root")),
+    "password": os.environ.get("DB_PASSWORD", _FILE_DB_CONFIG.get("password", "")),
+    "database": os.environ.get("DB_NAME", _FILE_DB_CONFIG.get("database", "cafe_management")),
+}
+_db_port = os.environ.get("DB_PORT", _FILE_DB_CONFIG.get("port"))
+if _db_port:
+    DB_CONFIG["port"] = int(_db_port)
+
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", _FILE_RAZORPAY_KEY_ID)
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", _FILE_RAZORPAY_KEY_SECRET)
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", _FILE_RAZORPAY_WEBHOOK_SECRET)
+# -----------------------------------------------------------------------
 
 app = Flask(__name__)
 app.config["CAFE_NAME"] = os.environ.get("CAFE_NAME", "Coffeehouse")
