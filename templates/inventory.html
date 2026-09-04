@@ -11,7 +11,7 @@
         </div>
 
         <div class="page-header__actions">
-            <a href="{{ url_for('home') }}" class="btn btn--ghost">
+            <a href="{{ url_for('dashboard') }}" class="btn btn--ghost">
                 <i class="bi bi-arrow-left"></i> Dashboard
             </a>
         </div>
@@ -76,17 +76,13 @@
 
                         <!-- Food Availability -->
                         <td>
-                            {% if item.quantity == 0 %}
-                                <span class="badge badge--unavailable">
-                                    <i class="bi bi-x-circle-fill"></i> Unavailable
-                                </span>
-                            {% elif item.quantity <= item.minimum_stock %}
-                                <span class="badge badge--low-stock">
-                                    <i class="bi bi-exclamation-triangle-fill"></i> Low Stock
-                                </span>
-                            {% else %}
+                            {% if item.availability %}
                                 <span class="badge badge--available">
                                     <i class="bi bi-check-circle-fill"></i> Available
+                                </span>
+                            {% else %}
+                                <span class="badge badge--unavailable">
+                                    <i class="bi bi-x-circle-fill"></i> Not Available
                                 </span>
                             {% endif %}
                         </td>

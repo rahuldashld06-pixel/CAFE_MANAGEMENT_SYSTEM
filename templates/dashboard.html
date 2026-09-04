@@ -4,421 +4,93 @@
 
 {% block content %}
 
-<style>
-    /* Dashboard quick actions */
-    .dashboard-actions {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 14px;
-    }
-
-    .dashboard-action {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        min-height: 76px;
-        padding: 14px 16px;
-        background: var(--espresso-850);
-        border: 1px solid var(--espresso-700);
-        border-radius: var(--radius-md);
-        color: var(--cream);
-        transition: background .18s ease, border-color .18s ease, transform .18s ease;
-    }
-
-    .dashboard-action:hover {
-        background: var(--espresso-800);
-        border-color: var(--copper-dark);
-        transform: translateY(-2px);
-    }
-
-    .dashboard-action__icon {
-        display: grid;
-        place-items: center;
-        width: 42px;
-        height: 42px;
-        flex: 0 0 42px;
-        border-radius: 10px;
-        background: rgba(224, 138, 62, .16);
-        color: var(--copper-light);
-        font-size: 18px;
-    }
-
-    .dashboard-action strong {
-        display: block;
-        font-size: 13.5px;
-    }
-
-    .dashboard-action small {
-        display: block;
-        margin-top: 3px;
-        color: var(--cream-faint);
-        font-size: 11px;
-    }
-
-    .dashboard-live {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        color: var(--sage);
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    .dashboard-live-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--sage);
-        box-shadow: 0 0 0 4px rgba(143,187,153,.10);
-    }
-
-    @media (max-width: 900px) {
-        .dashboard-actions {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-    }
-
-    @media (max-width: 560px) {
-        .dashboard-actions {
-            grid-template-columns: 1fr;
-        }
-    }
-</style>
-
-<div class="page-header">
-    <div>
-        <h1><i class="bi bi-speedometer2"></i> Cafe Dashboard</h1>
-        <p class="page-subtitle">Live overview of your cafe management system</p>
-    </div>
-
-    <div class="dashboard-live">
-        <span class="dashboard-live-dot"></span>
-        Live data
-    </div>
-</div>
-
-
-<!-- ==========================================
-     MAIN STATISTICS
-     ========================================== -->
-
-<div class="stats-grid">
-
-    <div class="stat-card">
-        <div class="stat-card__icon">
-            <i class="bi bi-egg-fried"></i>
-        </div>
+    <div class="page-header">
         <div>
-            <div class="stat-card__label">Total Food Items</div>
-            <div class="stat-card__value" id="total-foods">{{ total_foods }}</div>
+            <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
+            <p class="page-subtitle">Welcome to Cafe Food Management System</p>
         </div>
     </div>
 
+    <!-- Statistics -->
+    <div class="stats-grid">
 
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--categories">
-            <i class="bi bi-tags-fill"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Categories</div>
-            <div class="stat-card__value" id="total-categories">{{ total_categories }}</div>
-        </div>
-    </div>
-
-
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--orders">
-            <i class="bi bi-receipt-cutoff"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Total Orders</div>
-            <div class="stat-card__value" id="total-orders">{{ total_orders }}</div>
-        </div>
-    </div>
-
-
-    <div class="stat-card">
-        <div class="stat-card__icon">
-            <i class="bi bi-boxes"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Inventory Items</div>
-            <div class="stat-card__value" id="total-inventory">{{ total_inventory }}</div>
-        </div>
-    </div>
-
-</div>
-
-
-<!-- ==========================================
-     TODAY
-     ========================================== -->
-
-<div class="stats-grid">
-
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--today">
-            <i class="bi bi-calendar-day"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Today's Orders</div>
-            <div class="stat-card__value" id="today-orders">{{ today_orders }}</div>
-        </div>
-    </div>
-
-
-    {% if session.get('role') == 'admin' %}
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--sales">
-            <i class="bi bi-currency-rupee"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Today's Revenue</div>
-            <div class="stat-card__value">
-                ₹<span id="today-revenue">{{ "%.2f"|format(today_revenue|float) }}</span>
+        <div class="stat-card">
+            <div class="stat-card__icon"><i class="bi bi-egg-fried"></i></div>
+            <div class="stat-card__body">
+                <p class="stat-card__label">Total Food Items</p>
+                <p class="stat-card__value">{{ total_foods }}</p>
             </div>
         </div>
+
+        <div class="stat-card">
+            <div class="stat-card__icon stat-card__icon--categories"><i class="bi bi-tags-fill"></i></div>
+            <div class="stat-card__body">
+                <p class="stat-card__label">Total Categories</p>
+                <p class="stat-card__value">{{ total_categories }}</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-card__icon stat-card__icon--orders"><i class="bi bi-receipt-cutoff"></i></div>
+            <div class="stat-card__body">
+                <p class="stat-card__label">Total Orders</p>
+                <p class="stat-card__value">{{ total_orders }}</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-card__icon stat-card__icon--today"><i class="bi bi-calendar-check-fill"></i></div>
+            <div class="stat-card__body">
+                <p class="stat-card__label">Today's Orders</p>
+                <p class="stat-card__value">{{ today_orders }}</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-card__icon stat-card__icon--sales"><i class="bi bi-cash-coin"></i></div>
+            <div class="stat-card__body">
+                <p class="stat-card__label">Today's Sales</p>
+                <p class="stat-card__value">₹ {{ today_sales }}</p>
+            </div>
+        </div>
+
+        <div class="stat-card stat-card--warning">
+            <div class="stat-card__icon stat-card__icon--warning"><i class="bi bi-exclamation-triangle-fill"></i></div>
+            <div class="stat-card__body">
+                <p class="stat-card__label">Low Stock Items</p>
+                <p class="stat-card__value">{{ low_stock }}</p>
+            </div>
+        </div>
+
     </div>
-    {% endif %}
 
+    <!-- Quick Actions -->
+    <div class="panel">
 
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--warning">
-            <i class="bi bi-exclamation-triangle-fill"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Low Stock</div>
-            <div class="stat-card__value" id="low-stock">{{ low_stock }}</div>
-        </div>
-    </div>
-
-
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--warning">
-            <i class="bi bi-x-circle-fill"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Unavailable</div>
-            <div class="stat-card__value" id="unavailable">{{ unavailable }}</div>
-        </div>
-    </div>
-
-</div>
-
-
-<!-- ==========================================
-     QUICK ACTIONS — ONLY 4
-     ========================================== -->
-
-<div class="panel">
-
-    <div class="panel-header">
-        <div>
+        <div class="panel-header">
             <h2><i class="bi bi-lightning-charge-fill"></i> Quick Actions</h2>
-            <p class="panel-subtitle">Open the most-used cafe modules</p>
         </div>
-    </div>
 
+        <div class="quick-actions">
 
-    <div class="dashboard-actions">
+            <button class="action-btn" onclick="location.href='#'">
+                <i class="bi bi-plus-circle"></i> Add Food
+            </button>
 
-        <a href="{{ url_for('add_order') }}" class="dashboard-action">
-            <span class="dashboard-action__icon">
-                <i class="bi bi-cart-plus"></i>
-            </span>
-            <span>
-                <strong>New Order</strong>
-                <small>Take a new customer order</small>
-            </span>
-        </a>
+            <button class="action-btn" onclick="location.href='#'">
+                <i class="bi bi-cart-plus"></i> New Order
+            </button>
 
+            <button class="action-btn" onclick="location.href='#'">
+                <i class="bi bi-boxes"></i> View Inventory
+            </button>
 
-        <a href="{{ url_for('inventory') }}" class="dashboard-action">
-            <span class="dashboard-action__icon">
-                <i class="bi bi-boxes"></i>
-            </span>
-            <span>
-                <strong>Inventory</strong>
-                <small>Check and update stock</small>
-            </span>
-        </a>
+            <button class="action-btn" onclick="location.href='#'">
+                <i class="bi bi-bar-chart-line"></i> View Reports
+            </button>
 
-
-        <a href="{{ url_for('orders') }}" class="dashboard-action">
-            <span class="dashboard-action__icon">
-                <i class="bi bi-receipt-cutoff"></i>
-            </span>
-            <span>
-                <strong>Order Management</strong>
-                <small>Create, view and cancel orders</small>
-            </span>
-        </a>
-
-
-        <a href="{{ url_for('billing') }}" class="dashboard-action">
-            <span class="dashboard-action__icon">
-                <i class="bi bi-credit-card-2-front"></i>
-            </span>
-            <span>
-                <strong>Billing Management</strong>
-                <small>Manage bills and payments</small>
-            </span>
-        </a>
-
-    </div>
-
-</div>
-
-
-<!-- ==========================================
-     STOCK ALERT
-     ========================================== -->
-
-<div class="panel" id="stock-alert-panel"
-     {% if low_stock == 0 and unavailable == 0 %}style="display:none;"{% endif %}>
-
-    <div class="panel-header">
-        <div>
-            <h2><i class="bi bi-exclamation-triangle-fill"></i> Inventory Alert</h2>
-            <p class="panel-subtitle">These values are updated automatically from inventory.</p>
         </div>
-    </div>
-
-    <div id="stock-alert-content">
-
-        {% if unavailable > 0 %}
-            <p>
-                🔴 <strong id="unavailable-alert">{{ unavailable }}</strong>
-                food item(s) are currently unavailable.
-            </p>
-        {% endif %}
-
-        {% if low_stock > 0 %}
-            <p style="margin-top:8px;">
-                🟡 <strong id="low-stock-alert">{{ low_stock }}</strong>
-                food item(s) have reached minimum stock.
-            </p>
-        {% endif %}
-
-        <a href="{{ url_for('inventory') }}" class="btn" style="margin-top:14px;">
-            <i class="bi bi-boxes"></i> Check Inventory
-        </a>
 
     </div>
-</div>
-
-
-<script>
-    /*
-       Live dashboard:
-       Fetches only the statistics every 5 seconds.
-       It NEVER reloads/navigates the page.
-    */
-
-    async function updateDashboard() {
-        try {
-            const response = await fetch(
-                "{{ url_for('dashboard_stats') }}",
-                {
-                    method: "GET",
-                    cache: "no-store",
-                    headers: {
-                        "Accept": "application/json"
-                    }
-                }
-            );
-
-            if (!response.ok) {
-                throw new Error("Dashboard API returned " + response.status);
-            }
-
-            const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            document.getElementById("total-foods").textContent =
-                data.total_foods;
-
-            document.getElementById("total-categories").textContent =
-                data.total_categories;
-
-            document.getElementById("total-orders").textContent =
-                data.total_orders;
-
-            document.getElementById("total-inventory").textContent =
-                data.total_inventory;
-
-            document.getElementById("today-orders").textContent =
-                data.today_orders;
-
-            /* Revenue is admin-only: the element only exists in the DOM
-               for admins, and the API only sends a numeric value to them. */
-            const revenueEl = document.getElementById("today-revenue");
-            if (revenueEl && data.today_revenue !== null && data.today_revenue !== undefined) {
-                revenueEl.textContent = Number(data.today_revenue).toFixed(2);
-            }
-
-            document.getElementById("low-stock").textContent =
-                data.low_stock;
-
-            document.getElementById("unavailable").textContent =
-                data.unavailable;
-
-            /* Keep the alert section in sync without refreshing the page. */
-            const alertPanel =
-                document.getElementById("stock-alert-panel");
-
-            const alertContent =
-                document.getElementById("stock-alert-content");
-
-            if (data.low_stock > 0 || data.unavailable > 0) {
-
-                alertPanel.style.display = "";
-
-                let html = "";
-
-                if (data.unavailable > 0) {
-                    html += `
-                        <p>
-                            🔴 <strong>${data.unavailable}</strong>
-                            food item(s) are currently unavailable.
-                        </p>
-                    `;
-                }
-
-                if (data.low_stock > 0) {
-                    html += `
-                        <p style="margin-top:8px;">
-                            🟡 <strong>${data.low_stock}</strong>
-                            food item(s) have reached minimum stock.
-                        </p>
-                    `;
-                }
-
-                html += `
-                    <a href="{{ url_for('inventory') }}"
-                       class="btn"
-                       style="margin-top:14px;">
-                        <i class="bi bi-boxes"></i> Check Inventory
-                    </a>
-                `;
-
-                alertContent.innerHTML = html;
-
-            } else {
-                alertPanel.style.display = "none";
-            }
-
-        } catch (error) {
-            console.error("Live dashboard update failed:", error);
-        }
-    }
-
-    /* Update immediately, then every 5 seconds. */
-    updateDashboard();
-    setInterval(updateDashboard, 5000);
-</script>
 
 {% endblock %}
