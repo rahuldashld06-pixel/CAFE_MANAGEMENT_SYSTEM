@@ -13,7 +13,7 @@
 
     <div class="form-card">
 
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
 
             <!-- Food Name -->
             <div class="field">
@@ -37,6 +37,21 @@
                         </option>
                     {% endfor %}
                 </select>
+            </div>
+
+            <!-- Food Photo -->
+            <div class="field">
+                <label>Food Photo</label>
+                {% if food.image_path %}
+                    <div style="margin-bottom:10px;">
+                        <img src="{{ food.image_path }}" alt="{{ food.food_name }}" style="width:140px;height:90px;object-fit:cover;border-radius:8px;">
+                    </div>
+                {% endif %}
+                <input
+                    type="file"
+                    name="food_image"
+                    accept="image/jpeg,image/png,image/webp,image/gif">
+                <small>Optional · choose a new photo to replace the current one</small>
             </div>
 
             <!-- Description -->
@@ -79,15 +94,9 @@
                     required>
             </div>
 
-            <!-- Availability -->
-            <label class="switch-field">
-                <input
-                    type="checkbox"
-                    name="availability"
-                    {% if food.availability %}checked{% endif %}>
-                <span class="switch-slider"></span>
-                Food Available
-            </label>
+            <div class="field">
+                <small>Availability is automatic: stock above 0 = Available; stock at 0 = Unavailable.</small>
+            </div>
 
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary">

@@ -1,55 +1,942 @@
 {% extends "base.html" %}
 
-{% block title %}Create Order · Cafe Manager{% endblock %}
+{% block title %}New Order · Cafe Manager{% endblock %}
 
 {% block content %}
 
+<style>
+.order-page { width: 100%; }
+
+.food-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.food-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--espresso-700);
+    border-radius: 12px;
+    background: var(--espresso-900);
+    box-shadow: 0 6px 18px rgba(15, 8, 4, 0.22);
+    transition: transform .18s ease, border-color .18s ease;
+}
+
+.food-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--copper);
+}
+
+.food-card--out-of-stock {
+    opacity: .55;
+}
+
+.food-card--out-of-stock .quantity-plus {
+    cursor: not-allowed;
+}
+
+.food-card-image {
+    width: 100%;
+    height: 155px;
+    object-fit: cover;
+    display: block;
+    background: var(--espresso-800);
+}
+
+.food-card-placeholder {
+    width: 100%;
+    height: 155px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--espresso-800);
+    color: var(--copper-light);
+    font-size: 48px;
+}
+
+.food-card-body { padding: 15px; }
+.food-card-name { font-size: 17px; font-weight: 700; color: var(--cream); margin-bottom: 5px; }
+.food-card-category { color: var(--cream-faint); font-size: 12px; margin-bottom: 12px; }
+.food-card-price { font-size: 18px; font-weight: 800; color: var(--copper-light); }
+.food-card-stock { font-size: 11px; color: var(--cream-faint); margin-top: 4px; }
+
+.food-card-footer {
+    margin-top: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.quantity-control { display: inline-flex; align-items: center; }
+.quantity-btn {
+    width: 38px; height: 38px; border: 1px solid var(--espresso-700);
+    background: var(--espresso-800); color: var(--cream); font-size: 21px;
+    font-weight: 700; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; transition: .2s;
+}
+.quantity-btn:hover { background: var(--copper); color: white; }
+.quantity-minus { border-radius: 7px 0 0 7px; }
+.quantity-plus { border-radius: 0 7px 7px 0; }
+.quantity-input {
+    width: 45px; height: 38px; text-align: center; border: none;
+    border-top: 1px solid var(--espresso-700); border-bottom: 1px solid var(--espresso-700);
+    background: var(--espresso-900); color: var(--cream); font-weight: 700; outline: none;
+}
+
+.food-status {
+    position: absolute; top: 10px; right: 10px; padding: 5px 9px;
+    border-radius: 20px; font-size: 11px; font-weight: 700;
+    background: rgba(20, 20, 20, .78); color: var(--cream);
+}
+
+.order-bottom-bar {
+    position: fixed; left: 230px; right: 0; bottom: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    min-height: 78px; padding: 12px 24px; background: rgba(32, 21, 16, .98);
+    border-top: 1px solid var(--espresso-700); box-shadow: 0 -10px 30px rgba(15,8,4,.45);
+    backdrop-filter: blur(10px);
+}
+.order-bottom-summary { display: flex; align-items: center; gap: 25px; flex-wrap: wrap; }
+.order-bottom-stat { display: flex; flex-direction: column; gap: 2px; }
+.order-bottom-label { color: var(--cream-faint); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.order-bottom-value { color: var(--cream); font-size: 14px; font-weight: 700; }
+.order-bottom-total { color: var(--copper-light); font-size: 21px; font-weight: 800; }
+.order-bottom-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.order-bottom-actions .btn { min-width: 140px; justify-content: center; }
+.order-bottom-actions .btn--primary:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (max-width: 1200px) { .food-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) {
+    .food-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .order-bottom-bar { left: 0; padding: 10px 14px; }
+    .order-bottom-summary { gap: 14px; }
+}
+@media (max-width: 600px) {
+    .food-grid { grid-template-columns: 1fr; }
+    .order-bottom-bar { flex-direction: column; align-items: stretch; }
+    .order-bottom-actions { justify-content: stretch; }
+    .order-bottom-actions .btn { flex: 1; }
+}
+
+/* ==========================================
+   FLOATING ORDER SUMMARY
+   ========================================== */
+
+.order-summary-trigger {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    border: 1px solid var(--copper);
+    border-radius: 999px;
+    background: var(--espresso-900);
+    color: var(--cream);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    cursor: pointer;
+}
+
+.order-summary-trigger .summary-total {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: 16px;
+}
+
+.order-summary-badge {
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--copper);
+    color: white;
+    font-weight: 700;
+    font-size: 12px;
+}
+
+.order-summary-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.order-summary-overlay.open {
+    display: flex;
+}
+
+.order-summary-popup {
+    width: min(620px, 96vw);
+    max-height: 82vh;
+    margin-bottom: 18px;
+    overflow: hidden;
+    border: 1px solid var(--espresso-700);
+    border-radius: 16px;
+    background: var(--espresso-900);
+    color: var(--cream);
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+
+.order-summary-popup__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--espresso-700);
+}
+
+.order-summary-popup__header h2 {
+    margin: 0;
+}
+
+.order-summary-close {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--espresso-700);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--cream);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.order-summary-popup__body {
+    padding: 18px 20px;
+    overflow-y: auto;
+    max-height: 48vh;
+}
+
+.order-summary-status {
+    margin: 14px 20px 0;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.order-summary-status--success {
+    background: rgba(46, 160, 67, .18);
+    border: 1px solid rgba(46, 160, 67, .5);
+    color: #8fdc9c;
+}
+
+.order-summary-status--error {
+    background: rgba(220, 53, 69, .18);
+    border: 1px solid rgba(220, 53, 69, .5);
+    color: #f3a3ab;
+}
+
+.order-summary-status--loading {
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid var(--espresso-700);
+    color: var(--cream);
+}
+
+.selected-order-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--espresso-700);
+}
+
+.selected-order-item:last-child {
+    border-bottom: 0;
+}
+
+.selected-order-item__name {
+    font-weight: 600;
+}
+
+.selected-order-item__meta {
+    font-size: 12px;
+    opacity: .75;
+    margin-top: 3px;
+}
+
+.selected-order-item__amount {
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.order-summary-empty {
+    text-align: center;
+    padding: 30px 10px;
+    opacity: .75;
+}
+
+.order-summary-popup__footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--espresso-700);
+}
+
+.order-summary-totals {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.order-summary-row {
+    display: flex;
+    justify-content: space-between;
+}
+
+.order-summary-row--total {
+    padding-top: 10px;
+    border-top: 1px solid var(--espresso-700);
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.order-summary-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+@media (max-width: 700px) {
+    .order-summary-trigger {
+        right: 12px;
+        bottom: 12px;
+        left: 12px;
+        justify-content: center;
+    }
+
+    .order-summary-popup {
+        width: 100%;
+        max-height: 88vh;
+        margin: 0;
+        border-radius: 16px 16px 0 0;
+    }
+
+    .order-summary-actions {
+        flex-direction: column;
+    }
+
+    .order-summary-actions .btn {
+        width: 100%;
+    }
+}
+
+</style>
+
+<div class="order-page">
+
     <div class="page-header">
         <div>
-            <h1 style="margin-bottom:4px;"><i class="bi bi-cart-plus"></i> Create New Order</h1>
-            <p class="page-subtitle">Place a new order for a customer</p>
+            <h1><i class="bi bi-cart-plus"></i> New Order</h1>
+            <p class="page-subtitle">Choose food from the grid and use + / − to set quantities.</p>
+        </div>
+        <div class="page-header__actions">
+            <a href="{{ url_for('orders') }}" class="btn btn--ghost">
+                <i class="bi bi-arrow-left"></i> Order Management
+            </a>
         </div>
     </div>
 
-    <div class="form-card">
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 
-        <form method="POST">
+    <div class="toast-success" id="orderPlacedToast" style="display:none;">
+        <i class="bi bi-check-circle-fill"></i>
+        <span id="orderPlacedToastText">Order has been placed.</span>
+    </div>
 
-            <div class="field">
-                <label>Select Food</label>
-                <select name="food_id" required>
-                    <option value="">-- Select Food --</option>
-                    {% for food in foods %}
-                        <option value="{{ food.food_id }}">
-                            {{ food.food_name }} - ₹{{ food.price }} (Stock: {{ food.quantity }})
-                        </option>
-                    {% endfor %}
-                </select>
+    <div class="panel">
+        <div class="panel-header">
+            <div>
+                <h2><i class="bi bi-grid-3x3-gap"></i> Food Menu</h2>
+                <p class="panel-subtitle">Select several foods — they will be saved under one Order ID.</p>
+            </div>
+            <span class="badge">{{ foods|length }} Food Items</span>
+        </div>
+
+        {% if foods %}
+        <form method="POST" id="orderForm">
+            <div class="food-grid">
+                {% for food in foods %}
+                <div class="food-card" id="food_card_{{ food.food_id }}" data-food-id="{{ food.food_id }}">
+
+                    {% if food.image_path %}
+                        <img src="{{ food.image_path }}" alt="{{ food.food_name }}" class="food-card-image">
+                    {% else %}
+                        <div class="food-card-placeholder"><i class="bi bi-egg-fried"></i></div>
+                    {% endif %}
+
+                    <div class="food-status" id="food_status_{{ food.food_id }}">Stock: {{ food.quantity }}</div>
+
+                    <div class="food-card-body">
+                        <div class="food-card-name">{{ food.food_name }}</div>
+                        <div class="food-card-category">{{ food.category_name or "Other" }}</div>
+                        <div class="food-card-price">₹{{ food.price }}</div>
+                        <div class="food-card-stock" id="food_stock_note_{{ food.food_id }}">Maximum order quantity: {{ food.quantity }}</div>
+
+                        <div class="food-card-footer">
+                            <span class="quantity-help">Quantity</span>
+                            <div class="quantity-control">
+                                <button type="button" class="quantity-btn quantity-minus" onclick="changeQuantity({{ food.food_id }}, -1)">−</button>
+                                <input type="number" class="quantity-input" id="quantity_{{ food.food_id }}" name="quantity_{{ food.food_id }}" data-price="{{ food.price }}" data-food-name="{{ food.food_name }}" min="0" max="{{ food.quantity }}" value="0" readonly>
+                                <button type="button" class="quantity-btn quantity-plus" onclick="changeQuantity({{ food.food_id }}, 1)">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        </form>
+        {% else %}
+            <div class="empty-row">
+                <i class="bi bi-inbox"></i>
+                <p>No available food with stock found.</p>
+                <a href="{{ url_for('foods') }}" class="btn btn--sm btn--primary">Add Food</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+
+<!-- ==========================================
+     FLOATING ORDER SUMMARY
+     ========================================== -->
+
+<button
+    type="button"
+    id="orderSummaryTrigger"
+    class="order-summary-trigger"
+    aria-label="Open order summary">
+
+    <span class="order-summary-badge" id="selectedItemCount">0</span>
+
+    <span>🛒 Order Summary</span>
+
+    <span class="summary-total">
+        ₹<span id="floatingTotal">0.00</span>
+    </span>
+
+</button>
+
+
+<div
+    id="orderSummaryOverlay"
+    class="order-summary-overlay"
+    aria-hidden="true">
+
+    <div
+        class="order-summary-popup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="orderSummaryTitle">
+
+        <div class="order-summary-popup__header">
+
+            <h2 id="orderSummaryTitle">
+                🧾 Order Summary
+            </h2>
+
+            <button
+                type="button"
+                id="closeOrderSummary"
+                class="order-summary-close"
+                aria-label="Close">
+                ×
+            </button>
+
+        </div>
+
+        <div
+            class="order-summary-status"
+            id="orderSummaryStatus"
+            style="display:none;"
+            role="status"></div>
+
+        <div
+            class="order-summary-popup__body"
+            id="selectedOrderItems">
+
+            <div class="order-summary-empty">
+                No food selected yet.
             </div>
 
-            <div class="field">
-                <label>Quantity</label>
-                <input
-                    type="number"
-                    name="quantity"
-                    min="1"
-                    required>
+        </div>
+
+
+        <div class="order-summary-popup__footer">
+
+            <div class="order-summary-totals">
+
+                <div class="order-summary-row">
+                    <span>Subtotal</span>
+                    <strong>₹<span id="popupSubtotal">0.00</span></strong>
+                </div>
+
+                <div class="order-summary-row">
+                    <span>Tax (5%)</span>
+                    <strong>₹<span id="popupTax">0.00</span></strong>
+                </div>
+
+                <div class="order-summary-row order-summary-row--total">
+                    <span>Total</span>
+                    <span>₹<span id="popupTotal">0.00</span></span>
+                </div>
+
             </div>
 
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary">
-                    <i class="bi bi-check-lg"></i> Create Order
+
+            <div class="order-summary-actions">
+
+                <button
+                    type="button"
+                    id="closeSummaryButton"
+                    class="btn btn--ghost">
+                    Continue Selecting
                 </button>
 
-                <a 
-                class="back"
-                href="{{ url_for('orders') }}">
-                    cancel
-                </a>
+                <button
+                    type="submit"
+                    form="orderForm"
+                    id="popupCreateOrder"
+                    class="btn btn--primary"
+                    disabled>
+                    <i class="bi bi-check-lg"></i>
+                    Create Order
+                </button>
+
             </div>
 
-        </form>
+        </div>
 
     </div>
+
+</div>
+
+<script>
+function calculateOrderTotal() {
+    const inputs = document.querySelectorAll('.quantity-input');
+    let subtotal = 0, selectedItems = 0, selectedQuantity = 0;
+
+    inputs.forEach(function(input) {
+        const quantity = parseInt(input.value) || 0;
+        const price = parseFloat(input.dataset.price) || 0;
+        if (quantity > 0) selectedItems++;
+        selectedQuantity += quantity;
+        subtotal += quantity * price;
+    });
+
+    const tax = subtotal * 0.05;
+    const total = subtotal + tax;
+
+    document.getElementById('selected-items').textContent = selectedItems;
+    document.getElementById('selected-quantity').textContent = selectedQuantity;
+    document.getElementById('bottom-subtotal').textContent = subtotal.toFixed(2);
+    document.getElementById('bottom-tax').textContent = tax.toFixed(2);
+    document.getElementById('bottom-total').textContent = total.toFixed(2);
+    document.getElementById('createOrderButton').disabled = selectedQuantity === 0;
+}
+
+function changeQuantity(foodId, change) {
+    const input = document.getElementById('quantity_' + foodId);
+    if (!input) return;
+
+    let current = parseInt(input.value) || 0;
+    const max = parseInt(input.max) || 0;
+    let next = current + change;
+
+    if (next < 0) next = 0;
+    if (next > max) next = max;
+
+    input.value = next;
+    calculateOrderTotal();
+}
+
+document.addEventListener('DOMContentLoaded', calculateOrderTotal);
+</script>
+
+
+<script>
+(function () {
+
+    function getQuantityInputs() {
+        return document.querySelectorAll(".quantity-input");
+    }
+
+    function updateFloatingOrderSummary() {
+
+        const inputs = getQuantityInputs();
+
+        let itemCount = 0;
+        let subtotal = 0;
+        let selected = [];
+
+        inputs.forEach(function (input) {
+
+            const quantity = parseInt(input.value, 10) || 0;
+            const price = parseFloat(input.dataset.price) || 0;
+
+            if (quantity > 0) {
+
+                itemCount += quantity;
+                subtotal += quantity * price;
+
+                const name = input.dataset.foodName || "Food Item";
+
+                selected.push({
+                    name: name,
+                    quantity: quantity,
+                    price: price,
+                    amount: quantity * price
+                });
+            }
+        });
+
+        const tax = subtotal * 0.05;
+        const total = subtotal + tax;
+
+        const countEl = document.getElementById("selectedItemCount");
+        const floatingTotalEl = document.getElementById("floatingTotal");
+        const subtotalEl = document.getElementById("popupSubtotal");
+        const taxEl = document.getElementById("popupTax");
+        const totalEl = document.getElementById("popupTotal");
+        const createButton = document.getElementById("popupCreateOrder");
+        const itemsEl = document.getElementById("selectedOrderItems");
+
+        if (countEl) countEl.textContent = itemCount;
+        if (floatingTotalEl) floatingTotalEl.textContent = total.toFixed(2);
+        if (subtotalEl) subtotalEl.textContent = subtotal.toFixed(2);
+        if (taxEl) taxEl.textContent = tax.toFixed(2);
+        if (totalEl) totalEl.textContent = total.toFixed(2);
+
+        if (createButton) {
+            createButton.disabled = itemCount === 0;
+        }
+
+        if (itemsEl) {
+
+            if (selected.length === 0) {
+
+                itemsEl.innerHTML =
+                    '<div class="order-summary-empty">' +
+                    'No food selected yet.' +
+                    '</div>';
+
+            } else {
+
+                itemsEl.innerHTML = selected.map(function (item) {
+
+                    return (
+                        '<div class="selected-order-item">' +
+                            '<div>' +
+                                '<div class="selected-order-item__name">' +
+                                    escapeHtml(item.name) + ' × ' + item.quantity +
+                                '</div>' +
+                                '<div class="selected-order-item__meta">' +
+                                    '₹' + item.price.toFixed(2) + ' each' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="selected-order-item__amount">' +
+                                '₹' + item.amount.toFixed(2) +
+                            '</div>' +
+                        '</div>'
+                    );
+
+                }).join("");
+            }
+        }
+    }
+
+
+    function escapeHtml(value) {
+
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+
+    }
+
+
+    function openSummary() {
+
+        const overlay =
+            document.getElementById("orderSummaryOverlay");
+
+        if (!overlay) return;
+
+        updateFloatingOrderSummary();
+
+        overlay.classList.add("open");
+        overlay.setAttribute("aria-hidden", "false");
+
+    }
+
+
+    function closeSummary() {
+
+        const overlay =
+            document.getElementById("orderSummaryOverlay");
+
+        if (!overlay) return;
+
+        overlay.classList.remove("open");
+        overlay.setAttribute("aria-hidden", "true");
+
+    }
+
+
+    document.addEventListener("DOMContentLoaded", function () {
+
+        const trigger =
+            document.getElementById("orderSummaryTrigger");
+
+        const closeButton =
+            document.getElementById("closeOrderSummary");
+
+        const closeSummaryButton =
+            document.getElementById("closeSummaryButton");
+
+        const overlay =
+            document.getElementById("orderSummaryOverlay");
+
+
+        if (trigger) {
+            trigger.addEventListener("click", openSummary);
+        }
+
+        if (closeButton) {
+            closeButton.addEventListener("click", closeSummary);
+        }
+
+        if (closeSummaryButton) {
+            closeSummaryButton.addEventListener("click", closeSummary);
+        }
+
+        if (overlay) {
+
+            overlay.addEventListener("click", function (event) {
+
+                if (event.target === overlay) {
+                    closeSummary();
+                }
+
+            });
+        }
+
+
+        document.addEventListener("keydown", function (event) {
+
+            if (event.key === "Escape") {
+                closeSummary();
+            }
+
+        });
+
+
+        // Watch all quantity changes, including + / - buttons.
+        getQuantityInputs().forEach(function (input) {
+
+            input.addEventListener(
+                "input",
+                updateFloatingOrderSummary
+            );
+
+            input.addEventListener(
+                "change",
+                updateFloatingOrderSummary
+            );
+
+        });
+
+
+        // Observe programmatic value changes from existing
+        // changeQuantity() functions.
+        setInterval(
+            updateFloatingOrderSummary,
+            300
+        );
+
+
+        updateFloatingOrderSummary();
+
+
+        // ==============================================
+        // CREATE ORDER — submit from inside the popup
+        // without navigating the page. The popup content
+        // (status banner, cart, stock counts) refreshes
+        // itself in place instead of a full page reload.
+        // ==============================================
+
+        const orderForm = document.getElementById("orderForm");
+        const statusBox = document.getElementById("orderSummaryStatus");
+        const pageToast = document.getElementById("orderPlacedToast");
+        const pageToastText = document.getElementById("orderPlacedToastText");
+        let statusHideTimer = null;
+        let pageToastHideTimer = null;
+
+        function showStatus(kind, message) {
+
+            if (!statusBox) return;
+
+            if (statusHideTimer) {
+                clearTimeout(statusHideTimer);
+                statusHideTimer = null;
+            }
+
+            statusBox.className = "order-summary-status order-summary-status--" + kind;
+            statusBox.textContent = message;
+            statusBox.style.display = "block";
+        }
+
+        function hideStatus() {
+            if (!statusBox) return;
+            if (statusHideTimer) {
+                clearTimeout(statusHideTimer);
+                statusHideTimer = null;
+            }
+            statusBox.style.display = "none";
+        }
+
+        function showPageToast(message) {
+
+            if (!pageToast) return;
+
+            if (pageToastHideTimer) {
+                clearTimeout(pageToastHideTimer);
+                pageToastHideTimer = null;
+            }
+
+            if (pageToastText) pageToastText.textContent = message;
+            pageToast.style.display = "flex";
+
+            pageToastHideTimer = setTimeout(function () {
+                pageToast.style.display = "none";
+            }, 5000);
+        }
+
+        function applyStockUpdates(foods) {
+
+            if (!Array.isArray(foods)) return;
+
+            foods.forEach(function (food) {
+
+                const quantity = Number(food.quantity) || 0;
+
+                const input = document.getElementById("quantity_" + food.food_id);
+                const statusEl = document.getElementById("food_status_" + food.food_id);
+                const noteEl = document.getElementById("food_stock_note_" + food.food_id);
+                const card = document.getElementById("food_card_" + food.food_id);
+
+                if (input) {
+                    input.max = quantity;
+                    if (parseInt(input.value, 10) > quantity) {
+                        input.value = Math.max(quantity, 0);
+                    }
+                }
+
+                if (statusEl) statusEl.textContent = "Stock: " + quantity;
+                if (noteEl) noteEl.textContent = "Maximum order quantity: " + quantity;
+
+                if (card) {
+                    const plusBtn = card.querySelector(".quantity-plus");
+                    const outOfStock = quantity <= 0 || food.availability === 0;
+
+                    card.classList.toggle("food-card--out-of-stock", outOfStock);
+
+                    if (plusBtn) plusBtn.disabled = outOfStock;
+                }
+            });
+        }
+
+        function resetAllQuantities() {
+            getQuantityInputs().forEach(function (input) {
+                input.value = 0;
+            });
+        }
+
+        if (orderForm) {
+
+            orderForm.addEventListener("submit", function (event) {
+
+                event.preventDefault();
+
+                const createButton = document.getElementById("popupCreateOrder");
+                const originalLabel = createButton ? createButton.innerHTML : "";
+
+                if (createButton) {
+                    createButton.disabled = true;
+                    createButton.innerHTML = "Creating…";
+                }
+
+                showStatus("loading", "Creating your order…");
+
+                const formData = new FormData(orderForm);
+
+                fetch(orderForm.action || window.location.href, {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest"
+                    },
+                    body: formData
+                })
+                    .then(function (response) {
+                        return response.json().then(function (data) {
+                            return { ok: response.ok, data: data };
+                        });
+                    })
+                    .then(function (result) {
+
+                        const data = result.data || {};
+
+                        if (result.ok && data.success) {
+
+                            applyStockUpdates(data.foods);
+                            resetAllQuantities();
+                            updateFloatingOrderSummary();
+                            hideStatus();
+                            closeSummary();
+                            showPageToast(data.message || "Order has been placed.");
+
+                        } else {
+
+                            showStatus("error", data.message || "Could not create the order. Please try again.");
+                            if (data.foods) applyStockUpdates(data.foods);
+                        }
+                    })
+                    .catch(function () {
+                        showStatus("error", "Could not reach the server. Please check your connection and try again.");
+                    })
+                    .finally(function () {
+                        if (createButton) {
+                            createButton.disabled = false;
+                            createButton.innerHTML = originalLabel;
+                        }
+                        updateFloatingOrderSummary();
+                    });
+            });
+        }
+
+    });
+
+})();
+</script>
 
 {% endblock %}

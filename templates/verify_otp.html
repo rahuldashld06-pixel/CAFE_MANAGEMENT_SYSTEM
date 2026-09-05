@@ -186,7 +186,7 @@
 
     {% if cafe_branding.logo %}
         <img
-            src="{{ url_for('static', filename=cafe_branding.logo) }}"
+            src="{{ cafe_branding.logo }}"
             alt="{{ cafe_branding.cafe_name }} logo"
             style="width:56px;height:56px;object-fit:contain;border-radius:50%;margin-bottom:20px;background:rgba(255,250,243,.12);border:1px solid rgba(217,171,120,.45);padding:5px;">
     {% else %}

@@ -265,12 +265,12 @@
 
     <section class="login-visual"
         {% if cafe_branding.login_photo %}
-        style="--login-photo: url('{{ url_for('static', filename=cafe_branding.login_photo) }}');"
+        style="--login-photo: url('{{ cafe_branding.login_photo }}');"
         {% endif %}>
         <div class="brand-copy">
             {% if cafe_branding.logo %}
                 <img
-                    src="{{ url_for('static', filename=cafe_branding.logo) }}"
+                    src="{{ cafe_branding.logo }}"
                     alt="{{ cafe_branding.cafe_name }} logo"
                     class="login-logo">
             {% else %}

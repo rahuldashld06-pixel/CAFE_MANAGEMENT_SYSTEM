@@ -57,7 +57,7 @@
             <p><strong>Current Logo</strong></p>
 
             <img
-                src="{{ url_for('static', filename=branding.logo) }}"
+                src="{{ branding.logo }}"
                 alt="Current cafe logo"
                 style="
                     width:110px;
@@ -102,7 +102,7 @@
             <p><strong>Current Login Photo</strong></p>
 
             <img
-                src="{{ url_for('static', filename=branding.login_photo) }}"
+                src="{{ branding.login_photo }}"
                 alt="Current login page photo"
                 style="
                     width:100%;

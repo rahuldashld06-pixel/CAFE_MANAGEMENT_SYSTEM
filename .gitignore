@@ -1,10 +1,25 @@
-config.py
+# Secrets - never commit these
 .env
+config.py
+
+# Python
 __pycache__/
-*.pyc
-*.pyo
-static/uploads/*
-!static/uploads/branding/
-!static/uploads/branding/cafe_logo.png
+*.py[cod]
+*.egg-info/
 .venv/
 venv/
+env/
+
+# Runtime uploads (images now live in the database; this directory
+# is only used as a scratch area during local development)
+static/uploads/foods/
+static/uploads/branding/
+
+# Legacy single-tenant branding file, replaced by per-cafe storage
+cafe_branding.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

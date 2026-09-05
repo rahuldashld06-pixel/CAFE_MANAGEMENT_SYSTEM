@@ -11,7 +11,7 @@
         </div>
 
         <div class="page-header__actions">
-            <a href="{{ url_for('dashboard') }}" class="btn btn--ghost">
+            <a href="{{ url_for('home') }}" class="btn btn--ghost">
                 <i class="bi bi-arrow-left"></i> Dashboard
             </a>
             <a class="btn btn--primary" href="{{ url_for('add_food') }}">
@@ -39,6 +39,7 @@
                 <thead>
                     <tr>
                         <th>ID</th>
+                        <th>Photo</th>
                         <th>Food Name</th>
                         <th>Category</th>
                         <th>Description</th>
@@ -52,6 +53,13 @@
                 <tbody>
                 {% for food in foods %}
                     <tr>
+                        <td>
+                            {% if food.image_path %}
+                                <img src="{{ food.image_path }}" alt="{{ food.food_name }}" style="width:64px;height:48px;object-fit:cover;border-radius:7px;">
+                            {% else %}
+                                <span class="badge"><i class="bi bi-image"></i> No Photo</span>
+                            {% endif %}
+                        </td>
                         <td>{{ food.food_id }}</td>
                         <td class="cell-strong">{{ food.food_name }}</td>
                         <td>{{ food.category_name }}</td>
@@ -59,13 +67,13 @@
                         <td>₹{{ food.price }}</td>
                         <td>{{ food.quantity }}</td>
                         <td>
-                            {% if food.availability %}
+                            {% if food.quantity > 0 %}
                                 <span class="badge badge--available">
                                     <i class="bi bi-check-circle-fill"></i> Available
                                 </span>
                             {% else %}
                                 <span class="badge badge--unavailable">
-                                    <i class="bi bi-x-circle-fill"></i> Not Available
+                                    <i class="bi bi-x-circle-fill"></i> Unavailable
                                 </span>
                             {% endif %}
                         </td>
@@ -86,7 +94,7 @@
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="8" class="empty-row">
+                        <td colspan="9" class="empty-row">
                             <i class="bi bi-inbox"></i>
                             No food items found.
                         </td>

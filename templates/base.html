@@ -29,38 +29,58 @@
 
             <nav class="sidebar-nav">
 
+                {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('home') }}"
-                   class="nav-link {{ 'active' if request.endpoint in ['home', 'dashboard'] else '' }}">
+                   class="nav-link {{ 'active' if request.endpoint == 'home' else '' }}">
                     <i class="bi bi-speedometer2"></i><span>Dashboard</span>
                 </a>
+                {% endif %}
+
+                {% if current_user and current_user.role == 'admin' %}
+                <a href="{{ url_for('categories') }}"
+                   class="nav-link {{ 'active' if request.endpoint in ['categories', 'add_category', 'edit_category'] else '' }}">
+                    <i class="bi bi-tags"></i><span>Categories</span>
+                </a>
+                {% endif %}
 
                 <a href="{{ url_for('foods') }}"
                    class="nav-link {{ 'active' if request.endpoint in ['foods', 'add_food', 'edit_food'] else '' }}">
                     <i class="bi bi-egg-fried"></i><span>Food Management</span>
                 </a>
-
-                <a href="{{ url_for('categories') }}"
-                   class="nav-link {{ 'active' if request.endpoint in ['categories', 'add_category', 'edit_category'] else '' }}">
-                    <i class="bi bi-tags-fill"></i><span>Category Management</span>
-                </a>
-
                 <a href="{{ url_for('inventory') }}"
                    class="nav-link {{ 'active' if request.endpoint in ['inventory', 'update_stock'] else '' }}">
                     <i class="bi bi-boxes"></i><span>Inventory</span>
                 </a>
 
+                <a href="{{ url_for('add_order') }}"
+                   class="nav-link {{ 'active' if request.endpoint in ['add_order'] else '' }}">
+                    <i class="bi bi-cart-plus"></i><span>New Order</span>
+                </a>
+
                 <a href="{{ url_for('orders') }}"
-                   class="nav-link {{ 'active' if request.endpoint in ['orders', 'add_order', 'order_details'] else '' }}">
+                   class="nav-link {{ 'active' if request.endpoint in ['orders', 'order_details'] else '' }}">
                     <i class="bi bi-receipt-cutoff"></i><span>Order Management</span>
                 </a>
 
-                <a href="#" class="nav-link nav-link--soon">
+                <a href="{{ url_for('billing') }}"
+                    class="nav-link {{ 'active' if request.endpoint in ['billing'] else '' }}">
                     <i class="bi bi-credit-card-2-front"></i><span>Billing</span>
                 </a>
 
-                <a href="#" class="nav-link nav-link--soon">
-                    <i class="bi bi-graph-up-arrow"></i><span>Reports</span>
+                {% if session.get('role') == 'admin' %}
+                <a href="{{ url_for('reports') }}"
+                   class="nav-link {{ 'active' if request.endpoint in ['reports'] else '' }}">
+                    <i class="bi bi-bar-chart-line"></i>
+                    <span>Reports</span>
                 </a>
+                {% endif %}
+                {% if session.get('role') == 'admin' %}
+                <a href="{{ url_for('users') }}"
+                   class="nav-link {{ 'active' if request.endpoint in ['users', 'add_user', 'edit_user'] else '' }}">
+                    <i class="bi bi-people"></i>
+                    <span>User Management</span>
+                </a>
+                {% endif %}
 
             </nav>
 
@@ -68,10 +88,285 @@
 
         <!-- Main Content -->
         <main class="main">
+
+            <div class="topbar">
+                <div class="profile-menu" id="profileMenu">
+
+                    <button type="button" class="profile-trigger" id="profileTrigger">
+                        <span class="profile-avatar">
+                            {{ (current_user.full_name or current_user.username or "?")[0]|upper }}
+                        </span>
+                        <span class="profile-id">
+                            <span class="profile-name">{{ current_user.full_name or current_user.username }}</span>
+                            <span class="profile-role">{{ current_user.role|capitalize }}</span>
+                        </span>
+                        <i class="bi bi-chevron-down profile-caret"></i>
+                    </button>
+
+                    <div class="profile-dropdown" id="profileDropdown">
+
+                        <div class="profile-dropdown__header">
+                            <span class="profile-avatar profile-avatar--lg">
+                                {{ (current_user.full_name or current_user.username or "?")[0]|upper }}
+                            </span>
+                            <div>
+                                <div class="profile-name">{{ current_user.full_name or current_user.username }}</div>
+                                <div class="profile-role">{{ current_user.role|capitalize }} · @{{ current_user.username }}</div>
+                            </div>
+                        </div>
+
+                        <div class="profile-dropdown__section">Account</div>
+
+                        <a href="{{ url_for('change_password') }}" class="profile-dropdown__item">
+                            <i class="bi bi-shield-lock"></i><span>Change Password</span>
+                        </a>
+
+                        {% if session.get('role') == 'admin' %}
+                        <div class="profile-dropdown__section">Customize</div>
+
+                        <a href="{{ url_for('branding') }}" class="profile-dropdown__item">
+                            <i class="bi bi-palette"></i><span>Cafe Branding &amp; Login Photo</span>
+                        </a>
+                        {% endif %}
+
+                        <div class="profile-dropdown__divider"></div>
+
+                        <a href="{{ url_for('logout') }}" class="profile-dropdown__item profile-dropdown__item--danger">
+                            <i class="bi bi-box-arrow-right"></i><span>Logout</span>
+                        </a>
+
+                    </div>
+
+                </div>
+            </div>
+
+            {# Rendered here so every page shows feedback. Pages that already
+               render their own flash block still work: get_flashed_messages()
+               consumes the queue, so this runs first and the page-level block
+               simply finds nothing left to show - no duplicates. #}
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                <div class="flash-stack">
+                    {% for message in messages %}
+                    <div class="alert">{{ message }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% endwith %}
+
             {% block content %}{% endblock %}
         </main>
 
     </div>
+
+    {% if session.get('role') and session.get('role') != 'admin' %}
+    <!-- Order Status popup (staff pages) -->
+    <button type="button" class="order-status-fab" id="orderStatusFab" aria-haspopup="dialog">
+        <i class="bi bi-receipt-cutoff"></i>
+        <span class="order-status-fab__label">Order Status</span>
+        <span class="order-status-fab__badge" id="orderStatusBadge"></span>
+    </button>
+
+    <div class="order-status-overlay" id="orderStatusOverlay" aria-hidden="true">
+        <div class="order-status-popup" role="dialog" aria-modal="true" aria-labelledby="orderStatusTitle">
+
+            <div class="order-status-popup__header">
+                <h2 id="orderStatusTitle"><i class="bi bi-receipt-cutoff"></i> Order Status</h2>
+                <div>
+                    <button type="button" class="order-status-refresh" id="orderStatusRefresh" aria-label="Refresh">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <button type="button" class="order-status-close" id="orderStatusClose" aria-label="Close">×</button>
+                </div>
+            </div>
+
+            <div class="order-status-popup__body" id="orderStatusBody">
+                <div class="order-status-loading">Loading orders…</div>
+            </div>
+
+        </div>
+    </div>
+    {% endif %}
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const token = {{ csrf_token_value|tojson }};
+    document.querySelectorAll("form[method='POST'], form[method='post']").forEach(function(form) {
+        if (!form.querySelector('input[name="_csrf_token"]')) {
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "_csrf_token";
+            input.value = token;
+            form.appendChild(input);
+        }
+    });
+
+    const profileMenu = document.getElementById("profileMenu");
+    const profileTrigger = document.getElementById("profileTrigger");
+
+    if (profileMenu && profileTrigger) {
+        profileTrigger.addEventListener("click", function (event) {
+            event.stopPropagation();
+            profileMenu.classList.toggle("open");
+        });
+
+        document.addEventListener("click", function (event) {
+            if (!profileMenu.contains(event.target)) {
+                profileMenu.classList.remove("open");
+            }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+                profileMenu.classList.remove("open");
+            }
+        });
+    }
+
+    // ---- Order Status popup (staff pages) ----
+    const fab = document.getElementById("orderStatusFab");
+    const overlay = document.getElementById("orderStatusOverlay");
+    const closeBtn = document.getElementById("orderStatusClose");
+    const refreshBtn = document.getElementById("orderStatusRefresh");
+    const body = document.getElementById("orderStatusBody");
+    const badge = document.getElementById("orderStatusBadge");
+
+    if (fab && overlay) {
+
+        function badgeClass(status) {
+            if (status === "Completed") return "order-status-badge--completed";
+            if (status === "Cancelled") return "order-status-badge--cancelled";
+            return "order-status-badge--pending";
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement("div");
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function completeOrder(orderId, triggerBtn) {
+            if (triggerBtn) {
+                triggerBtn.disabled = true;
+                triggerBtn.textContent = "Marking…";
+            }
+
+            fetch("/orders/complete/" + orderId, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "X-CSRFToken": token }
+            })
+                .then(function (response) {
+                    if (!response.ok) throw new Error("Request failed");
+
+                    // Swap just this row's badge in place instead of
+                    // reloading the whole popup body.
+                    if (triggerBtn) {
+                        const doneBadge = document.createElement("span");
+                        doneBadge.className = "order-status-badge " + badgeClass("Completed");
+                        doneBadge.textContent = "Completed";
+                        triggerBtn.replaceWith(doneBadge);
+                    }
+
+                    // Keep the FAB's pending-count badge accurate without
+                    // touching the rest of the list.
+                    pollBadge();
+                })
+                .catch(function () {
+                    if (triggerBtn) {
+                        triggerBtn.disabled = false;
+                        triggerBtn.textContent = "Pending";
+                    }
+                });
+        }
+
+        function loadOrderStatus() {
+            body.innerHTML = '<div class="order-status-loading">Loading orders…</div>';
+
+            fetch("{{ url_for('order_status_feed') }}", { credentials: "same-origin" })
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    const orders = data.orders || [];
+
+                    if (badge) {
+                        badge.textContent = data.pending_count ? data.pending_count : "";
+                    }
+
+                    if (!orders.length) {
+                        body.innerHTML = '<div class="order-status-empty">No orders yet.</div>';
+                        return;
+                    }
+
+                    body.innerHTML = orders.map(function (order) {
+                        const isPending = order.order_status === "Pending";
+                        const statusTag = isPending
+                            ? '<button type="button" class="order-status-badge ' + badgeClass(order.order_status) + '" ' +
+                              'data-order-id="' + order.order_id + '" title="Click to mark this order as done">' +
+                                  escapeHtml(order.order_status) +
+                              '</button>'
+                            : '<span class="order-status-badge ' + badgeClass(order.order_status) + '">' + escapeHtml(order.order_status) + '</span>';
+
+                        return (
+                            '<div class="order-status-item">' +
+                                '<div>' +
+                                    '<div class="order-status-item__id">Order #' + order.order_id + '</div>' +
+                                    '<div class="order-status-item__meta">' + escapeHtml(order.order_date) + ' · ₹' + escapeHtml(order.total_amount) + '</div>' +
+                                '</div>' +
+                                statusTag +
+                            '</div>'
+                        );
+                    }).join("");
+
+                    body.querySelectorAll("button.order-status-badge--pending").forEach(function (btn) {
+                        btn.addEventListener("click", function () {
+                            completeOrder(btn.getAttribute("data-order-id"), btn);
+                        });
+                    });
+                })
+                .catch(function () {
+                    body.innerHTML = '<div class="order-status-empty">Could not load orders right now.</div>';
+                });
+        }
+
+        function pollBadge() {
+            fetch("{{ url_for('order_status_feed') }}", { credentials: "same-origin" })
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    if (badge) {
+                        badge.textContent = data.pending_count ? data.pending_count : "";
+                    }
+                })
+                .catch(function () {});
+        }
+
+        fab.addEventListener("click", function () {
+            overlay.classList.add("open");
+            overlay.setAttribute("aria-hidden", "false");
+            loadOrderStatus();
+        });
+
+        function closeOrderStatus() {
+            overlay.classList.remove("open");
+            overlay.setAttribute("aria-hidden", "true");
+        }
+
+        closeBtn.addEventListener("click", closeOrderStatus);
+        overlay.addEventListener("click", function (event) {
+            if (event.target === overlay) closeOrderStatus();
+        });
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") closeOrderStatus();
+        });
+        refreshBtn.addEventListener("click", loadOrderStatus);
+
+        // Show a live pending-orders count on the button right away,
+        // then keep it fresh every 30 seconds without opening the popup.
+        pollBadge();
+        setInterval(pollBadge, 30000);
+    }
+});
+</script>
 
 </body>
 

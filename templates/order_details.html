@@ -4,53 +4,578 @@
 
 {% block content %}
 
+    <!-- ==========================================
+         PAGE HEADER
+         ========================================== -->
+
     <div class="page-header">
+
         <div>
-            <h1><i class="bi bi-receipt-cutoff"></i> Order #{{ order.order_id }}</h1>
+
+            <h1>
+                <i class="bi bi-receipt-cutoff"></i>
+                Order #{{ order.order_id }}
+            </h1>
+
+            <p class="page-subtitle">
+                View order items, bill and payment information
+            </p>
+
         </div>
 
+
         <div class="page-header__actions">
-            <a href="{{ url_for('orders') }}" class="btn btn--ghost">
-                <i class="bi bi-arrow-left"></i> Back to Orders
+
+            <a
+                href="{{ url_for('orders') }}"
+                class="btn btn--ghost">
+
+                <i class="bi bi-arrow-left"></i>
+                Back to Orders
+
             </a>
+
         </div>
+
     </div>
+
+
+
+    <!-- ==========================================
+         ORDER INFORMATION
+         ========================================== -->
 
     <div class="panel">
 
+        <div class="panel-header">
+
+            <h2>
+                <i class="bi bi-info-circle-fill"></i>
+                Order Information
+            </h2>
+
+        </div>
+
+
         <div class="order-meta">
-            <span><i class="bi bi-calendar3"></i> Date: <strong>{{ order.order_date }}</strong></span>
-            <span><i class="bi bi-flag-fill"></i> Status: <strong>{{ order.order_status }}</strong></span>
-        </div>
 
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Food</th>
-                        <th>Quantity</th>
-                        <th>Price</th>
-                        <th>Subtotal</th>
-                    </tr>
-                </thead>
+            <span>
 
-                <tbody>
-                {% for item in items %}
-                    <tr>
-                        <td class="cell-strong">{{ item.food_name }}</td>
-                        <td>{{ item.quantity }}</td>
-                        <td>₹{{ item.price }}</td>
-                        <td>₹{{ item.subtotal }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                <i class="bi bi-hash"></i>
 
-        <div class="order-total">
-            Total: ₹{{ order.total_amount }}
+                Order ID:
+
+                <strong>
+                    #{{ order.order_id }}
+                </strong>
+
+            </span>
+
+
+            <span>
+
+                <i class="bi bi-calendar3"></i>
+
+                Date:
+
+                <strong>
+                    {{ order.order_date }}
+                </strong>
+
+            </span>
+
+
+            <span>
+
+                <i class="bi bi-flag-fill"></i>
+
+                Status:
+
+                <strong>
+                    {{ order.order_status }}
+                </strong>
+
+            </span>
+
         </div>
 
     </div>
+
+
+
+    <!-- ==========================================
+         ORDER ITEMS
+         ========================================== -->
+
+    <div class="panel">
+
+        <div class="panel-header">
+
+            <h2>
+                <i class="bi bi-egg-fried"></i>
+                Order Items
+            </h2>
+
+            <span class="badge badge--available">
+
+                <i class="bi bi-list-check"></i>
+
+                {{ items|length }} item{% if items|length != 1 %}s{% endif %}
+
+            </span>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="data-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Food
+                        </th>
+
+                        <th>
+                            Quantity
+                        </th>
+
+                        <th>
+                            Price
+                        </th>
+
+                        <th>
+                            Subtotal
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                {% for item in items %}
+
+                    <tr>
+
+                        <td class="cell-strong">
+
+                            <i
+                                class="bi bi-egg-fried"
+                                style="color: var(--copper); margin-right: 6px;">
+                            </i>
+
+                            {{ item.food_name }}
+
+                        </td>
+
+
+                        <td>
+
+                            <span class="badge">
+
+                                {{ item.quantity }}
+
+                            </span>
+
+                        </td>
+
+
+                        <td>
+
+                            ₹{{ item.price }}
+
+                        </td>
+
+
+                        <td class="cell-strong">
+
+                            ₹{{ item.subtotal }}
+
+                        </td>
+
+                    </tr>
+
+
+                {% else %}
+
+                    <tr>
+
+                        <td
+                            colspan="4"
+                            class="empty-row">
+
+                            <i class="bi bi-inbox"></i>
+
+                            No items found for this order.
+
+                        </td>
+
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <!-- Order Total -->
+
+        <div
+            style="
+                display: flex;
+                justify-content: flex-end;
+                margin-top: 20px;
+                padding-top: 18px;
+                border-top: 1px solid var(--espresso-700);
+            ">
+
+            <div style="text-align: right;">
+
+                <div
+                    style="
+                        color: var(--cream-faint);
+                        font-size: 13px;
+                        margin-bottom: 4px;
+                    ">
+
+                    Order Total
+
+                </div>
+
+
+                <div
+                    style="
+                        font-family: var(--font-display);
+                        font-size: 28px;
+                        font-weight: 700;
+                        color: var(--copper-light);
+                    ">
+
+                    ₹{{ order.total_amount }}
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- ==========================================
+         BILL SECTION
+         ========================================== -->
+
+    <div class="panel">
+
+        <div class="panel-header">
+
+            <h2>
+
+                <i class="bi bi-receipt-cutoff"></i>
+
+                Bill Details
+
+            </h2>
+
+
+            {% if bill %}
+
+                <span class="badge badge--available">
+
+                    <i class="bi bi-check-circle-fill"></i>
+
+                    Bill Generated
+
+                </span>
+
+            {% else %}
+
+                <span class="badge badge--unavailable">
+
+                    <i class="bi bi-x-circle-fill"></i>
+
+                    No Bill
+
+                </span>
+
+            {% endif %}
+
+        </div>
+
+
+
+        {% if bill %}
+
+
+            <div class="table-wrap">
+
+                <table class="data-table">
+
+                    <tbody>
+
+
+                        <!-- Bill ID -->
+
+                        <tr>
+
+                            <td class="cell-strong">
+
+                                <i
+                                    class="bi bi-receipt"
+                                    style="color: var(--copper); margin-right: 6px;">
+                                </i>
+
+                                Bill ID
+
+                            </td>
+
+                            <td>
+
+                                #{{ bill.bill_id }}
+
+                            </td>
+
+                        </tr>
+
+
+                        <!-- Subtotal -->
+
+                        <tr>
+
+                            <td class="cell-strong">
+
+                                Subtotal
+
+                            </td>
+
+                            <td>
+
+                                ₹{{ bill.subtotal }}
+
+                            </td>
+
+                        </tr>
+
+
+                        <!-- Tax -->
+
+                        <tr>
+
+                            <td class="cell-strong">
+
+                                Tax
+
+                            </td>
+
+                            <td>
+
+                                ₹{{ bill.tax }}
+
+                            </td>
+
+                        </tr>
+
+
+                        <!-- Discount -->
+
+                        <tr>
+
+                            <td class="cell-strong">
+
+                                Discount
+
+                            </td>
+
+                            <td>
+
+                                ₹{{ bill.discount }}
+
+                            </td>
+
+                        </tr>
+
+
+                        <!-- Total -->
+
+                        <tr>
+
+                            <td
+                                class="cell-strong"
+                                style="
+                                    font-size: 17px;
+                                    color: var(--cream);
+                                ">
+
+                                <i
+                                    class="bi bi-cash-stack"
+                                    style="color: var(--gold); margin-right: 6px;">
+                                </i>
+
+                                Total Amount
+
+                            </td>
+
+
+                            <td
+                                style="
+                                    font-family: var(--font-display);
+                                    font-size: 22px;
+                                    font-weight: 700;
+                                    color: var(--copper-light);
+                                ">
+
+                                ₹{{ bill.total_amount }}
+
+                            </td>
+
+                        </tr>
+
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+
+
+            <!-- ======================================
+                 PAYMENT INFORMATION
+                 ====================================== -->
+
+            <div
+                style="
+                    margin-top: 22px;
+                    padding-top: 20px;
+                    border-top: 1px solid var(--espresso-700);
+                ">
+
+                <div class="panel-header">
+
+                    <h2>
+
+                        <i class="bi bi-credit-card-2-front"></i>
+
+                        Payment Information
+
+                    </h2>
+
+                </div>
+
+
+                <div class="order-meta">
+
+
+                    <!-- Payment Method -->
+
+                    <span>
+
+                        <i class="bi bi-wallet2"></i>
+
+                        Payment Method:
+
+                        <strong>
+                            {{ bill.payment_method }}
+                        </strong>
+
+                    </span>
+
+
+                    <!-- Payment Status -->
+
+                    <span>
+
+                        <i class="bi bi-check2-circle"></i>
+
+                        Payment Status:
+
+                        <strong>
+                            {{ bill.payment_status }}
+                        </strong>
+
+                    </span>
+
+
+                    <!-- Bill Date -->
+
+                    <span>
+
+                        <i class="bi bi-calendar-check"></i>
+
+                        Bill Date:
+
+                        <strong>
+                            {{ bill.bill_date }}
+                        </strong>
+
+                    </span>
+
+
+                </div>
+
+            </div>
+
+
+        {% else %}
+
+
+            <!-- No Bill -->
+
+            <div class="empty-row">
+
+                <i class="bi bi-receipt"></i>
+
+                <p>
+                    No bill has been generated for this order yet.
+                </p>
+
+            </div>
+
+
+        {% endif %}
+
+    </div>
+
+
+
+    <!-- ==========================================
+         BOTTOM ACTIONS
+         ========================================== -->
+
+    <div class="page-header__actions">
+
+        {% if order.order_status != 'Cancelled' %}
+            <form method="POST"
+                  action="{{ url_for('cancel_order', order_id=order.order_id) }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Cancel Order #{{ order.order_id }}? The bill and complete order history will be preserved, and inventory will be restored.');">
+                <button type="submit" class="btn btn--delete">
+                    <i class="bi bi-x-circle-fill"></i> Cancel Order
+                </button>
+            </form>
+        {% endif %}
+
+        <a
+            href="{{ url_for('orders') }}"
+            class="btn btn--ghost">
+
+            <i class="bi bi-arrow-left"></i>
+
+            Back to Order Management
+
+        </a>
+
+    </div>
+
 
 {% endblock %}

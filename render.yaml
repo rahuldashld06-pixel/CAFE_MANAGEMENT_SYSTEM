@@ -1,0 +1,38 @@
+# Render blueprint. Import this repo as a Blueprint, or create a Web
+# Service manually with the same build/start commands.
+services:
+  - type: web
+    name: cafe-management-saas
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --workers 3 --threads 2 --timeout 60 --bind 0.0.0.0:$PORT wsgi:application
+    healthCheckPath: /healthz
+    envVars:
+      # Render generates a strong value and keeps it stable across
+      # deploys, so sessions survive a restart.
+      - key: SECRET_KEY
+        generateValue: true
+      - key: APP_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      # Fill these in from your database provider's dashboard.
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: CAFE_NAME
+        value: Cafe Manager
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false

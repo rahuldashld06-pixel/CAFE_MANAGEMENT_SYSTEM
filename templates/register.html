@@ -256,12 +256,12 @@
 
     <section class="register-visual"
         {% if cafe_branding.login_photo %}
-        style="--login-photo: url('{{ url_for('static', filename=cafe_branding.login_photo) }}');"
+        style="--login-photo: url('{{ cafe_branding.login_photo }}');"
         {% endif %}>
         <div class="brand-copy">
             {% if cafe_branding.logo %}
                 <img
-                    src="{{ url_for('static', filename=cafe_branding.logo) }}"
+                    src="{{ cafe_branding.logo }}"
                     alt="{{ cafe_branding.cafe_name }} logo"
                     style="width:64px;height:64px;object-fit:contain;border-radius:50%;margin-bottom:20px;background:rgba(255,250,243,.12);border:1px solid rgba(217,171,120,.45);padding:6px;">
             {% else %}
@@ -271,8 +271,7 @@
             <h1>{{ cafe_branding.cafe_name }}</h1>
 
             <p>
-                Create your own staff login and set your own password —
-                no need to wait for an admin to hand you one.
+                Create your café and administrator account. Your café data will be private to your organization.
             </p>
         </div>
     </section>
@@ -284,8 +283,8 @@
         <h2>Create your account</h2>
 
         <p class="subtitle">
-            Fill in your details below. You'll pick your own password here —
-            it's never set or seen by an admin.
+            Create your café workspace and the first administrator account.
+            You can add managers, cashiers, and staff after signing in.
         </p>
 
         {% with messages = get_flashed_messages() %}
@@ -301,6 +300,12 @@
         <form method="POST">
 
             <div class="field">
+                <label for="cafe_name">Café Name</label>
+                <input type="text" id="cafe_name" name="cafe_name" placeholder="e.g. My Coffee House" maxlength="150" required autofocus>
+                <small>This creates a new private café workspace.</small>
+            </div>
+
+            <div class="field">
                 <label for="full_name">Full Name</label>
                 <input
                     type="text"
@@ -308,8 +313,7 @@
                     name="full_name"
                     placeholder="Enter your full name"
                     maxlength="120"
-                    required
-                    autofocus>
+                    required>
             </div>
 
             <div class="field-row">
@@ -362,21 +366,12 @@
                 </div>
             </div>
 
-            <div class="field">
-                <label for="role">Role</label>
-                <select id="role" name="role" required>
-                    <option value="cashier">Cashier</option>
-                    <option value="staff">Staff</option>
-                    <option value="manager">Manager</option>
-                </select>
-                <small>Admin accounts aren't self-service — ask an existing admin to create one from User Management.</small>
-            </div>
 
             <button
                 type="submit"
                 class="register-button">
 
-                ☕ Create Account
+                ☕ Create Café & Admin Account
 
             </button>
 
