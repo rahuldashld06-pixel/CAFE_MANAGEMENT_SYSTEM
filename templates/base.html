@@ -23,8 +23,9 @@
 
     <div class="app-shell">
 
-        <!-- Sidebar -->
-        <aside class="sidebar">
+        <!-- Sidebar. On phones this slides in from the left as a drawer;
+             see .nav-toggle below and the drawer block in style.css. -->
+        <aside class="sidebar" id="appSidebar">
 
             <div class="sidebar-brand">
                 <span class="brand-mark"><i class="bi bi-cup-hot-fill"></i></span>
@@ -90,10 +91,22 @@
 
         </aside>
 
+        <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
+
         <!-- Main Content -->
         <main class="main">
 
             <div class="topbar">
+
+                <button type="button"
+                        class="nav-toggle"
+                        id="navToggle"
+                        aria-label="Open menu"
+                        aria-controls="appSidebar"
+                        aria-expanded="false">
+                    <span class="nav-toggle__bars" aria-hidden="true"></span>
+                </button>
+
                 <div class="profile-menu" id="profileMenu">
 
                     <button type="button" class="profile-trigger" id="profileTrigger">
@@ -255,6 +268,67 @@ window.CafeShell = {
                 profileMenu.classList.remove("open");
             }
         });
+    }
+
+    // ---- Mobile navigation drawer ----
+    // The sidebar is off-canvas below 880px. Everything here lives in the
+    // shell, which instant.js never tears down, so the drawer keeps working
+    // after any number of page swaps.
+    const appShell = document.querySelector(".app-shell");
+    const navToggle = document.getElementById("navToggle");
+    const navBackdrop = document.getElementById("sidebarBackdrop");
+    const appSidebar = document.getElementById("appSidebar");
+    const wideScreen = window.matchMedia("(min-width: 881px)");
+
+    if (appShell && navToggle) {
+
+        function setNav(open) {
+            appShell.classList.toggle("nav-open", open);
+            document.body.classList.toggle("nav-locked", open);
+            navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+            navToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+            if (navBackdrop) navBackdrop.hidden = !open;
+        }
+
+        function closeNav(returnFocus) {
+            if (!appShell.classList.contains("nav-open")) return;
+            setNav(false);
+            if (returnFocus) navToggle.focus();
+        }
+
+        navToggle.addEventListener("click", function () {
+            const opening = !appShell.classList.contains("nav-open");
+            setNav(opening);
+
+            // Hand the keyboard straight to the menu that just opened.
+            if (opening && appSidebar) {
+                const first = appSidebar.querySelector(".nav-link");
+                if (first) first.focus();
+            }
+        });
+
+        if (navBackdrop) {
+            navBackdrop.addEventListener("click", function () { closeNav(true); });
+        }
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") closeNav(true);
+        });
+
+        // Picking a section closes the drawer. Listening for the swap rather
+        // than for clicks on the links themselves matters: instant.js
+        // rewrites the sidebar's contents on every navigation, so any
+        // listener bound to a link would be thrown away with it.
+        document.addEventListener("instant:load", function () { closeNav(false); });
+
+        // A link that instant.js does not handle leaves via a full page load,
+        // which closes the drawer by itself. Rotating to a wide screen does
+        // not, and would otherwise leave the page scroll-locked.
+        function syncToWidth(event) {
+            if (event.matches) setNav(false);
+        }
+        if (wideScreen.addEventListener) wideScreen.addEventListener("change", syncToWidth);
+        else if (wideScreen.addListener) wideScreen.addListener(syncToWidth);
     }
 
     // ---- Order Status popup (staff pages) ----

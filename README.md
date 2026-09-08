@@ -68,6 +68,7 @@ tests/instant_nav_test.py Instant-navigation test suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
+tests/mobile_nav_test.py Real-browser mobile drawer test suite
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
@@ -80,10 +81,11 @@ python tests/instant_nav_test.py  # expect PASSED: 24   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 22   FAILED: 0
 ```
 
-All six run in memory against a SQLite stand-in — no database or network
-needed. The three suites that drive a browser use a headless Edge or Chrome
+All seven run in memory against a SQLite stand-in — no database or network
+needed. The four suites that drive a browser use a headless Edge or Chrome
 when one is installed, and skip themselves when none is.
 
 `smoke_test.py` takes two cafes through the full lifecycle and asserts
@@ -116,6 +118,11 @@ survives a search and still goes out with the order.
 could not be found." for the next page — and the background warm-up then
 cached that message onto Inventory and Food Management. It checks both
 directions: no banner on a good page, and a real 404 still says so.
+
+`mobile_nav_test.py` drives the phone layout at 390x844: the sidebar is an
+off-canvas drawer behind a hamburger, so the page keeps the screen. It
+checks the drawer opens with readable labels, is not tabbable while closed,
+closes after navigating, and that desktop is unaffected.
 
 ## Security notes
 

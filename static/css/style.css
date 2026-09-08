@@ -1568,3 +1568,174 @@ button.order-status-badge:disabled {
         transform: scaleX(.9);
     }
 }
+
+/* ============================================================
+   Mobile navigation drawer
+
+   On a phone the sidebar used to sit above the page as a block of
+   wrapped links, eating most of the first screen. Below 880px it
+   becomes a drawer instead: off-canvas until the hamburger in the
+   top-left is tapped, so the page itself gets the whole viewport.
+
+   This block is deliberately last in the file - it overrides the
+   earlier max-width:880px and max-width:820px rules that laid the
+   sidebar out as a horizontal strip.
+   ============================================================ */
+
+.nav-toggle {
+    display: none;              /* desktop keeps the sidebar on screen */
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 1px solid var(--espresso-700);
+    border-radius: 12px;
+    background: var(--espresso-850);
+    cursor: pointer;
+}
+
+.nav-toggle:hover { background: var(--espresso-800); }
+
+.nav-toggle:focus-visible {
+    outline: 2px solid var(--copper-light);
+    outline-offset: 2px;
+}
+
+/* Three bars drawn from one element: the middle is the box itself,
+   the outer two are its pseudo-elements. */
+.nav-toggle__bars,
+.nav-toggle__bars::before,
+.nav-toggle__bars::after {
+    display: block;
+    width: 20px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--cream);
+}
+
+.nav-toggle__bars {
+    position: relative;
+}
+
+.nav-toggle__bars::before,
+.nav-toggle__bars::after {
+    content: "";
+    position: absolute;
+    left: 0;
+}
+
+.nav-toggle__bars::before { top: -6px; }
+.nav-toggle__bars::after  { top: 6px; }
+
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 880px) {
+
+    .nav-toggle { display: inline-flex; }
+
+    /* Hamburger left, profile right. */
+    .topbar {
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .app-shell {
+        display: block;
+        grid-template-columns: none;
+        min-height: 100vh;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        z-index: 1450;
+        width: 268px;
+        max-width: 82vw;
+        height: 100vh;
+        max-height: none;
+        padding: 22px 16px;
+        border-right: 1px solid var(--espresso-800);
+        border-bottom: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        /* Closed drawers must not be tabbable, so visibility - not just a
+           transform - carries the hidden state. */
+        transform: translateX(-100%);
+        visibility: hidden;
+        transition: transform .25s ease, visibility .25s ease;
+    }
+
+    .app-shell.nav-open .sidebar {
+        transform: none;
+        visibility: visible;
+        box-shadow: 0 0 40px rgba(0, 0, 0, .55);
+    }
+
+    /* Back to a vertical list; the earlier breakpoints made it a row. */
+    .sidebar-nav {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        overflow-x: visible;
+        gap: 4px;
+        padding-bottom: 0;
+    }
+
+    .nav-link {
+        flex: 0 0 auto;
+        justify-content: flex-start;
+        min-width: 0;
+        padding: 11px 12px;
+        font-size: 14px;
+    }
+
+    /* The earlier breakpoint hid these to squeeze the nav into a horizontal
+       icon strip. A drawer has room for the words, and needs them: icons
+       alone are guesswork. */
+    .nav-link span {
+        display: inline;
+    }
+
+    .nav-link i {
+        width: 20px;
+        text-align: center;
+    }
+
+    .sidebar-brand {
+        border-bottom: 1px solid var(--espresso-800);
+        margin-bottom: 14px;
+        padding: 2px 4px 14px;
+    }
+
+    .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 1400;
+        background: rgba(0, 0, 0, .55);
+        opacity: 0;
+        transition: opacity .25s ease;
+    }
+
+    .app-shell.nav-open .sidebar-backdrop { opacity: 1; }
+
+    /* The page now owns the full width. */
+    .main {
+        width: 100%;
+    }
+}
+
+/* Stops the page scrolling behind an open drawer. */
+body.nav-locked {
+    overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar,
+    .sidebar-backdrop {
+        transition: none;
+    }
+}
