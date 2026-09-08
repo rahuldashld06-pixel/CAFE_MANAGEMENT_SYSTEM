@@ -13,6 +13,117 @@
     gap: 18px;
 }
 
+/* The search box hides cards and whole sections with [hidden]; .food-grid
+   sets display:grid, which would otherwise win over the attribute. */
+[hidden] { display: none !important; }
+
+/* ---------- Menu search ---------- */
+.menu-tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.menu-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.menu-search__icon {
+    position: absolute;
+    left: 12px;
+    font-size: 13px;
+    color: var(--cream-faint);
+    pointer-events: none;
+}
+
+.menu-search__input {
+    width: 260px;
+    max-width: 100%;
+    padding: 9px 32px 9px 34px;
+    border-radius: 999px;
+    border: 1px solid var(--espresso-700);
+    background: var(--espresso-800);
+    color: var(--cream);
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.menu-search__input::placeholder { color: var(--cream-faint); }
+
+.menu-search__input:focus {
+    outline: none;
+    border-color: var(--copper);
+    box-shadow: 0 0 0 3px rgba(224, 138, 62, .18);
+}
+
+/* The type=search clear button is not stylable across browsers, so it is
+   suppressed in favour of the themed one next to it. */
+.menu-search__input::-webkit-search-cancel-button { display: none; }
+
+.menu-search__clear {
+    position: absolute;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--espresso-700);
+    color: var(--cream);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.menu-search__clear:hover { background: var(--copper); color: #2a1a10; }
+
+.menu-search-empty {
+    padding: 34px 20px;
+    text-align: center;
+    color: var(--cream-faint);
+}
+
+.menu-search-empty i { font-size: 26px; display: block; margin-bottom: 10px; }
+.menu-search-empty p { margin: 0 0 14px; color: var(--cream); }
+
+/* ---------- Category sections ---------- */
+.food-group + .food-group { margin-top: 26px; }
+
+.food-group__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--espresso-800);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--copper-light);
+}
+
+.food-group__count {
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--espresso-800);
+    border: 1px solid var(--espresso-700);
+    color: var(--cream-faint);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+@media (max-width: 720px) {
+    .panel-header { flex-wrap: wrap; gap: 12px; }
+    .menu-tools { width: 100%; justify-content: space-between; }
+    .menu-search__input { width: 100%; }
+    .menu-search { flex: 1; }
+}
+
 .food-card {
     position: relative;
     overflow: hidden;
@@ -365,14 +476,43 @@
                 <h2><i class="bi bi-grid-3x3-gap"></i> Food Menu</h2>
                 <p class="panel-subtitle">Select several foods — they will be saved under one Order ID.</p>
             </div>
-            <span class="badge">{{ foods|length }} Food Items</span>
+
+            <div class="menu-tools">
+                <div class="menu-search">
+                    <i class="bi bi-search menu-search__icon"></i>
+                    <input type="search"
+                           id="foodSearch"
+                           class="menu-search__input"
+                           placeholder="Search food or category…"
+                           autocomplete="off"
+                           aria-label="Search the menu">
+                    <button type="button"
+                            id="foodSearchClear"
+                            class="menu-search__clear"
+                            aria-label="Clear search"
+                            hidden>&times;</button>
+                </div>
+                <span class="badge" id="foodCount">{{ foods|length }} Food Items</span>
+            </div>
         </div>
 
-        {% if foods %}
+        {% if food_groups %}
         <form method="POST" id="orderForm">
-            <div class="food-grid">
-                {% for food in foods %}
-                <div class="food-card" id="food_card_{{ food.food_id }}" data-food-id="{{ food.food_id }}">
+
+            {% for group in food_groups %}
+            <section class="food-group" data-category="{{ group.name|lower }}">
+
+                <h3 class="food-group__title">
+                    <span class="food-group__name">{{ group.name }}</span>
+                    <span class="food-group__count">{{ group.foods|length }}</span>
+                </h3>
+
+                <div class="food-grid">
+                    {% for food in group.foods %}
+                    <div class="food-card"
+                         id="food_card_{{ food.food_id }}"
+                         data-food-id="{{ food.food_id }}"
+                         data-search="{{ (food.food_name ~ " " ~ group.name)|lower }}">
 
                     {% if food.image_path %}
                         <img src="{{ food.image_path }}" alt="{{ food.food_name }}" class="food-card-image">
@@ -397,10 +537,22 @@
                             </div>
                         </div>
                     </div>
+                    </div>
+                    {% endfor %}
                 </div>
-                {% endfor %}
+
+            </section>
+            {% endfor %}
+
+            {# Shown by the search box when nothing in the menu matches. #}
+            <div class="menu-search-empty" id="foodSearchEmpty" hidden>
+                <i class="bi bi-search"></i>
+                <p>No food matches “<span id="foodSearchTerm"></span>”.</p>
+                <button type="button" class="btn btn--sm btn--ghost" id="foodSearchReset">
+                    Show the whole menu
+                </button>
             </div>
-        </div>
+
         </form>
         {% else %}
             <div class="empty-row">
@@ -411,6 +563,109 @@
         {% endif %}
     </div>
 </div>
+
+
+<script>
+// Menu search. Filters the category sections in place: matching on a food
+// name or on its category, hiding sections that end up empty, and leaving
+// every quantity alone - a filter narrows what is on screen, it never
+// clears what the cashier has already picked. Those selections stay in the
+// form and in the floating summary even while hidden.
+//
+// Wrapped in an IIFE because instant.js re-runs this script each time the
+// page is swapped back in; a top-level const/let would throw on the second
+// visit.
+(function () {
+
+    var input = document.getElementById("foodSearch");
+    if (!input) return;
+
+    var clearButton = document.getElementById("foodSearchClear");
+    var resetButton = document.getElementById("foodSearchReset");
+    var emptyState = document.getElementById("foodSearchEmpty");
+    var termLabel = document.getElementById("foodSearchTerm");
+    var countBadge = document.getElementById("foodCount");
+
+    var groups = Array.prototype.slice.call(document.querySelectorAll(".food-group"));
+    var total = document.querySelectorAll(".food-card").length;
+
+    // Each section's heading badge counts what is on screen, so it cannot sit
+    // there claiming "2" while a search has narrowed the section to one.
+    groups.forEach(function (group) {
+        var badge = group.querySelector(".food-group__count");
+        if (badge) badge.setAttribute("data-total", badge.textContent.trim());
+    });
+
+    function applyFilter() {
+        var query = input.value.trim().toLowerCase();
+        var visible = 0;
+
+        groups.forEach(function (group) {
+            // Typing a category name keeps that whole section, so "coffee"
+            // shows the section even for items that are not named "coffee".
+            var wholeSection =
+                query !== "" &&
+                (group.getAttribute("data-category") || "").indexOf(query) !== -1;
+
+            var cards = group.querySelectorAll(".food-card");
+            var shownHere = 0;
+
+            for (var i = 0; i < cards.length; i++) {
+                var haystack = cards[i].getAttribute("data-search") || "";
+                var match = query === "" || wholeSection || haystack.indexOf(query) !== -1;
+                cards[i].hidden = !match;
+                if (match) shownHere++;
+            }
+
+            group.hidden = shownHere === 0;
+            visible += shownHere;
+
+            var badge = group.querySelector(".food-group__count");
+            if (badge) {
+                badge.textContent = query === ""
+                    ? badge.getAttribute("data-total")
+                    : shownHere;
+            }
+        });
+
+        if (clearButton) clearButton.hidden = query === "";
+
+        if (emptyState) {
+            emptyState.hidden = visible !== 0;
+            if (termLabel) termLabel.textContent = input.value.trim();
+        }
+
+        if (countBadge) {
+            countBadge.textContent = query === ""
+                ? total + " Food Items"
+                : visible + " of " + total + " Food Items";
+        }
+    }
+
+    function clearSearch() {
+        input.value = "";
+        applyFilter();
+        input.focus();
+    }
+
+    input.addEventListener("input", applyFilter);
+
+    input.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+            event.preventDefault();
+            clearSearch();
+        }
+    });
+
+    if (clearButton) clearButton.addEventListener("click", clearSearch);
+    if (resetButton) resetButton.addEventListener("click", clearSearch);
+
+    // The browser can restore a typed value on a back-navigation, so start
+    // from whatever is actually in the box rather than assuming it is empty.
+    applyFilter();
+
+})();
+</script>
 
 
 <!-- ==========================================

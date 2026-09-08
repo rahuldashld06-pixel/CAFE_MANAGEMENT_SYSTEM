@@ -257,6 +257,26 @@
 }
 
 </style>
+    {# The sign-in screen is self-contained (its CSS is inline above), but the
+       page waiting on the other side of it is not: it needs style.css, the
+       navigation layer, the icon font and Google Fonts. Warming them while
+       the cashier is still typing their password means the dashboard or New
+       Order screen paints from cache the moment the login succeeds, instead
+       of showing an unstyled shell first.
+
+       Protected pages themselves cannot be fetched here - there is no
+       session yet - so instant.js takes over and warms those the instant the
+       first authenticated page loads. #}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+
+    <link rel="prefetch" as="style" href="{{ url_for('static', filename='css/style.css', v=asset_version) }}">
+    <link rel="prefetch" as="script" href="{{ url_for('static', filename='js/instant.js', v=asset_version) }}">
+    <link rel="prefetch" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" crossorigin>
+    <link rel="prefetch" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" crossorigin>
+    <link rel="prefetch" as="font" type="font/woff2" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2" crossorigin>
+
 </head>
 
 <body>

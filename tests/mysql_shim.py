@@ -50,6 +50,17 @@ PRIMARY_KEYS = {
 }
 
 
+_JOIN_UPDATE = re.compile(
+    r"UPDATE\s+foods\s+f\s+"
+    r"INNER\s+JOIN\s+inventory\s+i\s+"
+    r"ON\s+f\.food_id\s*=\s*i\.food_id\s+"
+    r"SET\s+f\.availability\s*=\s*(?P<expr>CASE.*?END)\s+"
+    r"WHERE\s+(?P<where>f\.\w+\s*=\s*(?:%s|\?)"
+    r"(?:\s+AND\s+f\.\w+\s*=\s*(?:%s|\?))*)",
+    re.I | re.S,
+)
+
+
 def _translate(sql):
     """Rewrite MySQL-specific syntax into something SQLite accepts."""
     s = sql
@@ -85,6 +96,34 @@ def _translate(sql):
     s = re.sub(r"DATE_ADD\(NOW\(\),\s*INTERVAL\s*%s\s*SECOND\)",
                "datetime('now', '+' || %s || ' seconds')", s, flags=re.I)
     s = re.sub(r"\bDATE\((\w+\.?\w*)\)", r"date(\1)", s)
+
+    # Multi-table UPDATE ... JOIN. MySQL can drive an UPDATE from a join;
+    # SQLite cannot. app.py uses exactly one shape of it - resetting a food's
+    # availability from its inventory row after stock moves - in two places,
+    # so it is rewritten into the correlated-subquery form rather than
+    # attempting a general translator. Without this the whole AJAX
+    # order-taking path (and order cancellation) is untestable offline.
+    def _join_update(match):
+        # The WHERE clause keeps its columns but loses the alias, which the
+        # rewritten single-table UPDATE no longer defines.
+        where = re.sub(r"\bf\.", "", match.group("where"))
+        return (
+            "UPDATE foods SET availability = ("
+            " SELECT %s FROM inventory i WHERE i.food_id = foods.food_id"
+            " ) WHERE %s" % (match.group("expr"), where)
+        )
+
+    s = _JOIN_UPDATE.sub(_join_update, s)
+
+    # Row locking. app.py takes SELECT ... FOR UPDATE on inventory before it
+    # decrements stock, which is how it stops two tills overselling the last
+    # item. SQLite has no such clause and needs none here: the shim is a
+    # single connection, so statements are already serialised. Dropping the
+    # clause keeps the AJAX order path testable offline - without it the
+    # statement does not even parse.
+    s = re.sub(r"\s+FOR\s+UPDATE\s*$", "", s, flags=re.I)
+    s = re.sub(r"\s+LOCK\s+IN\s+SHARE\s+MODE\s*$", "", s, flags=re.I)
+
     return "__SQL__", s
 
 

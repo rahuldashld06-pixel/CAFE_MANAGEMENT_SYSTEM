@@ -1528,3 +1528,43 @@ button.order-status-badge:disabled {
     font-size: 0.95rem;
     line-height: 1.4;
 }
+
+/* ============================================================
+   Instant navigation
+   Pages are swapped in from a background-warmed cache, so most
+   clicks paint with no network wait at all. The bar below only
+   appears for the rare page that was not warmed in time.
+   ============================================================ */
+
+.instant-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+    height: 3px;
+    width: 100%;
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    background: linear-gradient(90deg, #c28b52, #d9ab78);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s ease;
+}
+
+.instant-progress--on {
+    opacity: 1;
+    animation: instant-progress-run 1.6s cubic-bezier(.2, .8, .3, 1) forwards;
+}
+
+@keyframes instant-progress-run {
+    0%   { transform: scaleX(0); }
+    45%  { transform: scaleX(.65); }
+    100% { transform: scaleX(.92); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .instant-progress--on {
+        animation: none;
+        transform: scaleX(.9);
+    }
+}

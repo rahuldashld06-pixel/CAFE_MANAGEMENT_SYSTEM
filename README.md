@@ -61,19 +61,28 @@ docs/schema.sql      Reference database schema
 docs/FIXES.md        What was broken before, and how it was fixed
 templates/           Jinja2 templates
 static/              CSS and static assets
+static/js/instant.js Instant page navigation (prefetch + swap)
 tests/smoke_test.py  Offline end-to-end test suite
 tests/upgrade_test.py Legacy-database upgrade test suite
+tests/instant_nav_test.py Instant-navigation test suite
+tests/browser_nav_test.py Real-browser navigation test suite
+tests/menu_search_test.py Real-browser New Order menu/search test suite
+tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
 ## Tests
 
 ```bash
-python tests/smoke_test.py     # expect PASSED: 37   FAILED: 0
-python tests/upgrade_test.py   # expect PASSED: 19   FAILED: 0
+python tests/smoke_test.py        # expect PASSED: 37   FAILED: 0
+python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
+python tests/instant_nav_test.py  # expect PASSED: 17   FAILED: 0
+python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
+python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 ```
 
-Both run in memory against a SQLite stand-in — no database or network
-needed.
+All five run in memory against a SQLite stand-in — no database or network
+needed. The two `*_test.py` files that drive a browser use a headless Edge
+or Chrome when one is installed, and skip themselves when none is.
 
 `smoke_test.py` takes two cafes through the full lifecycle and asserts
 that neither can read or modify the other's data.
@@ -83,6 +92,22 @@ the older single-cafe app: missing unique constraints, duplicate rows
 already present, the rule that a paid bill is never deleted in favour of
 a pending duplicate, and constraint detection by shape rather than by
 index name.
+
+`instant_nav_test.py` covers the fast-navigation layer: that every page
+ships the region instant.js swaps, that a background warm-up cannot
+swallow a flash message or serve a page to a signed-out browser, and that
+no page script declares `const`/`let`/`class` at the top level - which
+would throw the second time that page is opened.
+
+`browser_nav_test.py` drives a real browser through the order-taking path:
+create an order, move Orders -> Billing -> New Order -> Billing, then pay.
+It is the check that catches a duplicated delegated listener - the failure
+that would post a payment twice from a single click.
+
+`menu_search_test.py` covers the New Order menu: categories A-Z with their
+items A-Z inside, and the search box filtering by food name or category -
+including that filtering only hides cards, so a quantity already keyed in
+survives a search and still goes out with the order.
 
 ## Security notes
 

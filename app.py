@@ -129,7 +129,84 @@ app.config.update(
     # body so a large file cannot exhaust a web worker's memory.
     MAX_CONTENT_LENGTH=int(os.environ.get("MAX_UPLOAD_MB", "5")) * 1024 * 1024,
     TEMPLATES_AUTO_RELOAD=not IS_PRODUCTION,
+    # style.css and instant.js are requested on every cold load. They are
+    # served with a ?v= stamp taken from their own modification times
+    # (see ASSET_VERSION), so a year-long cache is safe: a deploy changes
+    # the stamp and browsers fetch the new file immediately.
+    SEND_FILE_MAX_AGE_DEFAULT=timedelta(days=365),
 )
+
+
+def _asset_version():
+    """
+    Cache-busting stamp for the static files, from their newest mtime.
+
+    Without it the long SEND_FILE_MAX_AGE_DEFAULT above would pin a stale
+    stylesheet in every browser that had already loaded the old one.
+    """
+    newest = 0.0
+    static_root = os.path.join(app.root_path, "static")
+    for folder, _dirs, files in os.walk(static_root):
+        if "uploads" in folder:
+            continue
+        for name in files:
+            try:
+                newest = max(newest, os.path.getmtime(os.path.join(folder, name)))
+            except OSError:
+                continue
+    return str(int(newest))
+
+
+ASSET_VERSION = _asset_version()
+
+
+@app.context_processor
+def inject_asset_version():
+    return {"asset_version": ASSET_VERSION}
+
+
+def _is_prefetch():
+    """True for a page instant.js fetched speculatively, not one a user asked for."""
+    return request.headers.get("X-Instant-Prefetch") == "1"
+
+
+@app.before_request
+def _remember_flashes_for_prefetch():
+    """
+    Keep queued flash messages alive across a speculative fetch.
+
+    instant.js warms the sidebar pages in the background, and rendering any
+    of them runs get_flashed_messages(), which *pops* the queue. Without
+    this, a warm-up that happened to run just after "Order created" would
+    swallow that message and the user would never see it.
+    """
+    if _is_prefetch():
+        g._prefetch_flashes = session.get("_flashes")
+
+
+@app.after_request
+def _restore_flashes_after_prefetch(response):
+    if _is_prefetch():
+        saved = getattr(g, "_prefetch_flashes", None)
+        if saved and not session.get("_flashes"):
+            session["_flashes"] = saved
+    return response
+
+
+@app.after_request
+def _no_store_pages(response):
+    """
+    Rendered pages are per-user and per-café, so they must never be written
+    to a disk cache that another sign-in could read back. instant.js keeps
+    its own in-memory copy for the length of a session instead.
+
+    Routes that set their own Cache-Control (the immutable /media images)
+    are left alone.
+    """
+    if "Cache-Control" not in response.headers and response.mimetype == "text/html":
+        response.headers["Cache-Control"] = "no-store, private"
+    return response
+
 
 if IS_PRODUCTION:
     # gunicorn captures the app logger; without this, app.logger.info(...)
@@ -2267,6 +2344,37 @@ def order_status_feed():
 # CREATE MULTIPLE-ITEM ORDER
 # ==========================================
 
+UNCATEGORISED_LABEL = "Other"
+
+
+def group_foods_by_category(foods):
+    """
+    Split the menu into category sections for the New Order screen.
+
+    Categories come back A-Z and the items inside each one A-Z, so a cashier
+    can find a dish by eye instead of scanning one long grid. Food with no
+    category is collected under a single "Other" heading at the end rather
+    than sorted under a blank name.
+    """
+    grouped = {}
+    for food in foods:
+        name = (food.get("category_name") or "").strip() or UNCATEGORISED_LABEL
+        grouped.setdefault(name, []).append(food)
+
+    # The key is "foods", not "items": in a template `group.items` resolves
+    # to the dict's own .items method before it ever looks for the key, so
+    # `group.items|length` would blow up on a built-in method.
+    sections = [
+        {
+            "name": name,
+            "foods": sorted(rows, key=lambda f: (f.get("food_name") or "").lower()),
+        }
+        for name, rows in grouped.items()
+    ]
+    sections.sort(key=lambda s: (s["name"] == UNCATEGORISED_LABEL, s["name"].lower()))
+    return sections
+
+
 @app.route("/orders/add", methods=["GET", "POST"])
 def add_order():
 
@@ -2321,7 +2429,8 @@ def add_order():
 
             return render_template(
                 "add_order.html",
-                foods=foods
+                foods=foods,
+                food_groups=group_foods_by_category(foods)
             )
 
 

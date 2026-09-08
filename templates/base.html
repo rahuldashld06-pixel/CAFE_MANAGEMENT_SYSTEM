@@ -12,7 +12,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=asset_version) }}">
+
+    {# Loaded here, not deferred: every page script below relies on
+       window.Instant already existing when it runs. #}
+    <script src="{{ url_for('static', filename='js/instant.js', v=asset_version) }}"></script>
 </head>
 
 <body>
@@ -27,7 +31,7 @@
                 <span class="brand-text">Cafe Manager<small>Food &amp; Service Admin</small></span>
             </div>
 
-            <nav class="sidebar-nav">
+            <nav class="sidebar-nav"><!--nav:start-->
 
                 {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('home') }}"
@@ -82,7 +86,7 @@
                 </a>
                 {% endif %}
 
-            </nav>
+            <!--nav:end--></nav>
 
         </aside>
 
@@ -140,21 +144,33 @@
                 </div>
             </div>
 
-            {# Rendered here so every page shows feedback. Pages that already
-               render their own flash block still work: get_flashed_messages()
-               consumes the queue, so this runs first and the page-level block
-               simply finds nothing left to show - no duplicates. #}
-            {% with messages = get_flashed_messages() %}
-                {% if messages %}
-                <div class="flash-stack">
-                    {% for message in messages %}
-                    <div class="alert">{{ message }}</div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-            {% endwith %}
+            {# Everything inside #page-view is what instant.js swaps out on a
+               navigation; the sidebar, topbar and order-status popup around
+               it stay alive, which is what makes the switch feel immediate. #}
+            <div id="page-view"><!--pv:start-->
 
-            {% block content %}{% endblock %}
+                {# Opens the page scope: timers and document/window listeners
+                   registered from here on belong to this page and are torn
+                   down when the user moves to the next one. #}
+                <script>window.Instant && window.Instant.beginPage();</script>
+
+                {# Rendered here so every page shows feedback. Pages that already
+                   render their own flash block still work: get_flashed_messages()
+                   consumes the queue, so this runs first and the page-level block
+                   simply finds nothing left to show - no duplicates. #}
+                {% with messages = get_flashed_messages() %}
+                    {% if messages %}
+                    <div class="flash-stack">
+                        {% for message in messages %}
+                        <div class="alert">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+
+            <!--pv:end--></div>
         </main>
 
     </div>
@@ -190,17 +206,34 @@
 
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    const token = {{ csrf_token_value|tojson }};
-    document.querySelectorAll("form[method='POST'], form[method='post']").forEach(function(form) {
-        if (!form.querySelector('input[name="_csrf_token"]')) {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = "_csrf_token";
-            input.value = token;
-            form.appendChild(input);
-        }
-    });
+// Stamps the CSRF field onto every POST form. Exposed rather than inlined
+// because instant.js calls it again after each swap: forms that arrive with a
+// newly loaded page have not been through this yet.
+window.CafeShell = {
+    csrfToken: {{ csrf_token_value|tojson }},
+    applyCsrf: function (root) {
+        (root || document)
+            .querySelectorAll("form[method='POST'], form[method='post']")
+            .forEach(function (form) {
+                if (form.querySelector('input[name="_csrf_token"]')) return;
+                var input = document.createElement("input");
+                input.type = "hidden";
+                input.name = "_csrf_token";
+                input.value = window.CafeShell.csrfToken;
+                form.appendChild(input);
+            });
+    }
+};
+
+// The shell - sidebar, topbar, order-status popup - is never swapped out, so
+// it is wired up once per real page load and has to survive every navigation.
+// Instant.shell() keeps these listeners and the badge poller out of the
+// per-page teardown that runs on each swap.
+(window.Instant ? window.Instant.shell : function (fn) {
+    document.addEventListener("DOMContentLoaded", fn);
+})(function () {
+    const token = window.CafeShell.csrfToken;
+    window.CafeShell.applyCsrf(document);
 
     const profileMenu = document.getElementById("profileMenu");
     const profileTrigger = document.getElementById("profileTrigger");
