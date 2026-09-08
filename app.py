@@ -170,26 +170,51 @@ def _is_prefetch():
     return request.headers.get("X-Instant-Prefetch") == "1"
 
 
-@app.before_request
-def _remember_flashes_for_prefetch():
+def _is_page_request():
     """
-    Keep queued flash messages alive across a speculative fetch.
+    True when this request is a person opening a page.
 
-    instant.js warms the sidebar pages in the background, and rendering any
-    of them runs get_flashed_messages(), which *pops* the queue. Without
-    this, a warm-up that happened to run just after "Order created" would
-    swallow that message and the user would never see it.
+    Browsers fetch /favicon.ico and friends on their own, and instant.js
+    warms pages nobody asked for. Neither should be able to put a message
+    in front of the user.
     """
     if _is_prefetch():
-        g._prefetch_flashes = session.get("_flashes")
+        return False
+    destination = request.headers.get("Sec-Fetch-Dest")
+    if destination:
+        return destination == "document"
+    # Older browsers send no Sec-Fetch-Dest; a trailing file extension is
+    # the next best signal that this is a subresource, not a page.
+    return "." not in request.path.rsplit("/", 1)[-1]
+
+
+@app.before_request
+def _hide_flashes_from_prefetch():
+    """
+    Render a speculative fetch as though no message were queued.
+
+    instant.js warms the sidebar pages in the background and *caches the
+    HTML it gets back*, showing it later when the user clicks that section.
+    So a flash must not simply survive a warm-up - it must never be drawn
+    into one. Rendering it there would both bake a stale banner into the
+    cached page (a 404 message reappearing on Inventory, say) and consume
+    the queue, so the page the message was actually meant for never showed
+    it at all.
+
+    The queue is lifted out for the duration of the request and put back in
+    _restore_flashes_after_prefetch.
+    """
+    if _is_prefetch():
+        g._prefetch_flashes = session.pop("_flashes", None)
 
 
 @app.after_request
 def _restore_flashes_after_prefetch(response):
-    if _is_prefetch():
-        saved = getattr(g, "_prefetch_flashes", None)
-        if saved and not session.get("_flashes"):
-            session["_flashes"] = saved
+    saved = getattr(g, "_prefetch_flashes", None)
+    if saved:
+        # Anything queued while the warm-up was in flight keeps its place
+        # at the back of the queue rather than being overwritten.
+        session["_flashes"] = list(saved) + list(session.get("_flashes") or [])
     return response
 
 
@@ -5232,11 +5257,29 @@ def handle_too_large(error):
     return redirect(request.referrer or url_for("home")), 302
 
 
+@app.route("/favicon.ico")
+def favicon():
+    """
+    Browsers ask for this unprompted on every visit.
+
+    Answering "no content" keeps it out of the 404 handler below, which
+    would otherwise queue a "page could not be found" message for a request
+    the user never made.
+    """
+    return "", 204
+
+
 @app.errorhandler(404)
 def handle_not_found(error):
     if wants_json_response() or request.path.startswith("/api/"):
         return jsonify({"error": "Not found"}), 404
-    flash("That page could not be found.")
+
+    # Only a real page navigation earns a message. A missing subresource -
+    # an icon, a stylesheet, a background warm-up - must not leave a banner
+    # sitting in the queue for whatever page the user opens next.
+    if _is_page_request():
+        flash("That page could not be found.")
+
     return redirect(url_for("home") if session.get("user_id")
                     else url_for("login")), 302
 

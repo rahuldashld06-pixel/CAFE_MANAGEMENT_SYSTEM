@@ -67,6 +67,7 @@ tests/upgrade_test.py Legacy-database upgrade test suite
 tests/instant_nav_test.py Instant-navigation test suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
+tests/stale_banner_test.py Real-browser stale-flash regression suite
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
@@ -75,14 +76,15 @@ tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```bash
 python tests/smoke_test.py        # expect PASSED: 37   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
-python tests/instant_nav_test.py  # expect PASSED: 17   FAILED: 0
+python tests/instant_nav_test.py  # expect PASSED: 24   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
+python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
 ```
 
-All five run in memory against a SQLite stand-in — no database or network
-needed. The two `*_test.py` files that drive a browser use a headless Edge
-or Chrome when one is installed, and skip themselves when none is.
+All six run in memory against a SQLite stand-in — no database or network
+needed. The three suites that drive a browser use a headless Edge or Chrome
+when one is installed, and skip themselves when none is.
 
 `smoke_test.py` takes two cafes through the full lifecycle and asserts
 that neither can read or modify the other's data.
@@ -108,6 +110,12 @@ that would post a payment twice from a single click.
 items A-Z inside, and the search box filtering by food name or category -
 including that filtering only hides cards, so a quantity already keyed in
 survives a search and still goes out with the order.
+
+`stale_banner_test.py` guards a bug seen live: the browser's unprompted
+`/favicon.ico` request went through the 404 handler, queueing "That page
+could not be found." for the next page — and the background warm-up then
+cached that message onto Inventory and Food Management. It checks both
+directions: no banner on a good page, and a real 404 still says so.
 
 ## Security notes
 

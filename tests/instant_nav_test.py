@@ -118,6 +118,14 @@ warm = client.get("/foods", headers={"X-Instant-Prefetch": "1"})
 check("a prefetched page still renders", warm.status_code == 200,
       "status=%d" % warm.status_code)
 
+# The warm-up's HTML is cached by instant.js and shown later, on whatever
+# section the user clicks. A message drawn into it would resurface there -
+# this is how a stray "page could not be found" ended up greeting people on
+# Inventory and Food Management.
+check("a prefetched page never draws a queued message into its HTML",
+      "Order has been placed." not in warm.get_data(as_text=True),
+      "the warm-up baked a flash into the HTML instant.js caches")
+
 real = client.get("/orders").get_data(as_text=True)
 check("the message survives the prefetch and reaches the next real page",
       "Order has been placed." in real,
@@ -132,6 +140,38 @@ first = client.get("/foods").get_data(as_text=True)
 second = client.get("/foods").get_data(as_text=True)
 check("an ordinary request still consumes the queue exactly once",
       "Consumed once." in first and "Consumed once." not in second)
+
+
+print("\n=== 2b. A 404 only speaks up for a page a person opened ===")
+
+# Every browser asks for /favicon.ico unprompted. Routing that through the
+# 404 handler queued "That page could not be found." for whichever screen
+# the user opened next - and the warm-up then cached it onto that screen.
+client.get("/foods")                       # drain the queue first
+
+icon = client.get("/favicon.ico")
+check("/favicon.ico is answered, not sent to the 404 handler",
+      icon.status_code == 204, "status=%d" % icon.status_code)
+
+with client.session_transaction() as sess:
+    check("a favicon request queues no message for the user",
+          not sess.get("_flashes"), "queued: %r" % sess.get("_flashes"))
+
+client.get("/definitely-missing.png")
+with client.session_transaction() as sess:
+    check("a missing subresource queues no message either",
+          not sess.get("_flashes"), "queued: %r" % sess.get("_flashes"))
+
+client.get("/definitely-missing", headers={"Sec-Fetch-Dest": "document"})
+with client.session_transaction() as sess:
+    check("a person opening a missing page is still told",
+          bool(sess.get("_flashes")), "the real 404 message was suppressed")
+
+warm404 = client.get("/inventory", headers={"X-Instant-Prefetch": "1"})
+check("and that message is not baked into a warmed page",
+      "That page could not be found." not in warm404.get_data(as_text=True))
+check("it reaches the next real page instead",
+      "That page could not be found." in client.get("/inventory").get_data(as_text=True))
 
 
 print("\n=== 3. Caching headers ===")
