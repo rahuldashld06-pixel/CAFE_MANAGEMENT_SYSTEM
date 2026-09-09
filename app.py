@@ -596,6 +596,7 @@ _CORE_TABLES = [
             login_photo_mime VARCHAR(80) NULL,
             login_photo_blob MEDIUMBLOB NULL,
             branding_version INT NOT NULL DEFAULT 1,
+            tax_percent DECIMAL(5,2) NOT NULL DEFAULT 5.00,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             is_active TINYINT(1) NOT NULL DEFAULT 1
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -610,6 +611,9 @@ _CORE_TABLES = [
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             phone_number VARCHAR(20) NULL,
             cafe_id INT NULL,
+            photo_mime VARCHAR(80) NULL,
+            photo_blob MEDIUMBLOB NULL,
+            photo_version INT NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_users_cafe_id (cafe_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -750,6 +754,13 @@ _COLUMN_MIGRATIONS = [
     ("cafes", "login_photo_mime", "VARCHAR(80) NULL"),
     ("cafes", "login_photo_blob", "MEDIUMBLOB NULL"),
     ("cafes", "branding_version", "INT NOT NULL DEFAULT 1"),
+    # Per-café tax rate. 5.00 is what every bill was hard-coded to before
+    # this was configurable, so existing cafés keep their current totals.
+    ("cafes", "tax_percent", "DECIMAL(5,2) NOT NULL DEFAULT 5.00"),
+    # A staff member's own photo, shown in place of their initial.
+    ("users", "photo_mime", "VARCHAR(80) NULL"),
+    ("users", "photo_blob", "MEDIUMBLOB NULL"),
+    ("users", "photo_version", "INT NOT NULL DEFAULT 1"),
     ("bills", "gateway_order_id", "VARCHAR(100) NULL"),
     ("bills", "gateway_payment_id", "VARCHAR(100) NULL"),
     ("bills", "payment_reference", "VARCHAR(150) NULL"),
@@ -1243,7 +1254,8 @@ def get_current_user():
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
         cursor.execute("""
-            SELECT user_id, username, full_name, role, is_active
+            SELECT user_id, username, full_name, role, is_active,
+                   (photo_blob IS NOT NULL) AS has_photo, photo_version
             FROM users
             WHERE user_id = %s AND cafe_id = %s
         """, (user_id, cafe_id))
@@ -1282,7 +1294,65 @@ STAFF_ALLOWED_ENDPOINTS = {
     "verify_online_payment", "edit_bill",
     "order_status_feed",
     "change_password", "logout",
+    "account_photo", "user_media",
 }
+
+
+def format_percent(value):
+    """5.00 -> "5", 12.50 -> "12.5" - no trailing zeros in the message."""
+    text = ("%s" % Decimal(str(value)).quantize(Decimal("0.01"))).rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def user_photo_url(user_id, version=None):
+    """Versioned URL for a user's photo, so a new upload is picked up."""
+    return url_for("user_media", user_id=user_id, v=version or 1)
+
+
+DEFAULT_TAX_PERCENT = Decimal("5.00")
+MAX_TAX_PERCENT = Decimal("100.00")
+
+
+def get_tax_percent(cafe_id=None):
+    """
+    The café's tax rate, as a percentage.
+
+    Cached for the request: order creation and the billing page both need it,
+    and it is read again to render the New Order screen. Falls back to the
+    5% every bill used before the rate was configurable, so a café that has
+    never opened the settings page keeps the totals it already had.
+    """
+    if cafe_id is None and has_request_context() and "cafe_tax_percent" in g:
+        return g.cafe_tax_percent
+
+    target = cafe_id if cafe_id is not None else session.get("cafe_id")
+    if not target:
+        return DEFAULT_TAX_PERCENT
+
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT tax_percent FROM cafes WHERE cafe_id = %s", (target,)
+        )
+        row = cursor.fetchone()
+        rate = row["tax_percent"] if row and row["tax_percent"] is not None             else DEFAULT_TAX_PERCENT
+        rate = Decimal(str(rate))
+    except mysql.connector.Error:
+        # A café that predates the column must still be able to take orders.
+        rate = DEFAULT_TAX_PERCENT
+    finally:
+        cursor.close()
+        connection.close()
+
+    if cafe_id is None and has_request_context():
+        g.cafe_tax_percent = rate
+    return rate
+
+
+def tax_multiplier(cafe_id=None):
+    """The rate as a fraction, e.g. 5.00% -> Decimal('0.05')."""
+    return get_tax_percent(cafe_id) / Decimal("100")
 
 
 def get_cafe_owner_id():
@@ -2524,6 +2594,10 @@ def add_order():
                 foods=foods,
                 hot_foods=hot_foods,
                 hot_days=HOT_SELLER_DAYS,
+                # The on-screen totals must agree with what the server will
+                # charge, so both read the same café rate.
+                tax_rate=float(tax_multiplier()),
+                tax_percent=get_tax_percent(),
                 # Every food, hot ones included, still appears under its
                 # own category heading.
                 food_groups=group_foods_by_category(foods)
@@ -2695,7 +2769,7 @@ def add_order():
         )
 
 
-        tax = subtotal * Decimal("0.05")
+        tax = (subtotal * tax_multiplier()).quantize(Decimal("0.01"))
 
         discount = Decimal("0.00")
 
@@ -3655,8 +3729,8 @@ def ensure_missing_bills_for_user(user_id):
                 (order["order_id"],),
             )
             row = cursor.fetchone()
-            subtotal = row["subtotal"] or 0
-            tax = subtotal * Decimal("0.05")
+            subtotal = Decimal(str(row["subtotal"] or 0))
+            tax = (subtotal * tax_multiplier()).quantize(Decimal("0.01"))
             discount = 0
             total = subtotal + tax - discount
 
@@ -5270,6 +5344,165 @@ def get_cafe_branding(cafe_id):
     }
 
 
+@app.route("/settings/tax", methods=["GET", "POST"])
+def tax_settings():
+    """
+    The café's tax rate, in one place.
+
+    Admin only: the rate decides what every future bill charges, so it is
+    not something a cashier should be able to move. Bills already issued
+    keep the tax they were raised with - changing the rate is not a way to
+    rewrite history.
+    """
+    denied = require_role("admin")
+    if denied:
+        return denied
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cafe_id = require_cafe_session()
+
+        if request.method == "POST":
+            raw = (request.form.get("tax_percent") or "").strip()
+            try:
+                rate = Decimal(raw)
+            except (InvalidOperation, ValueError):
+                flash("Enter the tax rate as a number, for example 5 or 12.5.")
+                return redirect(url_for("tax_settings"))
+
+            if rate < 0 or rate > MAX_TAX_PERCENT:
+                flash("The tax rate must be between 0 and 100 percent.")
+                return redirect(url_for("tax_settings"))
+
+            cursor.execute(
+                "UPDATE cafes SET tax_percent = %s WHERE cafe_id = %s",
+                (rate.quantize(Decimal("0.01")), cafe_id)
+            )
+            connection.commit()
+            g.pop("cafe_tax_percent", None)
+
+            flash("Tax rate saved. New orders will use %s%%."
+                  % format_percent(rate))
+            return redirect(url_for("tax_settings"))
+
+        return render_template(
+            "tax_settings.html",
+            tax_percent=get_tax_percent(cafe_id),
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/account/photo", methods=["GET", "POST"])
+def account_photo():
+    """
+    The signed-in user's own profile photo.
+
+    Everyone gets this, not just admins - it is their own picture. Stored in
+    the database beside the food and branding images rather than on disk,
+    because the filesystem does not survive a deploy on this host.
+    """
+    user = get_current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        if request.method == "POST":
+            if request.form.get("action") == "remove":
+                cursor.execute("""
+                    UPDATE users
+                    SET photo_blob = NULL, photo_mime = NULL,
+                        photo_version = photo_version + 1
+                    WHERE user_id = %s
+                """, (user["user_id"],))
+                connection.commit()
+                flash("Profile photo removed.")
+                return redirect(url_for("account_photo"))
+
+            upload = request.files.get("photo")
+            if not upload or not upload.filename:
+                flash("Choose an image first.")
+                return redirect(url_for("account_photo"))
+
+            data = upload.read()
+            if not data:
+                flash("That file was empty.")
+                return redirect(url_for("account_photo"))
+
+            mime = (upload.mimetype or "").lower()
+            if not mime.startswith("image/"):
+                flash("Profile photos must be an image file.")
+                return redirect(url_for("account_photo"))
+
+            cursor.execute("""
+                UPDATE users
+                SET photo_blob = %s, photo_mime = %s,
+                    photo_version = photo_version + 1
+                WHERE user_id = %s
+            """, (data, mime, user["user_id"]))
+            connection.commit()
+            flash("Profile photo updated.")
+            return redirect(url_for("account_photo"))
+
+        cursor.execute(
+            "SELECT (photo_blob IS NOT NULL) AS has_photo, photo_version "
+            "FROM users WHERE user_id = %s",
+            (user["user_id"],)
+        )
+        row = cursor.fetchone() or {}
+        return render_template(
+            "account_photo.html",
+            has_photo=bool(row.get("has_photo")),
+            photo_url=user_photo_url(user["user_id"], row.get("photo_version")),
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/media/user/<int:user_id>")
+def user_media(user_id):
+    """Serve a staff member's profile photo from the database."""
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        # Scoped to the viewer's café: a photo is not something another
+        # tenant should be able to fetch by guessing user ids.
+        cursor.execute("""
+            SELECT photo_blob AS data, photo_mime AS mime
+            FROM users WHERE user_id = %s AND cafe_id = %s
+        """, (user_id, session.get("cafe_id")))
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+        connection.close()
+
+    if not row or not row["data"]:
+        abort(404)
+
+    response = send_file(
+        io.BytesIO(row["data"]),
+        mimetype=row["mime"] or "image/png",
+    )
+    # Private: it is a person's photo, and the URL carries a version that
+    # changes whenever they upload a new one.
+    response.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    return response
+
+
 @app.route("/media/cafe/<int:cafe_id>/<kind>")
 def cafe_media(cafe_id, kind):
     """Serve a café's logo or login photo from the database."""
@@ -5497,6 +5730,12 @@ def favicon():
 def handle_not_found(error):
     if wants_json_response() or request.path.startswith("/api/"):
         return jsonify({"error": "Not found"}), 404
+
+    # Media is fetched by <img>, not navigated to. Redirecting it to the
+    # dashboard would hand an image tag a page of HTML and hide the real
+    # answer, which is simply that there is no such picture.
+    if request.path.startswith("/media/"):
+        return "Not found", 404
 
     # Only a real page navigation earns a message. A missing subresource -
     # an icon, a stylesheet, a background warm-up - must not leave a banner

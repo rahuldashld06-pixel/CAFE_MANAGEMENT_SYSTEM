@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Tax Percentage · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Customize</div>
+        <h1><i class="bi bi-percent"></i> Tax Percentage</h1>
+        <p>The rate applied to every new order and bill.</p>
+    </div>
+    <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="panel form-panel" style="max-width:620px;">
+
+    <form method="POST">
+
+        <div class="form-group">
+            <label for="tax_percent">Tax rate</label>
+
+            <div class="input-suffix">
+                <input type="number"
+                       id="tax_percent"
+                       name="tax_percent"
+                       value="{{ tax_percent }}"
+                       min="0"
+                       max="100"
+                       step="0.01"
+                       required
+                       autocomplete="off">
+                <span class="input-suffix__unit">%</span>
+            </div>
+
+            <small>
+                Applied to the subtotal of each new order. Enter 0 if you do
+                not charge tax.
+            </small>
+        </div>
+
+        <div class="note-card">
+            <i class="bi bi-info-circle"></i>
+            <div>
+                Bills that have already been raised keep the rate they were
+                charged at. Changing this only affects orders taken from now
+                on.
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-check2"></i> Save tax rate
+            </button>
+            <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>Cancel</a>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

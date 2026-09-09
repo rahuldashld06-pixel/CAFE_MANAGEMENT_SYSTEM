@@ -1,126 +1,81 @@
 {% extends "base.html" %}
 
+{% block title %}Cafe Branding · Cafe Manager{% endblock %}
+
 {% block content %}
 
 <div class="page-header">
     <div>
-        <h1>☕ Cafe Branding</h1>
-        <p>Customize the cafe name, logo and login photo shown on the login page.</p>
+        <div class="eyebrow">Customize</div>
+        <h1><i class="bi bi-palette"></i> Cafe Branding</h1>
+        <p>The name, logo and photo shown on your sign-in page.</p>
     </div>
+    <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
 </div>
 
-<div class="panel" style="max-width:760px;">
+<div class="panel form-panel" style="max-width:680px;">
 
-    <form method="POST"
-          enctype="multipart/form-data">
+    <form method="POST" enctype="multipart/form-data">
 
-        <div style="margin-bottom:20px;">
-            <label for="cafe_name">
-                <strong>Cafe Name</strong>
-            </label>
-
-            <input
-                type="text"
-                id="cafe_name"
-                name="cafe_name"
-                value="{{ branding.cafe_name }}"
-                placeholder="Enter your cafe name"
-                required
-                style="width:100%;max-width:520px;margin-top:8px;">
+        <div class="form-group">
+            <label for="cafe_name">Cafe name</label>
+            <input type="text"
+                   id="cafe_name"
+                   name="cafe_name"
+                   value="{{ branding.cafe_name }}"
+                   placeholder="Enter your cafe name"
+                   required>
+            <small>Shown as the title on the sign-in screen.</small>
         </div>
 
+        <div class="form-group">
+            <label for="logo">Cafe logo</label>
 
-        <div style="margin-bottom:20px;">
+            {% if branding.logo %}
+            <div class="brand-preview brand-preview--logo">
+                <img src="{{ branding.logo }}" alt="Current cafe logo">
+                <span>Current logo</span>
+            </div>
+            {% endif %}
 
-            <label for="logo">
-                <strong>Cafe Logo</strong>
-            </label>
-
-            <input
-                type="file"
-                id="logo"
-                name="logo"
-                accept=".png,.jpg,.jpeg,.webp,.gif"
-                style="display:block;margin-top:8px;">
-
+            <input type="file"
+                   id="logo"
+                   name="logo"
+                   accept=".png,.jpg,.jpeg,.webp,.gif">
             <small>
-                Recommended: square PNG/JPG with a transparent or clean background.
+                A square image works best. Leave this empty to keep the
+                current one.
             </small>
-
         </div>
 
+        <div class="form-group">
+            <label for="login_photo">Sign-in page photo</label>
 
-        {% if branding.logo %}
+            {% if branding.login_photo %}
+            <div class="brand-preview brand-preview--wide">
+                <img src="{{ branding.login_photo }}" alt="Current sign-in photo">
+                <span>Current photo</span>
+            </div>
+            {% endif %}
 
-        <div style="margin:25px 0;">
-
-            <p><strong>Current Logo</strong></p>
-
-            <img
-                src="{{ branding.logo }}"
-                alt="Current cafe logo"
-                style="
-                    width:110px;
-                    height:110px;
-                    object-fit:contain;
-                    border-radius:14px;
-                    padding:8px;
-                    background:#fff;
-                    border:1px solid #ddd;
-                ">
-
-        </div>
-
-        {% endif %}
-
-
-        <div style="margin-bottom:20px;">
-
-            <label for="login_photo">
-                <strong>Login Page Photo</strong>
-            </label>
-
-            <input
-                type="file"
-                id="login_photo"
-                name="login_photo"
-                accept=".png,.jpg,.jpeg,.webp,.gif"
-                style="display:block;margin-top:8px;">
-
+            <input type="file"
+                   id="login_photo"
+                   name="login_photo"
+                   accept=".png,.jpg,.jpeg,.webp,.gif">
             <small>
-                Shown as the background photo on the login screen. Recommended:
-                a wide landscape photo of your cafe, at least 1200px wide.
+                A wide landscape photo of your cafe, at least 1200px across.
+                Leave this empty to keep the current one.
             </small>
-
         </div>
 
-
-        {% if branding.login_photo %}
-
-        <div style="margin:25px 0;">
-
-            <p><strong>Current Login Photo</strong></p>
-
-            <img
-                src="{{ branding.login_photo }}"
-                alt="Current login page photo"
-                style="
-                    width:100%;
-                    max-width:420px;
-                    height:180px;
-                    object-fit:cover;
-                    border-radius:14px;
-                    border:1px solid #ddd;
-                ">
-
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-check2"></i> Save branding
+            </button>
+            <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>Cancel</a>
         </div>
-
-        {% endif %}
-
-
-        <button type="submit" class="btn">
-            💾 Save Branding
-        </button>
 
     </form>
 

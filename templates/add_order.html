@@ -893,6 +893,11 @@
 </div>
 
 <script>
+// The café's own tax rate, set under Profile -> Tax Percentage. `var`, not
+// `const`: instant.js re-runs this script whenever the page is swapped back
+// in, and a repeated const would throw on the second visit.
+var TAX_RATE = {{ tax_rate }};
+
 function calculateOrderTotal() {
     const inputs = document.querySelectorAll('.quantity-input');
     let subtotal = 0, selectedItems = 0, selectedQuantity = 0;
@@ -905,7 +910,7 @@ function calculateOrderTotal() {
         subtotal += quantity * price;
     });
 
-    const tax = subtotal * 0.05;
+    const tax = subtotal * TAX_RATE;
     const total = subtotal + tax;
 
     // These six ids belong to a bottom summary bar that is no longer in the
@@ -1022,7 +1027,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        const tax = subtotal * 0.05;
+        const tax = subtotal * TAX_RATE;
         const total = subtotal + tax;
 
         const countEl = document.getElementById("selectedItemCount");

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Profile Photo · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Account</div>
+        <h1><i class="bi bi-person-circle"></i> Profile Photo</h1>
+        <p>The picture shown beside your name across the app.</p>
+    </div>
+    <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="panel form-panel" style="max-width:620px;">
+
+    <div class="photo-preview">
+        <span class="photo-preview__frame">
+            {% if has_photo %}
+            <img src="{{ photo_url }}" alt="Your current profile photo">
+            {% else %}
+            {{ (current_user.full_name or current_user.username or "?")[0]|upper }}
+            {% endif %}
+        </span>
+        <div>
+            <div class="photo-preview__name">
+                {{ current_user.full_name or current_user.username }}
+            </div>
+            <div class="photo-preview__meta">
+                {% if has_photo %}
+                    This is your photo right now.
+                {% else %}
+                    No photo yet — your initial is shown instead.
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+
+        <div class="form-group">
+            <label for="photo">Choose a picture</label>
+            <input type="file"
+                   id="photo"
+                   name="photo"
+                   accept="image/*"
+                   required>
+            <small>
+                A square picture looks best — it is shown as a small circle.
+            </small>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-upload"></i> Save photo
+            </button>
+            <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>Cancel</a>
+        </div>
+
+    </form>
+
+    {% if has_photo %}
+    <form method="POST"
+          class="photo-remove"
+          onsubmit="return confirm('Remove your profile photo? Your initial will be shown instead.');">
+        <input type="hidden" name="action" value="remove">
+        <button type="submit" class="btn btn--small btn--delete">
+            <i class="bi bi-trash"></i> Remove photo
+        </button>
+    </form>
+    {% endif %}
+
+</div>
+
+{% endblock %}

@@ -111,7 +111,12 @@
 
                     <button type="button" class="profile-trigger" id="profileTrigger">
                         <span class="profile-avatar">
+                            {% if current_user.has_photo %}
+                            <img src="{{ url_for('user_media', user_id=current_user.user_id, v=current_user.photo_version or 1) }}"
+                                 alt="" class="profile-avatar__img">
+                            {% else %}
                             {{ (current_user.full_name or current_user.username or "?")[0]|upper }}
+                            {% endif %}
                         </span>
                         <span class="profile-id">
                             <span class="profile-name">{{ current_user.full_name or current_user.username }}</span>
@@ -123,9 +128,22 @@
                     <div class="profile-dropdown" id="profileDropdown">
 
                         <div class="profile-dropdown__header">
-                            <span class="profile-avatar profile-avatar--lg">
+                            {# The picture itself is the control - clicking it
+                               goes straight to where it can be changed. #}
+                            <a href="{{ url_for('account_photo') }}"
+                               class="profile-avatar profile-avatar--lg profile-avatar--editable"
+                               title="Change your profile photo"
+                               aria-label="Change your profile photo">
+                                {% if current_user.has_photo %}
+                                <img src="{{ url_for('user_media', user_id=current_user.user_id, v=current_user.photo_version or 1) }}"
+                                     alt="" class="profile-avatar__img">
+                                {% else %}
                                 {{ (current_user.full_name or current_user.username or "?")[0]|upper }}
-                            </span>
+                                {% endif %}
+                                <span class="profile-avatar__edit" aria-hidden="true">
+                                    <i class="bi bi-camera-fill"></i>
+                                </span>
+                            </a>
                             <div>
                                 <div class="profile-name">{{ current_user.full_name or current_user.username }}</div>
                                 <div class="profile-role">{{ current_user.role|capitalize }} · @{{ current_user.username }}</div>
@@ -133,6 +151,10 @@
                         </div>
 
                         <div class="profile-dropdown__section">Account</div>
+
+                        <a href="{{ url_for('account_photo') }}" class="profile-dropdown__item">
+                            <i class="bi bi-person-circle"></i><span>Profile Photo</span>
+                        </a>
 
                         <a href="{{ url_for('change_password') }}" class="profile-dropdown__item">
                             <i class="bi bi-shield-lock"></i><span>Change Password</span>
@@ -143,6 +165,12 @@
 
                         <a href="{{ url_for('branding') }}" class="profile-dropdown__item">
                             <i class="bi bi-palette"></i><span>Cafe Branding &amp; Login Photo</span>
+                        </a>
+
+                        {# Admin only: the rate decides what every future bill
+                           charges, so it is not a cashier's to move. #}
+                        <a href="{{ url_for('tax_settings') }}" class="profile-dropdown__item">
+                            <i class="bi bi-percent"></i><span>Tax Percentage</span>
                         </a>
                         {% endif %}
 
@@ -269,6 +297,23 @@ window.CafeShell = {
             }
         });
     }
+
+    // ---- Back links ----
+    // A [data-back] link steps back through history when there is somewhere
+    // to go, and otherwise follows its own href - so it still works on a page
+    // opened directly, from a bookmark or after a redirect. Delegated from
+    // the document because instant.js replaces the page under us.
+    document.addEventListener("click", function (event) {
+        const link = event.target.closest && event.target.closest("[data-back]");
+        if (!link) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+
+        if (window.history.length > 1) {
+            event.preventDefault();
+            window.history.back();
+        }
+        // Otherwise the href takes over and lands somewhere sensible.
+    });
 
     // ---- Mobile navigation drawer ----
     // The sidebar is off-canvas below 880px. Everything here lives in the

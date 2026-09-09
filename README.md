@@ -68,6 +68,7 @@ tests/instant_nav_test.py Instant-navigation test suite
 tests/user_delete_test.py Staff-account deletion test suite
 tests/hot_sellers_test.py Hot-selling shelf test suite
 tests/hot_mirror_test.py Real-browser mirrored-card test suite
+tests/settings_test.py Tax-rate and profile-photo test suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
@@ -84,13 +85,14 @@ python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
+python tests/settings_test.py     # expect PASSED: 39   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
 python tests/mobile_nav_test.py   # expect PASSED: 24   FAILED: 0
 ```
 
-All ten run in memory against a SQLite stand-in — no database or network
+All eleven run in memory against a SQLite stand-in — no database or network
 needed. The five suites that drive a browser use a headless Edge or Chrome
 when one is installed, and skip themselves when none is.
 
@@ -150,6 +152,11 @@ step and, above all, that ordering two of a food shown twice charges for
 two rather than four. The shelf copy carries no form field name and a
 different input class, so only the card under the category heading is ever
 submitted or totalled.
+
+`settings_test.py` covers the pages behind the profile menu: that only an
+admin can change the café's tax rate, that the rate actually reaches the
+bill, that bills already raised keep the rate they were charged at, and
+that a profile photo cannot be fetched from another café.
 
 ## Security notes
 
