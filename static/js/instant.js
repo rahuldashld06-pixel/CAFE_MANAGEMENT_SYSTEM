@@ -45,8 +45,14 @@
         "|(/(delete|cancel|complete|toggle|pay|mark-paid|resend-otp|verify|webhook)(/|$))"
     );
 
-    // Screens the counter opens most, warmed in this order.
+    // Screens the counter opens most, warmed in this order. Only these are
+    // fetched speculatively: warming all nine sidebar destinations meant
+    // nine extra page renders - each with its own database round-trips -
+    // for every visit, most of them never looked at. Everything else is
+    // covered by the hover/touch prefetch below, which fires on actual
+    // intent a moment before the tap lands.
     var WARM_ORDER = ["/orders/add", "/orders", "/billing"];
+    var WARM_LIMIT = WARM_ORDER.length;
 
     var rawSetTimeout = window.setTimeout;
     var rawSetInterval = window.setInterval;
@@ -539,6 +545,7 @@
         }
 
         urls.sort(function (a, b) { return warmRank(a) - warmRank(b); });
+        urls = urls.filter(function (url) { return warmRank(url) < WARM_LIMIT; });
 
         // One at a time: the managed MySQL plan hands out only a handful of
         // connections, and warming must never compete with the page the user
@@ -566,9 +573,10 @@
         rawSetTimeout.call(window, warmSidebar, 300);
     });
 
-    rawAdd.call(document, "instant:load", function () {
-        rawSetTimeout.call(window, warmSidebar, 300);
-    });
+    // Deliberately not re-warmed after every navigation. Cached pages stay
+    // put, hovering or touching a link fetches whatever is missing, and a
+    // write clears the cache so the next visit reads fresh - re-warming on
+    // each swap only added server load for pages already in hand.
 
     // Registers shell code - sidebar, topbar, order-status popup - that must
     // outlive every navigation. Both the registration and the callback run

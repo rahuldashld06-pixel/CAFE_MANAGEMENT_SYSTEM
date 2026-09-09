@@ -65,6 +65,7 @@ static/js/instant.js Instant page navigation (prefetch + swap)
 tests/smoke_test.py  Offline end-to-end test suite
 tests/upgrade_test.py Legacy-database upgrade test suite
 tests/instant_nav_test.py Instant-navigation test suite
+tests/user_delete_test.py Staff-account deletion test suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
@@ -78,13 +79,14 @@ tests/cdp.py         Minimal DevTools-protocol client used by that suite
 python tests/smoke_test.py        # expect PASSED: 37   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
 python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
+python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 22   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 24   FAILED: 0
 ```
 
-All seven run in memory against a SQLite stand-in — no database or network
+All eight run in memory against a SQLite stand-in — no database or network
 needed. The four suites that drive a browser use a headless Edge or Chrome
 when one is installed, and skip themselves when none is.
 
@@ -122,7 +124,15 @@ directions: no banner on a good page, and a real 404 still says so.
 `mobile_nav_test.py` drives the phone layout at 390x844: the sidebar is an
 off-canvas drawer behind a hamburger, so the page keeps the screen. It
 checks the drawer opens with readable labels, is not tabbable while closed,
-closes after navigating, and that desktop is unaffected.
+closes after navigating, and that desktop is unaffected. It drives real
+input events rather than JavaScript `.click()`, so an invisible overlay
+covering a control is caught rather than clicked straight through.
+
+`user_delete_test.py` covers permanently deleting a staff account, and
+especially the refusals: never your own account, never the café owner
+(every food, category and order row is filed under that id), and never the
+last active admin. Also checks one café cannot delete another's staff and
+that order history survives the person who took it.
 
 ## Security notes
 

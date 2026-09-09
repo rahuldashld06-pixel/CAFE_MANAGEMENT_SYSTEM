@@ -316,6 +316,11 @@
     */
 
     async function updateDashboard() {
+        // Nothing to refresh while the tab is in the background, and every
+        // skipped tick is a request and a set of database queries saved.
+        // The next poll after the user returns brings it up to date.
+        if (document.hidden) return;
+
         try {
             const response = await fetch(
                 "{{ url_for('dashboard_stats') }}",

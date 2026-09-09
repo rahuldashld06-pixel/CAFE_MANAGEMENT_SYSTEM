@@ -50,6 +50,18 @@
                 {% if u.is_active %}Deactivate{% else %}Activate{% endif %}
               </button>
             </form>
+
+            {# Deleting is permanent, so it is offered only where it is
+               actually allowed: never your own account, and never the café
+               owner, whose id every food, category and order row carries. #}
+            {% if u.user_id != cafe_owner_id %}
+            <form method="POST"
+                  action="{{ url_for('delete_user', user_id=u.user_id) }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Delete {{ (u.full_name or u.username)|e }} permanently? Orders and bills they handled are kept.');">
+              <button class="btn btn--small btn--delete" type="submit">Delete</button>
+            </form>
+            {% endif %}
             {% endif %}
           </td>
         </tr>

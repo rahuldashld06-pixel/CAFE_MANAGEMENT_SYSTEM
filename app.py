@@ -4806,7 +4806,14 @@ def users():
             ORDER BY user_id DESC
         """, (require_cafe_session(),))
         user_list = cursor.fetchall()
-        return render_template("users.html", users=user_list)
+        return render_template(
+            "users.html",
+            users=user_list,
+            # The owner account cannot be deleted; the template uses this to
+            # leave the button off that row rather than offer an action that
+            # would just come back refused.
+            cafe_owner_id=get_cafe_owner_id(),
+        )
     finally:
         if cursor:
             cursor.close()
@@ -5038,6 +5045,97 @@ def toggle_user(user_id):
             connection.close()
 
 
+@app.route("/users/<int:user_id>/delete", methods=["POST"])
+def delete_user(user_id):
+    """
+    Remove a staff account for good.
+
+    Deactivating keeps someone in the list; this is for accounts that should
+    not be there at all - a mistyped signup, someone who has left. Orders and
+    bills are untouched: they are tagged with the café owner's id, not the id
+    of whoever was on the till, so history survives a staff account going
+    away.
+
+    Three accounts are refused, because deleting them breaks something that
+    cannot be undone from the UI:
+      * your own, so an admin cannot lock themselves out mid-session;
+      * the café owner, whose id every food, category and order row carries -
+        losing it would orphan the entire café's data;
+      * the last active admin, which would leave nobody able to administer.
+    """
+    denied = require_role("admin")
+    if denied:
+        return denied
+
+    if user_id == session.get("user_id"):
+        flash("You cannot delete your own account.")
+        return redirect(url_for("users"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cafe_id = require_cafe_session()
+
+        # Same tenant boundary as edit_user and toggle_user: match on cafe_id
+        # as well as user_id, or one café's admin could delete another's staff.
+        cursor.execute("""
+            SELECT user_id, username, full_name, role, is_active
+            FROM users
+            WHERE user_id = %s AND cafe_id = %s
+        """, (user_id, cafe_id))
+        target = cursor.fetchone()
+
+        if not target:
+            flash("User not found.")
+            return redirect(url_for("users"))
+
+        if user_id == get_cafe_owner_id():
+            flash(
+                "This is the café's owner account. Every food item, category "
+                "and order is filed under it, so it cannot be deleted."
+            )
+            return redirect(url_for("users"))
+
+        if target["role"] == "admin" and target["is_active"]:
+            cursor.execute("""
+                SELECT COUNT(*) AS n FROM users
+                WHERE cafe_id = %s AND role = 'admin'
+                  AND is_active = 1 AND user_id != %s
+            """, (cafe_id, user_id))
+            if cursor.fetchone()["n"] == 0:
+                flash(
+                    "This is the only active admin for your café. "
+                    "Promote another user to admin first."
+                )
+                return redirect(url_for("users"))
+
+        # Pending one-time codes cascade with the row, but say so explicitly
+        # rather than relying on the constraint being present on every
+        # deployment - older databases were created before it existed.
+        cursor.execute("DELETE FROM login_otp_codes WHERE user_id = %s", (user_id,))
+        cursor.execute(
+            "DELETE FROM users WHERE user_id = %s AND cafe_id = %s",
+            (user_id, cafe_id)
+        )
+        connection.commit()
+
+        flash("%s has been deleted." % (target["full_name"] or target["username"]))
+        return redirect(url_for("users"))
+
+    except mysql.connector.Error as error:
+        if connection:
+            connection.rollback()
+        flash(f"Could not delete that user: {error}")
+        return redirect(url_for("users"))
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
 # ==========================================
 # CAFE BRANDING / CUSTOMIZATION
 # ==========================================
@@ -5201,6 +5299,56 @@ def branding():
     return render_template("branding.html", branding=get_cafe_branding(cafe_id))
 
 
+class _LazyBranding:
+    """
+    Café branding that is fetched only if a template actually asks for it.
+
+    Branding is shown on four signed-out pages - sign-in, registration,
+    password reset and the OTP step. The context processor below runs on
+    every render, though, so eagerly loading it cost a query against `cafes`
+    on every authenticated page view as well: a wasted network round-trip
+    per page against a managed database, for a value nothing on the page
+    reads.
+    """
+
+    __slots__ = ("_cafe_id", "_loaded", "_data")
+
+    def __init__(self, cafe_id):
+        self._cafe_id = cafe_id
+        self._loaded = False
+        self._data = None
+
+    def _resolve(self):
+        if not self._loaded:
+            self._data = get_cafe_branding(self._cafe_id)
+            self._loaded = True
+        return self._data
+
+    def __getattr__(self, name):
+        # Guard the private slots, or a lookup during __init__ would recurse.
+        if name.startswith("_"):
+            raise AttributeError(name)
+        try:
+            return self._resolve()[name]
+        except KeyError:
+            raise AttributeError(name)
+
+    def __getitem__(self, key):
+        return self._resolve()[key]
+
+    def get(self, key, default=None):
+        return self._resolve().get(key, default)
+
+    def __contains__(self, key):
+        return key in self._resolve()
+
+    def __iter__(self):
+        return iter(self._resolve())
+
+    def __repr__(self):
+        return repr(self._resolve())
+
+
 @app.context_processor
 def inject_cafe_branding():
     """
@@ -5210,7 +5358,7 @@ def inject_cafe_branding():
     fall back to the platform name rather than leaking the branding of
     whichever tenant happened to save last.
     """
-    return {"cafe_branding": get_cafe_branding(session.get("cafe_id"))}
+    return {"cafe_branding": _LazyBranding(session.get("cafe_id"))}
 
 
 # ==========================================

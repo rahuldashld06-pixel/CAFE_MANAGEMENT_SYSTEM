@@ -437,6 +437,11 @@ window.CafeShell = {
         }
 
         function pollBadge() {
+            // Same reasoning as the dashboard poll: a backgrounded tab does
+            // not need a fresh count, and skipping saves a request and its
+            // queries every 30 seconds per open tab.
+            if (document.hidden) return;
+
             fetch("{{ url_for('order_status_feed') }}", { credentials: "same-origin" })
                 .then(function (response) { return response.json(); })
                 .then(function (data) {
@@ -471,6 +476,11 @@ window.CafeShell = {
         // then keep it fresh every 30 seconds without opening the popup.
         pollBadge();
         setInterval(pollBadge, 30000);
+
+        // Coming back to the tab should not wait out the rest of the interval.
+        document.addEventListener("visibilitychange", function () {
+            if (!document.hidden) pollBadge();
+        });
     }
 });
 </script>

@@ -1630,6 +1630,10 @@ button.order-status-badge:disabled {
 
 .sidebar-backdrop { display: none; }
 
+/* Author styles override the browser's own [hidden] rule, so say it here
+   explicitly rather than relying on the attribute alone. */
+.sidebar-backdrop[hidden] { display: none !important; }
+
 @media (max-width: 880px) {
 
     .nav-toggle { display: inline-flex; }
@@ -1717,10 +1721,18 @@ button.order-status-badge:disabled {
         z-index: 1400;
         background: rgba(0, 0, 0, .55);
         opacity: 0;
+        /* A closed backdrop is invisible, and must be intangible with it.
+           Without this it still covers the whole screen at z-index 1400 and
+           silently swallows every tap - the hamburger, the floating order
+           buttons, everything. Opacity alone does not stop hit-testing. */
+        pointer-events: none;
         transition: opacity .25s ease;
     }
 
-    .app-shell.nav-open .sidebar-backdrop { opacity: 1; }
+    .app-shell.nav-open .sidebar-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
 
     /* The page now owns the full width. */
     .main {

@@ -127,6 +127,68 @@ def wait(expr, what, timeout=20):
 
 
 
+def hit_test(selector):
+    """
+    What the browser finds painted at this element's own centre.
+
+    Real fingers hit whatever is on top. A JS .click() does not, which is how
+    an invisible full-screen backdrop once sat in front of every control here
+    without a single test noticing.
+    """
+    return b.evaluate("""
+        (function () {
+            var el = document.querySelector(%r);
+            if (!el) return false;
+            var r = el.getBoundingClientRect();
+            var hit = document.elementFromPoint(
+                Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+            return !!(hit && (hit === el || el.contains(hit)));
+        })()
+    """ % selector)
+
+
+def tap(selector):
+    """Dispatch genuine input at the element's centre, the way a finger does."""
+    point = b.evaluate("""
+        (function () {
+            var el = document.querySelector(%r);
+            if (!el) return null;
+            var r = el.getBoundingClientRect();
+            return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];
+        })()
+    """ % selector)
+    if not point:
+        raise AssertionError("no element for " + selector)
+    for kind in ("mousePressed", "mouseReleased"):
+        b.call("Input.dispatchMouseEvent", type=kind, x=point[0], y=point[1],
+               button="left", clickCount=1)
+    time.sleep(0.7)
+
+
+def tap_nav(label):
+    """Tap a drawer link by its visible name."""
+    point = b.evaluate("""
+        (function () {
+            var links = document.querySelectorAll('#appSidebar .nav-link');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].textContent.trim() === %r) {
+                    var r = links[i].getBoundingClientRect();
+                    return [Math.round(r.left + r.width / 2),
+                            Math.round(r.top + r.height / 2)];
+                }
+            }
+            return null;
+        })()
+    """ % label)
+    if not point:
+        raise AssertionError("no drawer link named " + label)
+    for kind in ("mousePressed", "mouseReleased"):
+        b.call("Input.dispatchMouseEvent", type=kind, x=point[0], y=point[1],
+               button="left", clickCount=1)
+    time.sleep(1.4)
+
+
+
 def drawer_open():
     return b.evaluate("document.querySelector('.app-shell').classList.contains('nav-open')")
 
@@ -159,7 +221,18 @@ try:
     print("\n=== On a phone, the page owns the screen ===")
     check("the hamburger is visible",
           b.evaluate("getComputedStyle(document.getElementById('navToggle')).display") != "none")
+    check("nothing is covering the hamburger",
+          hit_test("#navToggle"),
+          "a tap at its centre lands on something else - check for an "
+          "invisible overlay still accepting pointer events")
     check("the drawer starts closed and off-screen", not sidebar_on_screen())
+    check("the closed backdrop does not intercept taps",
+          b.evaluate("""
+              getComputedStyle(document.getElementById('sidebarBackdrop'))
+                  .pointerEvents === 'none'
+              || document.getElementById('sidebarBackdrop').hidden
+          """),
+          "the invisible backdrop is still swallowing every tap")
     check("its links are not reachable by tab while closed",
           b.evaluate("getComputedStyle(document.getElementById('appSidebar')).visibility") == "hidden")
 
@@ -176,8 +249,7 @@ try:
           "the page still starts below a nav block")
 
     print("\n=== Tapping the hamburger ===")
-    b.evaluate("document.getElementById('navToggle').click()")
-    time.sleep(0.6)
+    tap("#navToggle")
     check("the drawer opens", drawer_open() and sidebar_on_screen())
     check("aria-expanded is announced",
           b.evaluate("document.getElementById('navToggle').getAttribute('aria-expanded')") == "true")
@@ -203,16 +275,7 @@ try:
           "got %s" % links)
 
     print("\n=== Choosing a section ===")
-    b.evaluate("""
-        (function () {
-            var links = document.querySelectorAll('#appSidebar .nav-link');
-            for (var i = 0; i < links.length; i++) {
-                if (links[i].textContent.trim() === 'Billing') { links[i].click(); return true; }
-            }
-            return false;
-        })()
-    """)
-    time.sleep(1.4)
+    tap_nav("Billing")
     check("it navigates to that page",
           b.evaluate("location.pathname") == "/billing",
           "at %s" % b.evaluate("location.pathname"))
@@ -221,14 +284,11 @@ try:
           not b.evaluate("document.body.classList.contains('nav-locked')"))
 
     print("\n=== Backdrop and Escape ===")
-    b.evaluate("document.getElementById('navToggle').click()")
-    time.sleep(0.5)
-    b.evaluate("document.getElementById('sidebarBackdrop').click()")
-    time.sleep(0.5)
+    tap("#navToggle")
+    tap("#sidebarBackdrop")
     check("tapping outside closes the drawer", not drawer_open())
 
-    b.evaluate("document.getElementById('navToggle').click()")
-    time.sleep(0.5)
+    tap("#navToggle")
     b.evaluate("""document.dispatchEvent(
         new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))""")
     time.sleep(0.5)
@@ -236,18 +296,8 @@ try:
 
     print("\n=== Still works several swaps later ===")
     for section in ["Inventory", "Food Management", "New Order"]:
-        b.evaluate("document.getElementById('navToggle').click()")
-        time.sleep(0.5)
-        b.evaluate("""
-            (function () {
-                var links = document.querySelectorAll('#appSidebar .nav-link');
-                for (var i = 0; i < links.length; i++) {
-                    if (links[i].textContent.trim() === %r) { links[i].click(); return true; }
-                }
-                return false;
-            })()
-        """ % section)
-        time.sleep(1.3)
+        tap("#navToggle")
+        tap_nav(section)
         check("%-16s reached from the drawer" % section, not drawer_open(),
               "drawer stuck open at %s" % b.evaluate("location.pathname"))
 
