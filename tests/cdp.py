@@ -238,29 +238,47 @@ class Browser:
         except Exception:
             pass
 
-        # Ask politely first; the browser closes its own children on a
-        # clean exit.
+        # Kill the tree while it is still a tree. Terminating the launcher
+        # first re-parents its renderer and GPU children, and taskkill /T can
+        # then no longer find them by parent - which is how a hundred stray
+        # processes accumulated even with a kill in place.
+        self._kill_tree()
+
         try:
-            self.proc.terminate()
             self.proc.wait(timeout=8)
         except Exception:
-            pass
-
-        if self.proc.poll() is None or os.name == "nt":
-            self._kill_tree()
+            try:
+                self.proc.kill()
+            except Exception:
+                pass
 
         # The profile is a fresh temporary directory per run.
         shutil.rmtree(self.profile, ignore_errors=True)
 
     def _kill_tree(self):
-        if os.name == "nt":
-            subprocess.run(
-                ["taskkill", "/PID", str(self.proc.pid), "/T", "/F"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                check=False,
-            )
-        else:
+        if os.name != "nt":
             try:
                 self.proc.kill()
             except Exception:
                 pass
+            return
+
+        # /T takes the children with it, /F does not ask twice.
+        subprocess.run(
+            ["taskkill", "/PID", str(self.proc.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
+
+        # Edge's --headless=new launcher hands off to a browser process that
+        # is not in our tree, so taskkill misses it. Every process of this
+        # run carries our unique profile directory on its command line, which
+        # identifies them exactly - and cannot match the user's own browser.
+        marker = os.path.basename(self.profile)
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe' or "
+             "Name='chrome.exe'\" | Where-Object { $_.CommandLine -like "
+             "'*%s*' } | ForEach-Object { Stop-Process -Id $_.ProcessId "
+             "-Force -ErrorAction SilentlyContinue }" % marker],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
