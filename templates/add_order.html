@@ -202,6 +202,51 @@
     background: rgba(20, 20, 20, .78); color: var(--cream);
 }
 
+/* ---------- Hot selling ---------- */
+
+/* Sits opposite the stock badge so the two never overlap. */
+.food-card-hot-tag {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(224, 138, 62, .92);
+    color: #2a1a10;
+}
+
+.food-card--hot {
+    border-color: rgba(224, 138, 62, .55);
+}
+
+.food-group--hot .food-group__title {
+    border-bottom-color: rgba(224, 138, 62, .35);
+}
+
+.food-group__flame {
+    color: var(--copper-light);
+    font-size: 15px;
+}
+
+.food-group__note {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--cream-faint);
+}
+
+@media (max-width: 560px) {
+    /* The heading stacks on a phone; the note would squeeze the name. */
+    .food-group__note { display: none; }
+}
+
 .order-bottom-bar {
     position: fixed; left: 230px; right: 0; bottom: 0; z-index: 1000;
     display: flex; align-items: center; justify-content: space-between; gap: 20px;
@@ -496,23 +541,13 @@
             </div>
         </div>
 
-        {% if food_groups %}
-        <form method="POST" id="orderForm">
-
-            {% for group in food_groups %}
-            <section class="food-group" data-category="{{ group.name|lower }}">
-
-                <h3 class="food-group__title">
-                    <span class="food-group__name">{{ group.name }}</span>
-                    <span class="food-group__count">{{ group.foods|length }}</span>
-                </h3>
-
-                <div class="food-grid">
-                    {% for food in group.foods %}
-                    <div class="food-card"
+        {# One definition of a food card, used by the hot-selling shelf and by
+           every category section, so the two can never drift apart. #}
+        {% macro food_card(food, category_label) %}
+                    <div class="food-card{{ ' food-card--hot' if food.sold_recently else '' }}"
                          id="food_card_{{ food.food_id }}"
                          data-food-id="{{ food.food_id }}"
-                         data-search="{{ (food.food_name ~ " " ~ group.name)|lower }}">
+                         data-search="{{ (food.food_name ~ " " ~ category_label)|lower }}">
 
                     {% if food.image_path %}
                         <img src="{{ food.image_path }}" alt="{{ food.food_name }}" class="food-card-image">
@@ -521,6 +556,12 @@
                     {% endif %}
 
                     <div class="food-status" id="food_status_{{ food.food_id }}">Stock: {{ food.quantity }}</div>
+
+                    {% if food.sold_recently %}
+                        <div class="food-card-hot-tag" title="Ordered {{ food.sold_recently }} times in the last {{ hot_days }} days">
+                            <i class="bi bi-fire"></i> {{ food.sold_recently }} sold
+                        </div>
+                    {% endif %}
 
                     <div class="food-card-body">
                         <div class="food-card-name">{{ food.food_name }}</div>
@@ -538,6 +579,45 @@
                         </div>
                     </div>
                     </div>
+        {% endmacro %}
+
+        {% if food_groups or hot_foods %}
+        <form method="POST" id="orderForm">
+
+            {# What the till reaches for most, lifted out of its category so
+               it is the first thing on screen. Each item appears once: the
+               card carries the quantity input, and two copies of the same
+               food would mean two elements sharing one input id and name. #}
+            {% if hot_foods %}
+            <section class="food-group food-group--hot" data-category="hot selling popular best">
+
+                <h3 class="food-group__title">
+                    <i class="bi bi-fire food-group__flame"></i>
+                    <span class="food-group__name">Hot Selling</span>
+                    <span class="food-group__count">{{ hot_foods|length }}</span>
+                    <span class="food-group__note">most ordered in the last {{ hot_days }} days</span>
+                </h3>
+
+                <div class="food-grid">
+                    {% for food in hot_foods %}
+                    {{ food_card(food, food.category_name or "Other") }}
+                    {% endfor %}
+                </div>
+
+            </section>
+            {% endif %}
+
+            {% for group in food_groups %}
+            <section class="food-group" data-category="{{ group.name|lower }}">
+
+                <h3 class="food-group__title">
+                    <span class="food-group__name">{{ group.name }}</span>
+                    <span class="food-group__count">{{ group.foods|length }}</span>
+                </h3>
+
+                <div class="food-grid">
+                    {% for food in group.foods %}
+                    {{ food_card(food, group.name) }}
                     {% endfor %}
                 </div>
 

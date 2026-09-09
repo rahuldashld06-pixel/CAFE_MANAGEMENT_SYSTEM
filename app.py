@@ -2371,6 +2371,70 @@ def order_status_feed():
 
 UNCATEGORISED_LABEL = "Other"
 
+# How far back "hot selling" looks, and how many items it lifts to the top
+# of the New Order menu. Thirty days is long enough that a quiet week does
+# not empty the section, recent enough to follow what is actually selling
+# now rather than what sold last season.
+HOT_SELLER_DAYS = 30
+HOT_SELLER_LIMIT = 6
+
+
+def top_selling_food_ids(cursor, owner_id):
+    """
+    (food_id, units sold) for the best sellers of the recent window, best
+    first.
+
+    Cancelled orders do not count - the items went back on the shelf, so
+    counting them would promote food that was never actually served. The
+    cutoff is computed here rather than with DATE_SUB so the statement is
+    plain SQL that any backend can run.
+    """
+    cutoff = datetime.now() - timedelta(days=HOT_SELLER_DAYS)
+    cursor.execute("""
+        SELECT oi.food_id, SUM(oi.quantity) AS sold
+        FROM order_items oi
+        INNER JOIN orders o
+            ON o.order_id = oi.order_id
+        WHERE o.user_id = %s
+          AND o.order_status != 'Cancelled'
+          AND o.order_date >= %s
+          AND oi.food_id IS NOT NULL
+        GROUP BY oi.food_id
+        ORDER BY sold DESC, oi.food_id ASC
+        LIMIT %s
+    """, (owner_id, cutoff, HOT_SELLER_LIMIT))
+
+    return [
+        (row["food_id"], int(row["sold"] or 0))
+        for row in cursor.fetchall()
+        if row["sold"]
+    ]
+
+
+def split_hot_sellers(foods, ranked):
+    """
+    Lift the best sellers to the front of the menu.
+
+    A hot item is moved, not copied. Rendering the same food twice would
+    put two elements on the page carrying the same quantity input id and
+    name, so changeQuantity() would drive only the first and the form would
+    post the field twice. Each card shows its category, so nothing is lost
+    by the item sitting at the top instead of under its heading.
+    """
+    by_id = {food["food_id"]: food for food in foods}
+
+    hot = []
+    for food_id, sold in ranked:
+        food = by_id.get(food_id)
+        if food is None:
+            continue          # no longer on the menu, or out of stock
+        food["sold_recently"] = sold
+        hot.append(food)
+
+    hot_ids = {food["food_id"] for food in hot}
+    rest = [food for food in foods if food["food_id"] not in hot_ids]
+    return hot, rest
+
 
 def group_foods_by_category(foods):
     """
@@ -2452,10 +2516,16 @@ def add_order():
                     if food.get("has_image") else None
                 )
 
+            hot_foods, other_foods = split_hot_sellers(
+                foods, top_selling_food_ids(cursor, scope_user_id())
+            )
+
             return render_template(
                 "add_order.html",
                 foods=foods,
-                food_groups=group_foods_by_category(foods)
+                hot_foods=hot_foods,
+                hot_days=HOT_SELLER_DAYS,
+                food_groups=group_foods_by_category(other_foods)
             )
 
 
