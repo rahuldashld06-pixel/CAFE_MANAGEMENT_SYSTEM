@@ -77,7 +77,7 @@ tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```bash
 python tests/smoke_test.py        # expect PASSED: 37   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
-python tests/instant_nav_test.py  # expect PASSED: 24   FAILED: 0
+python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0

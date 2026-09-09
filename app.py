@@ -4668,6 +4668,11 @@ def require_login():
         "login", "login_verify_otp", "login_resend_otp",
         "register", "forgot_password", "static", "razorpay_webhook",
         "healthz", "cafe_media",
+        # The browser asks for the icon on the sign-in screen too. Without
+        # this it is redirected to /login, and the browser then renders the
+        # whole login page again - a wasted database round-trip on every
+        # signed-out visit, to answer a request for a favicon.
+        "favicon",
     }:
         # Razorpay webhooks are authenticated with their own HMAC signature.
         return

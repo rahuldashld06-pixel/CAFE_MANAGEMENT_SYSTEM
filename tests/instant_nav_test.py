@@ -153,6 +153,15 @@ icon = client.get("/favicon.ico")
 check("/favicon.ico is answered, not sent to the 404 handler",
       icon.status_code == 204, "status=%d" % icon.status_code)
 
+# Signed out too. Otherwise the auth guard redirects the icon request to
+# /login and the browser renders the whole sign-in page a second time -
+# a wasted database round-trip on every visit, to answer a favicon.
+signed_out = app.test_client()
+icon_out = signed_out.get("/favicon.ico")
+check("/favicon.ico is answered without a session as well",
+      icon_out.status_code == 204,
+      "status=%d - the auth guard is intercepting it" % icon_out.status_code)
+
 with client.session_transaction() as sess:
     check("a favicon request queues no message for the user",
           not sess.get("_flashes"), "queued: %r" % sess.get("_flashes"))
