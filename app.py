@@ -2376,7 +2376,7 @@ UNCATEGORISED_LABEL = "Other"
 # not empty the section, recent enough to follow what is actually selling
 # now rather than what sold last season.
 HOT_SELLER_DAYS = 30
-HOT_SELLER_LIMIT = 6
+HOT_SELLER_LIMIT = 5
 
 
 def top_selling_food_ids(cursor, owner_id):
@@ -2411,15 +2411,16 @@ def top_selling_food_ids(cursor, owner_id):
     ]
 
 
-def split_hot_sellers(foods, ranked):
+def pick_hot_sellers(foods, ranked):
     """
-    Lift the best sellers to the front of the menu.
+    The best sellers, in order, for the shelf at the top of the menu.
 
-    A hot item is moved, not copied. Rendering the same food twice would
-    put two elements on the page carrying the same quantity input id and
-    name, so changeQuantity() would drive only the first and the form would
-    post the field twice. Each card shows its category, so nothing is lost
-    by the item sitting at the top instead of under its heading.
+    These stay in their category sections as well - someone looking under
+    "Beverages" should still find the coffee that happens to be selling
+    well. The shelf therefore renders a *second* card for the same food,
+    which the template marks as a mirror: it carries no form field name and
+    a different input class, so only the card under the category heading is
+    ever submitted or counted. add_order.html keeps the pair in step.
     """
     by_id = {food["food_id"]: food for food in foods}
 
@@ -2431,9 +2432,7 @@ def split_hot_sellers(foods, ranked):
         food["sold_recently"] = sold
         hot.append(food)
 
-    hot_ids = {food["food_id"] for food in hot}
-    rest = [food for food in foods if food["food_id"] not in hot_ids]
-    return hot, rest
+    return hot
 
 
 def group_foods_by_category(foods):
@@ -2516,7 +2515,7 @@ def add_order():
                     if food.get("has_image") else None
                 )
 
-            hot_foods, other_foods = split_hot_sellers(
+            hot_foods = pick_hot_sellers(
                 foods, top_selling_food_ids(cursor, scope_user_id())
             )
 
@@ -2525,7 +2524,9 @@ def add_order():
                 foods=foods,
                 hot_foods=hot_foods,
                 hot_days=HOT_SELLER_DAYS,
-                food_groups=group_foods_by_category(other_foods)
+                # Every food, hot ones included, still appears under its
+                # own category heading.
+                food_groups=group_foods_by_category(foods)
             )
 
 

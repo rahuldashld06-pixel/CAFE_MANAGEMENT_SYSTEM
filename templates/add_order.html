@@ -190,7 +190,8 @@
 .quantity-btn:hover { background: var(--copper); color: white; }
 .quantity-minus { border-radius: 7px 0 0 7px; }
 .quantity-plus { border-radius: 0 7px 7px 0; }
-.quantity-input {
+.quantity-input,
+.quantity-mirror-input {
     width: 45px; height: 38px; text-align: center; border: none;
     border-top: 1px solid var(--espresso-700); border-bottom: 1px solid var(--espresso-700);
     background: var(--espresso-900); color: var(--cream); font-weight: 700; outline: none;
@@ -542,10 +543,19 @@
         </div>
 
         {# One definition of a food card, used by the hot-selling shelf and by
-           every category section, so the two can never drift apart. #}
-        {% macro food_card(food, category_label) %}
-                    <div class="food-card{{ ' food-card--hot' if food.sold_recently else '' }}"
-                         id="food_card_{{ food.food_id }}"
+           every category section, so the two can never drift apart.
+
+           A best seller is shown twice: once on the shelf and once under its
+           category. The shelf copy is rendered with mirror=true, which gives
+           it prefixed element ids, a different input class and - critically -
+           no form field name. Only the card under the category heading is
+           submitted, totalled or read by changeQuantity(); the script at the
+           foot of this page copies its state onto the mirror so the two look
+           and behave the same. #}
+        {% macro food_card(food, category_label, mirror=false) %}
+                    {% set uid = ('hot_' ~ food.food_id) if mirror else food.food_id %}
+                    <div class="food-card{{ ' food-card--hot' if food.sold_recently else '' }}{{ ' food-card--mirror' if mirror else '' }}"
+                         id="food_card_{{ uid }}"
                          data-food-id="{{ food.food_id }}"
                          data-search="{{ (food.food_name ~ " " ~ category_label)|lower }}">
 
@@ -555,7 +565,7 @@
                         <div class="food-card-placeholder"><i class="bi bi-egg-fried"></i></div>
                     {% endif %}
 
-                    <div class="food-status" id="food_status_{{ food.food_id }}">Stock: {{ food.quantity }}</div>
+                    <div class="food-status" id="food_status_{{ uid }}">Stock: {{ food.quantity }}</div>
 
                     {% if food.sold_recently %}
                         <div class="food-card-hot-tag" title="Ordered {{ food.sold_recently }} times in the last {{ hot_days }} days">
@@ -567,13 +577,24 @@
                         <div class="food-card-name">{{ food.food_name }}</div>
                         <div class="food-card-category">{{ food.category_name or "Other" }}</div>
                         <div class="food-card-price">₹{{ food.price }}</div>
-                        <div class="food-card-stock" id="food_stock_note_{{ food.food_id }}">Maximum order quantity: {{ food.quantity }}</div>
+                        <div class="food-card-stock" id="food_stock_note_{{ uid }}">Maximum order quantity: {{ food.quantity }}</div>
 
                         <div class="food-card-footer">
                             <span class="quantity-help">Quantity</span>
                             <div class="quantity-control">
                                 <button type="button" class="quantity-btn quantity-minus" onclick="changeQuantity({{ food.food_id }}, -1)">−</button>
-                                <input type="number" class="quantity-input" id="quantity_{{ food.food_id }}" name="quantity_{{ food.food_id }}" data-price="{{ food.price }}" data-food-name="{{ food.food_name }}" min="0" max="{{ food.quantity }}" value="0" readonly>
+                                {# The mirror deliberately has no `name`, so the browser
+                                   posts one field per food, and class
+                                   `quantity-mirror-input` keeps it out of every
+                                   `.quantity-input` selector that totals the order. #}
+                                <input type="number"
+                                       class="{{ 'quantity-mirror-input' if mirror else 'quantity-input' }}"
+                                       id="quantity_{{ uid }}"
+                                       {% if not mirror %}name="quantity_{{ food.food_id }}"{% endif %}
+                                       data-food-id="{{ food.food_id }}"
+                                       data-price="{{ food.price }}"
+                                       data-food-name="{{ food.food_name }}"
+                                       min="0" max="{{ food.quantity }}" value="0" readonly>
                                 <button type="button" class="quantity-btn quantity-plus" onclick="changeQuantity({{ food.food_id }}, 1)">+</button>
                             </div>
                         </div>
@@ -600,7 +621,7 @@
 
                 <div class="food-grid">
                     {% for food in hot_foods %}
-                    {{ food_card(food, food.category_name or "Other") }}
+                    {{ food_card(food, food.category_name or "Other", mirror=true) }}
                     {% endfor %}
                 </div>
 
@@ -667,7 +688,12 @@
     var countBadge = document.getElementById("foodCount");
 
     var groups = Array.prototype.slice.call(document.querySelectorAll(".food-group"));
-    var total = document.querySelectorAll(".food-card").length;
+
+    // A best seller is on screen twice - once on the shelf, once under its
+    // category - so the counts below tally the real cards only. Mirrors are
+    // still shown and hidden with everything else.
+    var REAL_CARD = ".food-card:not(.food-card--mirror)";
+    var total = document.querySelectorAll(REAL_CARD).length;
 
     // Each section's heading badge counts what is on screen, so it cannot sit
     // there claiming "2" while a search has narrowed the section to one.
@@ -689,16 +715,20 @@
 
             var cards = group.querySelectorAll(".food-card");
             var shownHere = 0;
+            var realShownHere = 0;
 
             for (var i = 0; i < cards.length; i++) {
                 var haystack = cards[i].getAttribute("data-search") || "";
                 var match = query === "" || wholeSection || haystack.indexOf(query) !== -1;
                 cards[i].hidden = !match;
-                if (match) shownHere++;
+                if (match) {
+                    shownHere++;
+                    if (!cards[i].classList.contains("food-card--mirror")) realShownHere++;
+                }
             }
 
             group.hidden = shownHere === 0;
-            visible += shownHere;
+            visible += realShownHere;
 
             var badge = group.querySelector(".food-group__count");
             if (badge) {
@@ -878,12 +908,59 @@ function calculateOrderTotal() {
     const tax = subtotal * 0.05;
     const total = subtotal + tax;
 
-    document.getElementById('selected-items').textContent = selectedItems;
-    document.getElementById('selected-quantity').textContent = selectedQuantity;
-    document.getElementById('bottom-subtotal').textContent = subtotal.toFixed(2);
-    document.getElementById('bottom-tax').textContent = tax.toFixed(2);
-    document.getElementById('bottom-total').textContent = total.toFixed(2);
-    document.getElementById('createOrderButton').disabled = selectedQuantity === 0;
+    // These six ids belong to a bottom summary bar that is no longer in the
+    // markup, so every one of them is null. Writing to them threw on page
+    // load and again on every +/- press, which aborted changeQuantity()
+    // halfway - the quantity had already been set by then and the floating
+    // summary does its own sum, so the failure stayed invisible until
+    // something else needed to run after this call.
+    setSummaryText('selected-items', selectedItems);
+    setSummaryText('selected-quantity', selectedQuantity);
+    setSummaryText('bottom-subtotal', subtotal.toFixed(2));
+    setSummaryText('bottom-tax', tax.toFixed(2));
+    setSummaryText('bottom-total', total.toFixed(2));
+
+    const createButton = document.getElementById('createOrderButton');
+    if (createButton) createButton.disabled = selectedQuantity === 0;
+}
+
+function setSummaryText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+// A best seller appears twice: on the Hot Selling shelf and under its own
+// category. Only the card under the category carries the form field, so
+// this copies its state onto the shelf copy - quantity, stock, the maximum
+// and the out-of-stock look - after anything changes it. Both cards' +/-
+// buttons call changeQuantity() with the same food id, so either one drives
+// the single real input and both then show the result.
+function syncHotMirrors() {
+    document.querySelectorAll('.quantity-mirror-input').forEach(function (mirror) {
+        const foodId = mirror.dataset.foodId;
+        const input = document.getElementById('quantity_' + foodId);
+        if (!input) return;
+
+        mirror.value = input.value;
+        mirror.max = input.max;
+
+        const status = document.getElementById('food_status_' + foodId);
+        const mirrorStatus = document.getElementById('food_status_hot_' + foodId);
+        if (status && mirrorStatus) mirrorStatus.textContent = status.textContent;
+
+        const note = document.getElementById('food_stock_note_' + foodId);
+        const mirrorNote = document.getElementById('food_stock_note_hot_' + foodId);
+        if (note && mirrorNote) mirrorNote.textContent = note.textContent;
+
+        const card = document.getElementById('food_card_' + foodId);
+        const mirrorCard = document.getElementById('food_card_hot_' + foodId);
+        if (card && mirrorCard) {
+            const out = card.classList.contains('food-card--out-of-stock');
+            mirrorCard.classList.toggle('food-card--out-of-stock', out);
+            const plus = mirrorCard.querySelector('.quantity-plus');
+            if (plus) plus.disabled = out;
+        }
+    });
 }
 
 function changeQuantity(foodId, change) {
@@ -899,9 +976,13 @@ function changeQuantity(foodId, change) {
 
     input.value = next;
     calculateOrderTotal();
+    syncHotMirrors();
 }
 
-document.addEventListener('DOMContentLoaded', calculateOrderTotal);
+document.addEventListener('DOMContentLoaded', function () {
+    calculateOrderTotal();
+    syncHotMirrors();
+});
 </script>
 
 
@@ -1198,12 +1279,16 @@ document.addEventListener('DOMContentLoaded', calculateOrderTotal);
                     if (plusBtn) plusBtn.disabled = outOfStock;
                 }
             });
+
+            // Stock just moved; carry it onto the Hot Selling copies.
+            syncHotMirrors();
         }
 
         function resetAllQuantities() {
             getQuantityInputs().forEach(function (input) {
                 input.value = 0;
             });
+            syncHotMirrors();
         }
 
         if (orderForm) {

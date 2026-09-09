@@ -67,6 +67,7 @@ tests/upgrade_test.py Legacy-database upgrade test suite
 tests/instant_nav_test.py Instant-navigation test suite
 tests/user_delete_test.py Staff-account deletion test suite
 tests/hot_sellers_test.py Hot-selling shelf test suite
+tests/hot_mirror_test.py Real-browser mirrored-card test suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
@@ -81,15 +82,16 @@ python tests/smoke_test.py        # expect PASSED: 37   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
 python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
-python tests/hot_sellers_test.py  # expect PASSED: 18   FAILED: 0
+python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
+python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
 python tests/mobile_nav_test.py   # expect PASSED: 24   FAILED: 0
 ```
 
-All nine run in memory against a SQLite stand-in — no database or network
-needed. The four suites that drive a browser use a headless Edge or Chrome
+All ten run in memory against a SQLite stand-in — no database or network
+needed. The five suites that drive a browser use a headless Edge or Chrome
 when one is installed, and skip themselves when none is.
 
 `smoke_test.py` takes two cafes through the full lifecycle and asserts
@@ -139,8 +141,15 @@ that order history survives the person who took it.
 `hot_sellers_test.py` covers the Hot Selling shelf on New Order: ranking by
 units sold over the recent window, and the things that would mislead a till
 if they were wrong — cancelled orders must not count, a stale month must not
-keep an item pinned, a sold-out item must not be offered first, and no food
-may be rendered twice.
+keep an item pinned, a sold-out item must not be offered first, and the
+shelf never holds more than five.
+
+A best seller is drawn twice — on the shelf and under its own category —
+so `hot_mirror_test.py` drives a real browser to check the pair stays in
+step and, above all, that ordering two of a food shown twice charges for
+two rather than four. The shelf copy carries no form field name and a
+different input class, so only the card under the category heading is ever
+submitted or totalled.
 
 ## Security notes
 

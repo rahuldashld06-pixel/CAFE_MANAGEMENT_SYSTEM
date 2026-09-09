@@ -63,8 +63,12 @@ def build_cafe(client, cafe, username, menu):
             "_csrf_token": csrf(client)}, follow_redirects=True)
 
     html = client.get("/orders/add").get_data(as_text=True)
+    # Anchored on the card's own id. `data-food-id` appears on the card *and*
+    # on its quantity input, so a looser pattern pairs one card's input with
+    # the next card's name. Shelf copies use food_card_hot_<id>, which this
+    # deliberately does not match.
     return {name: fid for fid, name in re.findall(
-        r'data-food-id="(\d+)".*?food-card-name">([^<]+)<', html, re.S)}
+        r'id="food_card_(\d+)".*?food-card-name">([^<]+)<', html, re.S)}
 
 
 def order(client, food_id, quantity=1):
@@ -129,21 +133,58 @@ check("units sold are shown on the card",
       re.findall(r'([0-9]+) sold', html)[:3] == ["9", "5", "2"],
       "got %s" % re.findall(r'([0-9]+) sold', html)[:3])
 
-print("\n=== 3. Every food still appears exactly once ===")
-# Two cards for one food would share a quantity input id and name, so
-# changeQuantity() would drive only the first and the form would post the
-# field twice.
-inputs = re.findall(r'id="quantity_(\d+)"', html)
-check("no food is rendered twice",
-      sorted(inputs) == sorted(set(inputs)),
-      "duplicated ids: %s" % [i for i in set(inputs) if inputs.count(i) > 1])
-check("the whole menu is still reachable",
-      len(inputs) == len(MENU), "%d cards for %d foods" % (len(inputs), len(MENU)))
-check("a promoted item is no longer under its old heading",
-      "Samosa" not in re.findall(
-          r'food-card-name">([^<]+)<',
-          html[html.find("</section>", html.find(HOT_SECTION)):]),
-      "Samosa appears both on the shelf and in Snacks")
+print("\n=== 3. Shown twice, ordered once ===")
+# A best seller appears on the shelf *and* under its category. Two cards for
+# one food must still mean one form field, or the order would post that
+# quantity twice, and one element id per card, or changeQuantity() would
+# drive only the first.
+below_shelf = html[html.find("</section>", html.find(HOT_SECTION)):]
+check("a promoted item still appears under its own category",
+      "Samosa" in re.findall(r'food-card-name">([^<]+)<', below_shelf),
+      "Samosa was moved out of Snacks instead of repeated there")
+check("the category sections still list the whole menu",
+      set(re.findall(r'food-card-name">([^<]+)<', below_shelf)) ==
+      {name for name, _ in MENU},
+      "got %s" % sorted(set(re.findall(r'food-card-name">([^<]+)<', below_shelf))))
+
+fields = re.findall(r'name="quantity_(\d+)"', html)
+check("exactly one submittable field per food",
+      sorted(fields) == sorted(set(fields)) and len(fields) == len(MENU),
+      "fields %s - a repeated name would post the quantity twice" % fields)
+
+element_ids = re.findall(r'id="quantity_([A-Za-z0-9_]+)"', html)
+check("no element id is used twice",
+      sorted(element_ids) == sorted(set(element_ids)),
+      "duplicated: %s" % [i for i in set(element_ids)
+                          if element_ids.count(i) > 1])
+
+# Counted on the rendered attribute, not the bare class name: the page also
+# carries that name in its stylesheet and in its own script.
+mirrors = html.count('class="quantity-mirror-input"')
+check("the shelf copies are marked as mirrors",
+      mirrors == len(hot_shelf(a)),
+      "%d mirror inputs for %d shelf cards - an unmarked copy would be "
+      "counted and submitted like a real one" % (mirrors, len(hot_shelf(a))))
+
+
+print("\n=== 3b. The shelf is capped at five ===")
+big = app.test_client()
+BIG_MENU = [("Food %02d" % i, "Beverages" if i % 2 else "Snacks")
+            for i in range(9)]
+big_ids = build_cafe(big, "Big Cafe", "big", BIG_MENU)
+for index, (name, _) in enumerate(BIG_MENU):
+    for _ in range(index + 1):
+        order(big, big_ids[name])
+
+check("at most five items on the shelf, even with nine sellers",
+      len(hot_shelf(big)) == 5,
+      "got %d: %s" % (len(hot_shelf(big)), hot_shelf(big)))
+check("and they are the five best, best first",
+      hot_shelf(big) == ["Food 08", "Food 07", "Food 06", "Food 05", "Food 04"],
+      "got %s" % hot_shelf(big))
+check("the cap is the configured limit",
+      application.HOT_SELLER_LIMIT == 5,
+      "HOT_SELLER_LIMIT is %s" % application.HOT_SELLER_LIMIT)
 
 
 print("\n=== 4. Cancelled orders do not count ===")
