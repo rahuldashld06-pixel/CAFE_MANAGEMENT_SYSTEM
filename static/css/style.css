@@ -324,9 +324,16 @@ textarea:focus-visible {
     .profile-trigger { padding: 7px; }
 }
 
+/* Fades only - deliberately no transform.
+   .main runs this with fill-mode `both`, so any transform here persists
+   after the animation ends, and a transformed element becomes the
+   containing block for its position:fixed descendants. That anchored the
+   floating order summary (and the summary overlay) to .main instead of the
+   viewport: fine on a desktop where .main is about a screen tall, but on a
+   phone it left the button hundreds of pixels below the fold. */
 @keyframes rise-in {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1570,12 +1577,20 @@ button.order-status-badge:disabled {
 }
 
 /* ============================================================
-   Mobile navigation drawer
+   Touch navigation drawer
 
    On a phone the sidebar used to sit above the page as a block of
-   wrapped links, eating most of the first screen. Below 880px it
-   becomes a drawer instead: off-canvas until the hamburger in the
-   top-left is tapped, so the page itself gets the whole viewport.
+   wrapped links, eating most of the first screen. It is a drawer
+   instead: off-canvas until the hamburger in the top-left is tapped,
+   so the page itself gets the whole viewport.
+
+   It applies to tablets too, in both orientations. A tablet held
+   upright is narrow enough to catch the width rule, but rotating it
+   used to cross back over the old 880px line and hand the user the
+   laptop layout mid-session. Width alone cannot tell a tablet from a
+   small laptop, so the second query asks the real question - is this
+   a touch device - and covers landscape tablets up to 1400px while
+   leaving a 1366px laptop with a mouse exactly as it was.
 
    This block is deliberately last in the file - it overrides the
    earlier max-width:880px and max-width:820px rules that laid the
@@ -1634,7 +1649,8 @@ button.order-status-badge:disabled {
    explicitly rather than relying on the attribute alone. */
 .sidebar-backdrop[hidden] { display: none !important; }
 
-@media (max-width: 880px) {
+@media (max-width: 1024px),
+       (max-width: 1400px) and (pointer: coarse) {
 
     .nav-toggle { display: inline-flex; }
 
@@ -2003,4 +2019,107 @@ body.nav-locked {
     max-height: 150px;
     object-fit: cover;
     border-radius: 10px;
+}
+
+/* ============================================================
+   Touch devices
+
+   Width says how much room there is; it says nothing about how the
+   screen is operated. A 1366px tablet and a 1366px laptop get the
+   same layout, but a finger needs a bigger target than a cursor -
+   which is what made a rotated tablet feel like someone else's
+   laptop. Everything below keys off the input device, so it reaches
+   phones and tablets of any size and leaves mouse users untouched.
+
+   44px is the usual floor for a comfortable touch target.
+   ============================================================ */
+
+@media (pointer: coarse) {
+
+    .nav-link {
+        min-height: 46px;
+        padding: 12px 14px;
+    }
+
+    .btn,
+    .profile-dropdown__item {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .profile-dropdown__item {
+        display: flex;
+    }
+
+    .btn--small,
+    .btn--sm {
+        min-height: 38px;
+    }
+
+    .profile-trigger {
+        min-height: 46px;
+    }
+
+    /* The +/- pair is the most-tapped control in the app. */
+    .quantity-btn {
+        min-width: 42px;
+        min-height: 42px;
+    }
+
+    .quantity-input,
+    .quantity-mirror-input {
+        height: 42px;
+        width: 52px;
+    }
+
+    /* Comfortable rows, and enough height that a tap does not land
+       between two of them. */
+    .data-table th,
+    .data-table td {
+        padding-top: 14px;
+        padding-bottom: 14px;
+    }
+
+    /* 16px keeps iOS from zooming the page when a field is focused. */
+    .form-panel input,
+    .form-panel select,
+    .form-panel textarea,
+    .menu-search__input,
+    .cash-received-input {
+        font-size: 16px;
+        min-height: 44px;
+    }
+
+    .menu-search__clear {
+        width: 26px;
+        height: 26px;
+    }
+
+    .order-summary-trigger {
+        min-height: 50px;
+    }
+
+    /* Hover previews never fire on a touch screen; the lift just makes
+       cards feel unresponsive when tapped. */
+    .food-card:hover {
+        transform: none;
+    }
+}
+
+/* A tablet in landscape is wide but short. Trim the vertical padding so
+   the menu itself, not the chrome, fills that shorter screen. */
+@media (max-height: 860px) and (pointer: coarse) and (orientation: landscape) {
+    .main {
+        padding-top: 20px;
+        padding-bottom: 32px;
+    }
+
+    .page-header {
+        margin-bottom: 16px;
+    }
+
+    .panel {
+        padding: 18px;
+    }
 }

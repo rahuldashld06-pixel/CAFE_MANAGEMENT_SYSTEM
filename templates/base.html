@@ -323,7 +323,13 @@ window.CafeShell = {
     const navToggle = document.getElementById("navToggle");
     const navBackdrop = document.getElementById("sidebarBackdrop");
     const appSidebar = document.getElementById("appSidebar");
-    const wideScreen = window.matchMedia("(min-width: 881px)");
+    // The same condition the stylesheet uses to turn the sidebar into a
+    // drawer, so the two can never disagree about which layout is showing.
+    // Asking for the drawer query and reacting when it stops matching beats
+    // hard-coding the opposite width, which would have force-closed the
+    // drawer on a landscape tablet.
+    const drawerLayout = window.matchMedia(
+        "(max-width: 1024px), (max-width: 1400px) and (pointer: coarse)");
 
     if (appShell && navToggle) {
 
@@ -367,13 +373,15 @@ window.CafeShell = {
         document.addEventListener("instant:load", function () { closeNav(false); });
 
         // A link that instant.js does not handle leaves via a full page load,
-        // which closes the drawer by itself. Rotating to a wide screen does
-        // not, and would otherwise leave the page scroll-locked.
-        function syncToWidth(event) {
-            if (event.matches) setNav(false);
+        // which closes the drawer by itself. Growing into the desktop layout
+        // - rotating a tablet, resizing a window - does not, and would
+        // otherwise leave the page scroll-locked behind a sidebar that is
+        // now permanently on screen.
+        function syncToLayout(event) {
+            if (!event.matches) setNav(false);
         }
-        if (wideScreen.addEventListener) wideScreen.addEventListener("change", syncToWidth);
-        else if (wideScreen.addListener) wideScreen.addListener(syncToWidth);
+        if (drawerLayout.addEventListener) drawerLayout.addEventListener("change", syncToLayout);
+        else if (drawerLayout.addListener) drawerLayout.addListener(syncToLayout);
     }
 
     // ---- Order Status popup (staff pages) ----

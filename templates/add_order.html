@@ -248,33 +248,12 @@
     .food-group__note { display: none; }
 }
 
-.order-bottom-bar {
-    position: fixed; left: 230px; right: 0; bottom: 0; z-index: 1000;
-    display: flex; align-items: center; justify-content: space-between; gap: 20px;
-    min-height: 78px; padding: 12px 24px; background: rgba(32, 21, 16, .98);
-    border-top: 1px solid var(--espresso-700); box-shadow: 0 -10px 30px rgba(15,8,4,.45);
-    backdrop-filter: blur(10px);
-}
-.order-bottom-summary { display: flex; align-items: center; gap: 25px; flex-wrap: wrap; }
-.order-bottom-stat { display: flex; flex-direction: column; gap: 2px; }
-.order-bottom-label { color: var(--cream-faint); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
-.order-bottom-value { color: var(--cream); font-size: 14px; font-weight: 700; }
-.order-bottom-total { color: var(--copper-light); font-size: 21px; font-weight: 800; }
-.order-bottom-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.order-bottom-actions .btn { min-width: 140px; justify-content: center; }
-.order-bottom-actions .btn--primary:disabled { opacity: .5; cursor: not-allowed; }
-
 @media (max-width: 1200px) { .food-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) {
     .food-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .order-bottom-bar { left: 0; padding: 10px 14px; }
-    .order-bottom-summary { gap: 14px; }
 }
 @media (max-width: 600px) {
     .food-grid { grid-template-columns: 1fr; }
-    .order-bottom-bar { flex-direction: column; align-items: stretch; }
-    .order-bottom-actions { justify-content: stretch; }
-    .order-bottom-actions .btn { flex: 1; }
 }
 
 /* ==========================================
@@ -464,11 +443,13 @@
 }
 
 @media (max-width: 700px) {
+    /* Stays a compact pill in the corner. It used to pin `left` as well,
+       which stretched it into a bar across the whole bottom of the screen
+       and buried the last row of the menu behind it. */
     .order-summary-trigger {
         right: 12px;
         bottom: 12px;
-        left: 12px;
-        justify-content: center;
+        padding: 11px 15px;
     }
 
     .order-summary-popup {
@@ -898,42 +879,6 @@
 // in, and a repeated const would throw on the second visit.
 var TAX_RATE = {{ tax_rate }};
 
-function calculateOrderTotal() {
-    const inputs = document.querySelectorAll('.quantity-input');
-    let subtotal = 0, selectedItems = 0, selectedQuantity = 0;
-
-    inputs.forEach(function(input) {
-        const quantity = parseInt(input.value) || 0;
-        const price = parseFloat(input.dataset.price) || 0;
-        if (quantity > 0) selectedItems++;
-        selectedQuantity += quantity;
-        subtotal += quantity * price;
-    });
-
-    const tax = subtotal * TAX_RATE;
-    const total = subtotal + tax;
-
-    // These six ids belong to a bottom summary bar that is no longer in the
-    // markup, so every one of them is null. Writing to them threw on page
-    // load and again on every +/- press, which aborted changeQuantity()
-    // halfway - the quantity had already been set by then and the floating
-    // summary does its own sum, so the failure stayed invisible until
-    // something else needed to run after this call.
-    setSummaryText('selected-items', selectedItems);
-    setSummaryText('selected-quantity', selectedQuantity);
-    setSummaryText('bottom-subtotal', subtotal.toFixed(2));
-    setSummaryText('bottom-tax', tax.toFixed(2));
-    setSummaryText('bottom-total', total.toFixed(2));
-
-    const createButton = document.getElementById('createOrderButton');
-    if (createButton) createButton.disabled = selectedQuantity === 0;
-}
-
-function setSummaryText(id, text) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = text;
-}
-
 // A best seller appears twice: on the Hot Selling shelf and under its own
 // category. Only the card under the category carries the form field, so
 // this copies its state onto the shelf copy - quantity, stock, the maximum
@@ -980,14 +925,17 @@ function changeQuantity(foodId, change) {
     if (next > max) next = max;
 
     input.value = next;
-    calculateOrderTotal();
+
+    // Tell the page the value moved. The floating summary listens for
+    // `input` on these fields, so it recalculates straight away instead of
+    // waiting for its 300ms poll - and it is the only total on screen now
+    // that the bottom bar is gone.
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
     syncHotMirrors();
 }
 
-document.addEventListener('DOMContentLoaded', function () {
-    calculateOrderTotal();
-    syncHotMirrors();
-});
+document.addEventListener('DOMContentLoaded', syncHotMirrors);
 </script>
 
 

@@ -18,6 +18,7 @@ No network and no database - the app runs on the SQLite stand-in.
 
 Run with:  python tests/mobile_nav_test.py
 """
+import json
 import os
 import re
 import sys
@@ -303,6 +304,37 @@ try:
 
     check("no full page reloads throughout",
           b.evaluate("performance.getEntriesByType('navigation').length") == 1)
+
+    print("\n=== The floating order summary stays in the corner ===")
+    tap("#navToggle")
+    tap_nav("New Order")
+    wait("!!document.getElementById('orderSummaryTrigger')", "the summary button")
+    time.sleep(0.6)
+
+    box = json.loads(b.evaluate("""
+        (function () {
+            var r = document.getElementById('orderSummaryTrigger')
+                            .getBoundingClientRect();
+            return JSON.stringify({
+                width: Math.round(r.width),
+                rightGap: Math.round(innerWidth - r.right),
+                bottomGap: Math.round(innerHeight - r.bottom),
+                viewport: innerWidth
+            });
+        })()
+    """))
+
+    # position:fixed anchors to the nearest transformed ancestor rather than
+    # the viewport, so an animation that leaves a transform on .main pushes
+    # this button hundreds of pixels below the fold on a tall phone page.
+    check("it sits in the bottom-right corner, on screen",
+          0 <= box["rightGap"] <= 30 and 0 <= box["bottomGap"] <= 30,
+          "gaps right=%(rightGap)s bottom=%(bottomGap)s" % box)
+    check("it is a compact pill, not a bar across the bottom",
+          box["width"] < box["viewport"] * 0.8,
+          "%(width)spx wide on a %(viewport)spx screen" % box)
+    check("nothing is covering it", hit_test("#orderSummaryTrigger"),
+          "a tap at its centre lands on something else")
 
     print("\n=== Back on a desktop width ===")
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=900,

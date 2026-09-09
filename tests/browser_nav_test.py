@@ -211,7 +211,16 @@ try:
           "window.Instant missing")
 
     print("\n=== 2. Background warm-up ===")
-    time.sleep(3.0)          # let the idle warm-up run
+    # Wait for the warm-up rather than guessing at it. It runs on an idle
+    # callback, which a loaded machine can defer well past a fixed sleep -
+    # that made this assertion fail intermittently when the browser suites
+    # ran back to back.
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        if len({r[1] for r in REQUESTS if r[2]}) >= 3:
+            break
+        time.sleep(0.25)
+
     warmed = sorted({r[1] for r in REQUESTS if r[2]})
     check("sidebar pages are prefetched in the background", len(warmed) >= 3,
           "prefetched: %s" % warmed)

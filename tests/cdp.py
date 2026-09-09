@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import socket
 import struct
 import subprocess
@@ -224,11 +225,42 @@ class Browser:
         return result.get("result", {}).get("value")
 
     def close(self):
+        """
+        Shut the browser down, children included.
+
+        Chromium forks a renderer, a GPU process and several utilities.
+        Terminating only the process we launched leaves those running: a
+        few dozen runs had piled up over a hundred stray processes, which
+        starved later runs and made them time out or flake.
+        """
         try:
             self.ws.close()
-        finally:
+        except Exception:
+            pass
+
+        # Ask politely first; the browser closes its own children on a
+        # clean exit.
+        try:
             self.proc.terminate()
+            self.proc.wait(timeout=8)
+        except Exception:
+            pass
+
+        if self.proc.poll() is None or os.name == "nt":
+            self._kill_tree()
+
+        # The profile is a fresh temporary directory per run.
+        shutil.rmtree(self.profile, ignore_errors=True)
+
+    def _kill_tree(self):
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(self.proc.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        else:
             try:
-                self.proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
                 self.proc.kill()
+            except Exception:
+                pass

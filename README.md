@@ -69,6 +69,7 @@ tests/user_delete_test.py Staff-account deletion test suite
 tests/hot_sellers_test.py Hot-selling shelf test suite
 tests/hot_mirror_test.py Real-browser mirrored-card test suite
 tests/settings_test.py Tax-rate and profile-photo test suite
+tests/tablet_layout_test.py Real-browser tablet layout test suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
@@ -86,14 +87,15 @@ python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 39   FAILED: 0
+python tests/tablet_layout_test.py # expect PASSED: 33   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 24   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 27   FAILED: 0
 ```
 
-All eleven run in memory against a SQLite stand-in — no database or network
-needed. The five suites that drive a browser use a headless Edge or Chrome
+All twelve run in memory against a SQLite stand-in — no database or network
+needed. The six suites that drive a browser use a headless Edge or Chrome
 when one is installed, and skip themselves when none is.
 
 `smoke_test.py` takes two cafes through the full lifecycle and asserts
@@ -157,6 +159,14 @@ submitted or totalled.
 admin can change the café's tax rate, that the rate actually reaches the
 bill, that bills already raised keep the rate they were charged at, and
 that a profile photo cannot be fetched from another café.
+
+`tablet_layout_test.py` walks the common tablet sizes in both orientations.
+A tablet held upright was narrow enough to get the drawer, but rotating it
+crossed back over the old breakpoint and handed the user the laptop layout
+mid-session. Width cannot tell a tablet from a small laptop, so the
+stylesheet also asks whether the pointer is coarse — the test checks every
+tablet gets the drawer and finger-sized controls while a 1366px laptop with
+a mouse, the exact width of an iPad Pro in landscape, is left alone.
 
 ## Security notes
 
