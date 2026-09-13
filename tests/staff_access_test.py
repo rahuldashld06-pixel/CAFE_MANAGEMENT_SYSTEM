@@ -183,6 +183,56 @@ check("but the dashboard feed is not",
       "a cashier can read the revenue figures through the API")
 
 
+print("\n=== 6. No page offers a non-admin the dashboard ===")
+# Hiding it from the sidebar was not enough: several page headers carried
+# their own "Dashboard" button, and every Back link fell back to it. For a
+# cashier those all bounced off the permission guard.
+for username, role in [("mgr", "manager"), ("cash2", "cashier"),
+                       ("stf", "staff")]:
+    admin.post("/users/add", data={
+        "full_name": username.title(), "username": username, "role": role,
+        "phone_number": "", "password": "password123",
+        "_csrf_token": csrf(admin)}, follow_redirects=True)
+
+PAGES = ["/orders/add", "/orders", "/foods", "/inventory", "/categories",
+         "/billing", "/account/password", "/account/photo",
+         "/settings/printing"]
+
+for username, role in [("mgr", "manager"), ("cash2", "cashier"),
+                       ("stf", "staff")]:
+    client = app.test_client()
+    client.post("/login", data={"username": username,
+                                "password": "password123"},
+                follow_redirects=True)
+
+    leaks = []
+    for path in PAGES:
+        response = client.get(path)
+        if response.status_code != 200:
+            continue
+        html = response.get_data(as_text=True)
+        if re.search(r'href="(/dashboard|/)"', html):
+            leaks.append(path)
+
+    check("a %s is offered no dashboard link anywhere" % role,
+          not leaks, "found one on: %s" % leaks)
+
+# And the Back links land somewhere the role can actually open.
+cashier = app.test_client()
+cashier.post("/login", data={"username": "cash2", "password": "password123"},
+             follow_redirects=True)
+back = re.search(r'href="([^"]+)" class="btn btn--ghost" data-back',
+                 cashier.get("/account/photo").get_data(as_text=True))
+check("a cashier's Back button goes somewhere they can open",
+      back and back.group(1) == "/orders/add",
+      "it points at %s" % (back and back.group(1)))
+
+admin_back = re.search(r'href="([^"]+)" class="btn btn--ghost" data-back',
+                       admin.get("/account/photo").get_data(as_text=True))
+check("an admin's still goes to the dashboard",
+      admin_back and admin_back.group(1) == "/",
+      "it points at %s" % (admin_back and admin_back.group(1)))
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

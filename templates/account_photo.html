@@ -10,7 +10,7 @@
         <h1><i class="bi bi-person-circle"></i> Profile Photo</h1>
         <p>The picture shown beside your name across the app.</p>
     </div>
-    <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>
+    <a href="{{ home_url }}" class="btn btn--ghost" data-back>
         <i class="bi bi-arrow-left"></i> Back
     </a>
 </div>
@@ -57,7 +57,7 @@
             <button type="submit" class="btn btn--primary">
                 <i class="bi bi-upload"></i> Save photo
             </button>
-            <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>Cancel</a>
+            <a href="{{ home_url }}" class="btn btn--ghost" data-back>Cancel</a>
         </div>
 
     </form>

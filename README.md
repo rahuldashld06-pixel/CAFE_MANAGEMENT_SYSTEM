@@ -96,7 +96,7 @@ python tests/settings_test.py     # expect PASSED: 39   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
-python tests/staff_access_test.py # expect PASSED: 29   FAILED: 0
+python tests/staff_access_test.py # expect PASSED: 34   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 25   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 23   FAILED: 0
 python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0

@@ -166,6 +166,21 @@ def inject_asset_version():
 
 
 @app.context_processor
+def inject_home_url():
+    """
+    Where "home" is for whoever is signed in.
+
+    Only an admin can open the dashboard, so for everyone else it is the
+    New Order screen - the page the permission guard sends them to anyway.
+    Used as the fallback for every Back link, so a staff member who lands
+    on a settings page directly is not bounced off the dashboard.
+    """
+    if session.get("role") == "admin":
+        return {"home_url": url_for("home")}
+    return {"home_url": url_for("add_order")}
+
+
+@app.context_processor
 def inject_print_settings():
     """Every page needs these to decide whether to arm an automatic print."""
     if not session.get("user_id"):

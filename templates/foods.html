@@ -11,9 +11,14 @@
         </div>
 
         <div class="page-header__actions">
+            {# Only an admin can open the dashboard, so only an admin is
+               offered it - for anyone else this bounced back with a
+               permission message. #}
+            {% if session.get('role') == 'admin' %}
             <a href="{{ url_for('home') }}" class="btn btn--ghost">
                 <i class="bi bi-arrow-left"></i> Dashboard
             </a>
+            {% endif %}
             <a class="btn btn--primary" href="{{ url_for('add_food') }}">
                 <i class="bi bi-plus-circle"></i> Add Food
             </a>
