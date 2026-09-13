@@ -1,0 +1,45 @@
+{# The body of the dashboard's stock alert.
+
+   Kept in its own file because the 5-second poll rebuilds the same markup
+   in JavaScript; having one shape to copy makes it obvious when the two
+   drift apart. #}
+
+{% if unavailable > 0 %}
+<div class="stock-alert__row stock-alert__row--out">
+    <span class="stock-alert__badge">
+        <i class="bi bi-x-circle-fill"></i> Out of stock
+        <strong>{{ unavailable }}</strong>
+    </span>
+    <span class="stock-alert__names">
+        {% for item in unavailable_items %}<span class="stock-chip">{{ item.name }}</span>{% endfor %}
+        {% if unavailable > unavailable_items|length %}
+        <span class="stock-alert__more">
+            and {{ unavailable - unavailable_items|length }} more
+        </span>
+        {% endif %}
+    </span>
+</div>
+{% endif %}
+
+{% if low_stock > 0 %}
+<div class="stock-alert__row stock-alert__row--low">
+    <span class="stock-alert__badge">
+        <i class="bi bi-exclamation-triangle-fill"></i> Running low
+        <strong>{{ low_stock }}</strong>
+    </span>
+    <span class="stock-alert__names">
+        {% for item in low_stock_items %}<span class="stock-chip">{{ item.name }}<em>{{ item.quantity }}</em></span>{% endfor %}
+        {% if low_stock > low_stock_items|length %}
+        <span class="stock-alert__more">
+            and {{ low_stock - low_stock_items|length }} more
+        </span>
+        {% endif %}
+    </span>
+</div>
+{% endif %}
+
+{# btn on its own has a transparent border and no background, so it renders
+   as bare text - the variant is what makes it look like a button. #}
+<a href="{{ url_for('inventory') }}" class="btn btn--ghost btn--sm stock-alert__action">
+    <i class="bi bi-boxes"></i> Restock in Inventory
+</a>

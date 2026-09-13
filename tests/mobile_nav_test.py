@@ -305,6 +305,46 @@ try:
     check("no full page reloads throughout",
           b.evaluate("performance.getEntriesByType('navigation').length") == 1)
 
+    print("\n=== The top bar survives scrolling ===")
+    # The hamburger and the profile menu are the only way off a page on a
+    # phone. They used to scroll away with everything else, stranding the
+    # user at the bottom of a long list.
+    b.evaluate("window.scrollTo(0, 0)")
+    time.sleep(0.3)
+    before = json.loads(b.evaluate("""
+        (function () {
+            var r = document.querySelector('.topbar').getBoundingClientRect();
+            return JSON.stringify({top: Math.round(r.top),
+                                   height: Math.round(r.height)});
+        })()
+    """))
+
+    b.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(0.6)
+    after = json.loads(b.evaluate("""
+        (function () {
+            var r = document.querySelector('.topbar').getBoundingClientRect();
+            return JSON.stringify({top: Math.round(r.top),
+                                   scrolled: Math.round(window.scrollY)});
+        })()
+    """))
+
+    check("the page actually scrolled", after["scrolled"] > 50,
+          "only moved %(scrolled)spx - the check below would prove nothing"
+          % after)
+    check("the top bar is still at the top of the screen",
+          -2 <= after["top"] <= 2,
+          "it moved to %spx after scrolling (was %spx)"
+          % (after["top"], before["top"]))
+    check("the hamburger is still tappable after scrolling",
+          hit_test("#navToggle"),
+          "something scrolled over the top bar")
+    check("and the profile menu with it",
+          hit_test("#profileTrigger"))
+
+    b.evaluate("window.scrollTo(0, 0)")
+    time.sleep(0.3)
+
     print("\n=== The floating order summary stays in the corner ===")
     tap("#navToggle")
     tap_nav("New Order")

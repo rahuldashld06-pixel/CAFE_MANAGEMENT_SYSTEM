@@ -99,6 +99,21 @@
 
 
 <!-- ==========================================
+     STOCK ALERT
+
+     First thing on the page, and by name. Counts alone said something was
+     wrong without saying what to reorder.
+     ========================================== -->
+
+<div class="stock-alert" id="stock-alert-panel"
+     {% if low_stock == 0 and unavailable == 0 %}hidden{% endif %}>
+    <div id="stock-alert-content">
+        {% include "_stock_alert.html" %}
+    </div>
+</div>
+
+
+<!-- ==========================================
      MAIN STATISTICS
      ========================================== -->
 
@@ -270,42 +285,7 @@
 </div>
 
 
-<!-- ==========================================
-     STOCK ALERT
-     ========================================== -->
-
-<div class="panel" id="stock-alert-panel"
-     {% if low_stock == 0 and unavailable == 0 %}style="display:none;"{% endif %}>
-
-    <div class="panel-header">
-        <div>
-            <h2><i class="bi bi-exclamation-triangle-fill"></i> Inventory Alert</h2>
-            <p class="panel-subtitle">These values are updated automatically from inventory.</p>
-        </div>
-    </div>
-
-    <div id="stock-alert-content">
-
-        {% if unavailable > 0 %}
-            <p>
-                🔴 <strong id="unavailable-alert">{{ unavailable }}</strong>
-                food item(s) are currently unavailable.
-            </p>
-        {% endif %}
-
-        {% if low_stock > 0 %}
-            <p style="margin-top:8px;">
-                🟡 <strong id="low-stock-alert">{{ low_stock }}</strong>
-                food item(s) have reached minimum stock.
-            </p>
-        {% endif %}
-
-        <a href="{{ url_for('inventory') }}" class="btn" style="margin-top:14px;">
-            <i class="bi bi-boxes"></i> Check Inventory
-        </a>
-
-    </div>
-</div>
+{# The stock alert now lives at the top of this page, above the statistics. #}
 
 
 <script>
@@ -314,6 +294,41 @@
        Fetches only the statistics every 5 seconds.
        It NEVER reloads/navigates the page.
     */
+
+    /* Food names are typed by the café, so they are escaped before going
+       anywhere near innerHTML. */
+    function escapeHtml(value) {
+        const box = document.createElement("div");
+        box.textContent = value == null ? "" : String(value);
+        return box.innerHTML;
+    }
+
+    /* Builds one row of the stock alert. Mirrors the markup in
+       templates/_stock_alert.html, which renders the same thing on a cold
+       load - change both together. */
+    function stockRow(kind, icon, label, count, items, showQuantity) {
+        const listed = items || [];
+
+        let chips = listed.map(function (item) {
+            const amount = showQuantity
+                ? "<em>" + escapeHtml(item.quantity) + "</em>"
+                : "";
+            return '<span class="stock-chip">' + escapeHtml(item.name) + amount + "</span>";
+        }).join("");
+
+        if (count > listed.length) {
+            chips += '<span class="stock-alert__more">and ' +
+                     (count - listed.length) + " more</span>";
+        }
+
+        return '<div class="stock-alert__row stock-alert__row--' + kind + '">' +
+                   '<span class="stock-alert__badge">' +
+                       '<i class="bi ' + icon + '"></i> ' + label +
+                       " <strong>" + count + "</strong>" +
+                   "</span>" +
+                   '<span class="stock-alert__names">' + chips + "</span>" +
+               "</div>";
+    }
 
     async function updateDashboard() {
         // Nothing to refresh while the tab is in the background, and every
@@ -380,40 +395,33 @@
 
             if (data.low_stock > 0 || data.unavailable > 0) {
 
-                alertPanel.style.display = "";
+                alertPanel.hidden = false;
 
+                /* Mirrors templates/_stock_alert.html - change both together. */
                 let html = "";
 
                 if (data.unavailable > 0) {
-                    html += `
-                        <p>
-                            🔴 <strong>${data.unavailable}</strong>
-                            food item(s) are currently unavailable.
-                        </p>
-                    `;
+                    html += stockRow(
+                        "out", "bi-x-circle-fill", "Out of stock",
+                        data.unavailable, data.unavailable_items, false);
                 }
 
                 if (data.low_stock > 0) {
-                    html += `
-                        <p style="margin-top:8px;">
-                            🟡 <strong>${data.low_stock}</strong>
-                            food item(s) have reached minimum stock.
-                        </p>
-                    `;
+                    html += stockRow(
+                        "low", "bi-exclamation-triangle-fill", "Running low",
+                        data.low_stock, data.low_stock_items, true);
                 }
 
                 html += `
-                    <a href="{{ url_for('inventory') }}"
-                       class="btn"
-                       style="margin-top:14px;">
-                        <i class="bi bi-boxes"></i> Check Inventory
+                    <a href="{{ url_for('inventory') }}" class="btn btn--ghost btn--sm stock-alert__action">
+                        <i class="bi bi-boxes"></i> Restock in Inventory
                     </a>
                 `;
 
                 alertContent.innerHTML = html;
 
             } else {
-                alertPanel.style.display = "none";
+                alertPanel.hidden = true;
             }
 
         } catch (error) {

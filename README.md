@@ -70,6 +70,7 @@ tests/hot_sellers_test.py Hot-selling shelf test suite
 tests/hot_mirror_test.py Real-browser mirrored-card test suite
 tests/settings_test.py Tax-rate and profile-photo test suite
 tests/tablet_layout_test.py Real-browser tablet layout test suite
+tests/stock_alert_test.py Dashboard stock-alert test suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
@@ -88,15 +89,16 @@ python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 39   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 33   FAILED: 0
+python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 27   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 31   FAILED: 0
 ```
 
-All twelve run in memory against a SQLite stand-in — no database or network
-needed. The six suites that drive a browser use a headless Edge or Chrome
-when one is installed, and skip themselves when none is.
+All thirteen run in memory against a SQLite stand-in — no database or
+network needed. The six suites that drive a browser use a headless Edge or
+Chrome when one is installed, and skip themselves when none is.
 
 `smoke_test.py` takes two cafes through the full lifecycle and asserts
 that neither can read or modify the other's data.
@@ -167,6 +169,13 @@ mid-session. Width cannot tell a tablet from a small laptop, so the
 stylesheet also asks whether the pointer is coarse — the test checks every
 tablet gets the drawer and finger-sized controls while a 1366px laptop with
 a mouse, the exact width of an iPad Pro in landscape, is left alone.
+
+`stock_alert_test.py` covers the dashboard's stock alert, which names the
+food that needs reordering rather than only counting it. Checks that zero
+stock is reported as out rather than low (a zero satisfies the minimum test
+too), that the most urgent is listed first, that a long list is capped and
+says how many more there are, and that one café is never told about
+another's empty shelves.
 
 ## Security notes
 

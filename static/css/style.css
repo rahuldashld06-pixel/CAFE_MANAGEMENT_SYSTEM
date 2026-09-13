@@ -2123,3 +2123,228 @@ body.nav-locked {
         padding: 18px;
     }
 }
+
+/* ============================================================
+   Stock alert
+
+   Sits at the very top of the dashboard and names the food that
+   needs attention. Counts alone told a manager something was wrong
+   without telling them what to reorder.
+   ============================================================ */
+
+.stock-alert {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 22px;
+    padding: 16px 18px;
+    border-radius: var(--radius-lg);
+    background: var(--espresso-900);
+    border: 1px solid var(--espresso-700);
+    border-left: 3px solid var(--copper);
+    box-shadow: var(--shadow-soft);
+}
+
+.stock-alert[hidden] { display: none !important; }
+
+.stock-alert__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.stock-alert__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    white-space: nowrap;
+}
+
+.stock-alert__badge strong {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .28);
+}
+
+.stock-alert__row--out .stock-alert__badge {
+    background: rgba(225, 97, 79, .18);
+    color: #ffb3a5;
+    border: 1px solid rgba(225, 97, 79, .38);
+}
+
+.stock-alert__row--low .stock-alert__badge {
+    background: rgba(242, 201, 76, .14);
+    color: #f0cf85;
+    border: 1px solid rgba(242, 201, 76, .32);
+}
+
+.stock-alert__names {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+.stock-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--espresso-850);
+    border: 1px solid var(--espresso-700);
+    color: var(--cream);
+    font-size: 12.5px;
+}
+
+/* The number beside a low-stock name is how many are left. */
+.stock-chip em {
+    font-style: normal;
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--copper-light);
+}
+
+.stock-alert__more {
+    align-self: center;
+    font-size: 12px;
+    color: var(--cream-faint);
+}
+
+.stock-alert__action {
+    align-self: flex-start;
+}
+
+/* ============================================================
+   Mobile polish
+
+   On a phone the hamburger and the profile menu are the only way
+   to get anywhere, and they used to scroll off the top with the
+   rest of the page - leaving a long menu or order list with no way
+   out but scrolling back up. The bar stays put now.
+   ============================================================ */
+
+@media (max-width: 1024px),
+       (max-width: 1400px) and (pointer: coarse) {
+
+    .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 1150;   /* over the page, under the drawer at 1450 */
+        margin: 0 -16px 16px;
+        padding: 8px 16px;
+        /* Opaque enough to read against whatever scrolls beneath it, with
+           a blur behind for the parts that are not. */
+        background: rgba(32, 21, 16, .92);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--espresso-800);
+    }
+
+    /* The drawer sits above the bar, so the bar must not paint over the
+       backdrop when it is open. */
+    .app-shell.nav-open .topbar {
+        z-index: 1;
+    }
+
+    .main {
+        /* The sticky bar supplies the top gap now. */
+        padding-top: 0;
+    }
+
+    .page-header h1 {
+        font-size: 23px;
+        line-height: 1.25;
+    }
+
+    .page-header p {
+        font-size: 13px;
+    }
+
+    /* Two up rather than a single tall column of statistics. */
+    .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .stat-card {
+        padding: 14px;
+        gap: 12px;
+    }
+
+    .stat-card__value {
+        font-size: 22px;
+    }
+
+    /* Two cards to a row leaves little width for a label, so most of them
+       fit on one line at this size instead of wrapping and making the row
+       uneven. */
+    .stat-card__label {
+        font-size: 12px;
+        line-height: 1.3;
+    }
+
+    .stock-alert {
+        padding: 14px;
+        margin-bottom: 18px;
+    }
+
+    /* Wide tables scroll inside their panel instead of stretching the page
+       sideways, which is what made the whole layout pannable. */
+    .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@media (max-width: 560px) {
+    .stats-grid {
+        gap: 10px;
+    }
+
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    /* A lone action in a page header reads better full width than floated
+       against the title on a narrow screen. */
+    .page-header > .btn,
+    .page-header > a.btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .stock-alert__badge {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .panel-header {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+}
+
+/* Phones with a home indicator or a rounded chin: keep the floating
+   controls clear of it rather than tucked underneath. */
+@supports (padding: env(safe-area-inset-bottom)) {
+    @media (pointer: coarse) {
+        .order-summary-trigger,
+        .order-status-fab {
+            bottom: calc(12px + env(safe-area-inset-bottom));
+        }
+
+        .main {
+            padding-bottom: calc(40px + env(safe-area-inset-bottom));
+        }
+    }
+}

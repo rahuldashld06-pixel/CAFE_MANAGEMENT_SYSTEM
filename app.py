@@ -1467,19 +1467,7 @@ def home():
             """, (scope_user_id(),))
             today_revenue = cursor.fetchone()["total"]
 
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-            FROM inventory i INNER JOIN foods f ON i.food_id=f.food_id
-            WHERE f.user_id=%s AND i.quantity > 0 AND i.quantity <= i.minimum_stock
-        """, (scope_user_id(),))
-        low_stock = cursor.fetchone()["total"]
-
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-            FROM inventory i INNER JOIN foods f ON i.food_id=f.food_id
-            WHERE f.user_id=%s AND i.quantity = 0
-        """, (scope_user_id(),))
-        unavailable = cursor.fetchone()["total"]
+        alerts = stock_alerts(cursor, scope_user_id())
 
         return render_template(
             "dashboard.html",
@@ -1489,8 +1477,11 @@ def home():
             total_inventory=total_inventory,
             today_orders=today_orders,
             today_revenue=today_revenue,
-            low_stock=low_stock,
-            unavailable=unavailable
+            low_stock=alerts["low_stock"],
+            unavailable=alerts["unavailable"],
+            low_stock_items=alerts["low_stock_items"],
+            unavailable_items=alerts["unavailable_items"],
+            alert_name_limit=STOCK_ALERT_NAMES
         )
 
     except mysql.connector.Error as error:
@@ -2438,6 +2429,46 @@ def order_status_feed():
 # ==========================================
 # CREATE MULTIPLE-ITEM ORDER
 # ==========================================
+
+# How many names the stock alert lists before it stops and says "and N more".
+STOCK_ALERT_NAMES = 12
+
+
+def stock_alerts(cursor, owner_id):
+    """
+    Which food is out, and which is nearly out - by name.
+
+    The dashboard used to report only counts ("3 items are low"), which told
+    a manager something was wrong but not what to reorder. One query covers
+    both sets: quantity 0 is unavailable, anything at or below its minimum
+    is low. A zero quantity always satisfies the minimum test too, so the
+    split happens here rather than in a second round trip.
+    """
+    cursor.execute("""
+        SELECT f.food_name, i.quantity, i.minimum_stock
+        FROM inventory i
+        INNER JOIN foods f ON i.food_id = f.food_id
+        WHERE f.user_id = %s
+          AND i.quantity <= i.minimum_stock
+        ORDER BY i.quantity ASC, f.food_name ASC
+    """, (owner_id,))
+
+    out, low = [], []
+    for row in cursor.fetchall():
+        entry = {
+            "name": row["food_name"],
+            "quantity": int(row["quantity"] or 0),
+            "minimum": int(row["minimum_stock"] or 0),
+        }
+        (out if entry["quantity"] <= 0 else low).append(entry)
+
+    return {
+        "unavailable": len(out),
+        "low_stock": len(low),
+        "unavailable_items": out[:STOCK_ALERT_NAMES],
+        "low_stock_items": low[:STOCK_ALERT_NAMES],
+    }
+
 
 UNCATEGORISED_LABEL = "Other"
 
@@ -4352,21 +4383,7 @@ def dashboard_stats():
             """, (uid,))
             today_revenue = cursor.fetchone()["total"]
 
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-            FROM inventory i INNER JOIN foods f ON i.food_id=f.food_id
-            WHERE f.user_id=%s
-              AND i.quantity>0
-              AND i.quantity<=i.minimum_stock
-        """, (uid,))
-        low_stock = cursor.fetchone()["total"]
-
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-            FROM inventory i INNER JOIN foods f ON i.food_id=f.food_id
-            WHERE f.user_id=%s AND i.quantity=0
-        """, (uid,))
-        unavailable = cursor.fetchone()["total"]
+        alerts = stock_alerts(cursor, uid)
 
         return {
             "total_foods": total_foods,
@@ -4375,8 +4392,13 @@ def dashboard_stats():
             "total_inventory": total_inventory,
             "today_orders": today_orders,
             "today_revenue": (float(today_revenue) if today_revenue is not None else None),
-            "low_stock": low_stock,
-            "unavailable": unavailable
+            "low_stock": alerts["low_stock"],
+            "unavailable": alerts["unavailable"],
+            # Names as well as counts, so the poll can keep the alert at the
+            # top of the dashboard naming the right items as stock moves.
+            "low_stock_items": alerts["low_stock_items"],
+            "unavailable_items": alerts["unavailable_items"],
+            "alert_name_limit": STOCK_ALERT_NAMES
         }
     except Exception as e:
         return {"error": str(e)}, 500
