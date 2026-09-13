@@ -135,21 +135,43 @@ check("the admin sees the same category list",
       and admin.get("/categories").status_code == 200)
 
 
-print("\n=== 4. Billing without the manager's summary ===")
+print("\n=== 4. Billing: today's counts for staff, the period for admins ===")
 staff_billing = staff.get("/billing").get_data(as_text=True)
 admin_billing = admin.get("/billing").get_data(as_text=True)
 
 check("staff can still use Billing",
       staff.get("/billing").status_code == 200)
-check("but the summary cards are not shown to them",
-      "Bills in Period" not in staff_billing
-      and "Paid Bills" not in staff_billing,
-      "the manager's figures are on a cashier's screen")
-check("an admin still gets them", "Bills in Period" in admin_billing,
-      "the summary disappeared for admins too")
+
+# Staff get the same four counts, but fixed to today: a tally only helps at
+# the till if it describes the shift they are on.
+check("staff see the counts, labelled as today's",
+      "Bills Today" in staff_billing and "Paid Today" in staff_billing
+      and "Pending Today" in staff_billing
+      and "Cancelled Today" in staff_billing,
+      "the cashier's summary is missing or mislabelled")
+check("an admin sees the same counts for the filtered period",
+      "Bills in Period" in admin_billing and "Paid Bills" in admin_billing,
+      "the admin summary changed")
+check("staff are not shown the period labels",
+      "Bills in Period" not in staff_billing,
+      "a cashier is being told these are period figures when they are not")
+
+# Revenue is the one figure that stays a manager's.
+check("revenue is not on a cashier's screen",
+      'id="stat-revenue"' not in staff_billing,
+      "takings are visible to staff")
+check("but it is on the admin's", 'id="stat-revenue"' in admin_billing)
+
 check("the bill history itself is untouched",
       "Billing History" in staff_billing,
       "staff lost the part of Billing they actually need")
+
+# The filter drives the history, not the cashier's tally.
+filtered = staff.get("/billing?from_date=2020-01-01&to_date=2020-01-31"
+                     ).get_data(as_text=True)
+check("a date filter does not move the cashier's today figures",
+      "Bills Today" in filtered,
+      "filtering the history rewrote the shift summary")
 
 
 print("\n=== 5. Taking payment still works for staff ===")

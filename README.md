@@ -93,7 +93,7 @@ python tests/settings_test.py     # expect PASSED: 39   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
-python tests/staff_access_test.py # expect PASSED: 25   FAILED: 0
+python tests/staff_access_test.py # expect PASSED: 29   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
@@ -193,8 +193,9 @@ open to staff, and both stop at the café boundary.
 
 `staff_access_test.py` pins down what a non-admin can reach. Staff run the
 counter — orders, the menu, categories, stock and taking payment — and get
-neither the dashboard, the reports, user management, nor the manager's
-summary figures on Billing. It checks the sidebar and the server guard
+neither the dashboard, the reports, nor user management. They do get the
+Billing summary, fixed to today rather than the filtered period, with
+revenue left off. It checks the sidebar and the server guard
 agree, because a link that is hidden but still served is a hole.
 
 ## Security notes

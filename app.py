@@ -4032,8 +4032,22 @@ def billing():
             bills = []
 
         # --------------------------------------
-        # Filtered-period summary
+        # Summary
+        #
+        # An admin is looking at whatever period the filter says. A cashier
+        # is looking at their shift, so theirs is fixed to today whatever
+        # the history below is filtered to - "12 bills, 9 paid" only means
+        # something at the till if it means today.
         # --------------------------------------
+
+        is_admin = session.get("role") == "admin"
+
+        if is_admin:
+            summary_where, summary_params = where_sql, params
+        else:
+            summary_where = ("WHERE o.user_id = %s "
+                             "AND DATE(b.bill_date) = CURDATE()")
+            summary_params = [scope_user_id()]
 
         cursor.execute(f"""
             SELECT
@@ -4055,8 +4069,8 @@ def billing():
             LEFT JOIN orders o
                 ON b.order_id = o.order_id
 
-            {where_sql}
-        """, tuple(params))
+            {summary_where}
+        """, tuple(summary_params))
 
         summary = cursor.fetchone()
 
@@ -4068,6 +4082,9 @@ def billing():
             pending_today=summary["pending_count"] or 0,
             cancelled_count=summary["cancelled_count"] or 0,
             revenue_today=summary["revenue"] or Decimal("0.00"),
+            # Tells the page whether those figures describe the filtered
+            # period or just today, so it can label them honestly.
+            summary_is_today=not is_admin,
             from_date=from_date,
             to_date=to_date
         )

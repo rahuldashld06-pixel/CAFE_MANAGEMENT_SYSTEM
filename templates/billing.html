@@ -386,18 +386,17 @@
         </form>
     </div>
 
-    {# Summary figures are a manager's view of the day, not something a
-       cashier needs in front of them while taking payment - and the revenue
-       card was already admin-only, so the row was half-empty for everyone
-       else anyway. #}
-    {% if session.get('role') == 'admin' %}
+    {# Everyone gets these. An admin sees whatever period the filter above
+       is set to; a cashier always sees today, because a count only helps at
+       the till if it describes the shift they are on. Revenue stays admin
+       only either way. #}
     <!-- SUMMARY -->
     <div class="stats-grid">
 
         <div class="stat-card">
             <div class="stat-card__icon"><i class="bi bi-receipt-cutoff"></i></div>
             <div class="stat-card__body">
-                <div class="stat-card__label">Bills in Period</div>
+                <div class="stat-card__label">{{ 'Bills Today' if summary_is_today else 'Bills in Period' }}</div>
                 <div class="stat-card__value" id="stat-bills-total">{{ bills_today }}</div>
             </div>
         </div>
@@ -405,7 +404,7 @@
         <div class="stat-card">
             <div class="stat-card__icon"><i class="bi bi-check-circle-fill"></i></div>
             <div class="stat-card__body">
-                <div class="stat-card__label">Paid Bills</div>
+                <div class="stat-card__label">{{ 'Paid Today' if summary_is_today else 'Paid Bills' }}</div>
                 <div class="stat-card__value" id="stat-paid-bills">{{ paid_today }}</div>
             </div>
         </div>
@@ -413,7 +412,7 @@
         <div class="stat-card">
             <div class="stat-card__icon"><i class="bi bi-clock-fill"></i></div>
             <div class="stat-card__body">
-                <div class="stat-card__label">Pending Bills</div>
+                <div class="stat-card__label">{{ 'Pending Today' if summary_is_today else 'Pending Bills' }}</div>
                 <div class="stat-card__value" id="stat-pending-bills">{{ pending_today }}</div>
             </div>
         </div>
@@ -421,7 +420,7 @@
         <div class="stat-card">
             <div class="stat-card__icon"><i class="bi bi-x-circle-fill"></i></div>
             <div class="stat-card__body">
-                <div class="stat-card__label">Cancelled Orders</div>
+                <div class="stat-card__label">{{ 'Cancelled Today' if summary_is_today else 'Cancelled Orders' }}</div>
                 <div class="stat-card__value">{{ cancelled_count }}</div>
             </div>
         </div>
@@ -437,7 +436,6 @@
         {% endif %}
 
     </div>
-    {% endif %}
 
     <!-- ALL BILLS -->
     <div class="panel billing-table-panel">
