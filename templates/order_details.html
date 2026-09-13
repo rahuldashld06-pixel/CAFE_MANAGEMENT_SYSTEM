@@ -26,6 +26,31 @@
 
         <div class="page-header__actions">
 
+            {# Opened in their own tab: you print, close, and you are back
+               where you were. target also keeps instant.js out of it, since
+               these are standalone documents with no #page-view to swap. #}
+            <a
+                href="{{ url_for('print_bill', order_id=order.order_id) }}"
+                target="_blank"
+                rel="noopener"
+                class="btn btn--primary">
+
+                <i class="bi bi-printer-fill"></i>
+                Print Bill
+
+            </a>
+
+            <a
+                href="{{ url_for('print_kot', order_id=order.order_id) }}"
+                target="_blank"
+                rel="noopener"
+                class="btn btn--ghost">
+
+                <i class="bi bi-fire"></i>
+                Print KOT
+
+            </a>
+
             <a
                 href="{{ url_for('orders') }}"
                 class="btn btn--ghost">

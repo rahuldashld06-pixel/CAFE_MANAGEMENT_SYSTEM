@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KOT · Order #{{ order.order_id }} · {{ branding.cafe_name }}</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css', v=asset_version) }}">
+</head>
+
+<body class="print-body">
+
+<div class="print-toolbar no-print">
+    <button type="button" class="print-toolbar__btn print-toolbar__btn--primary"
+            onclick="window.print()">Print KOT</button>
+    <a href="{{ url_for('print_bill', order_id=order.order_id) }}"
+       class="print-toolbar__btn">Bill</a>
+    <a href="{{ url_for('order_details', order_id=order.order_id) }}"
+       class="print-toolbar__btn">Back to order</a>
+</div>
+
+{# Deliberately no prices. The kitchen needs the number, the dish and how
+   many - anything else is noise on a ticket read at a glance over a pass. #}
+<div class="receipt receipt--kot" id="receipt">
+
+    <header class="kot__head">
+        <p class="kot__label">Kitchen Order Ticket</p>
+        <p class="kot__order">#{{ order.order_id }}</p>
+        <p class="kot__time">{{ order.order_date }}</p>
+    </header>
+
+    <table class="kot__items">
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="kot__qty">{{ item.quantity }}</td>
+                <td class="kot__name">{{ item.food_name }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="2" class="receipt__empty">This order has no items.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <footer class="kot__foot">
+        <span>{{ items|sum(attribute='quantity') }} item(s)</span>
+        <span>{{ branding.cafe_name }}</span>
+    </footer>
+
+</div>
+
+<script>
+window.addEventListener("load", function () {
+    window.print();
+});
+</script>
+
+</body>
+</html>

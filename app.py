@@ -1287,6 +1287,8 @@ def require_role(*roles):
 # same access as manager/cashier with no extra wiring.
 STAFF_ALLOWED_ENDPOINTS = {
     "add_order", "order_details",
+    # Printing a bill or a kitchen ticket is counter work, not admin work.
+    "print_bill", "print_kot",
     "orders", "cancel_order", "complete_order", "delete_order",
     "foods", "add_food", "edit_food", "delete_food",
     "inventory", "update_stock",
@@ -3058,6 +3060,111 @@ def add_order():
 # ==========================================
 # ORDER DETAILS
 # ==========================================
+
+def load_order_for_print(cursor, order_id):
+    """
+    One order with its lines and bill, scoped to the café.
+
+    Shared by the bill and the kitchen ticket so the two documents can never
+    disagree about what was ordered. Returns None when the order belongs to
+    another café, which the callers turn into a redirect rather than a 404 -
+    the same treatment the order page gives an id that is not yours.
+    """
+    cursor.execute("""
+        SELECT order_id, order_date, total_amount, order_status
+        FROM orders
+        WHERE order_id = %s AND user_id = %s
+    """, (order_id, scope_user_id()))
+    order = cursor.fetchone()
+    if order is None:
+        return None
+
+    cursor.execute("""
+        SELECT oi.quantity, oi.price, oi.subtotal, f.food_name
+        FROM order_items oi
+        INNER JOIN foods f ON oi.food_id = f.food_id
+        WHERE oi.order_id = %s
+        ORDER BY oi.order_item_id
+    """, (order_id,))
+    items = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT bill_id, subtotal, tax, discount, total_amount,
+               payment_method, payment_status, bill_date
+        FROM bills
+        WHERE order_id = %s
+    """, (order_id,))
+    bill = cursor.fetchone()
+
+    return {"order": order, "items": items, "bill": bill}
+
+
+@app.route("/orders/<int:order_id>/bill")
+def print_bill(order_id):
+    """
+    A printable receipt: the café's name and logo, and every line of one
+    order. Open to anyone who can see the order - taking payment is not an
+    admin-only job.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        data = load_order_for_print(cursor, order_id)
+        if data is None:
+            flash("Order not found.")
+            return redirect(url_for("orders"))
+
+        return render_template(
+            "print_bill.html",
+            branding=get_cafe_branding(session.get("cafe_id")),
+            tax_percent=get_tax_percent(),
+            **data
+        )
+    except mysql.connector.Error as error:
+        flash(f"Database error: {error}")
+        return redirect(url_for("orders"))
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/orders/<int:order_id>/kot")
+def print_kot(order_id):
+    """
+    The kitchen's copy: order number, what to make, how many. No prices -
+    the kitchen does not need them and they only crowd the ticket.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        data = load_order_for_print(cursor, order_id)
+        if data is None:
+            flash("Order not found.")
+            return redirect(url_for("orders"))
+
+        return render_template(
+            "print_kot.html",
+            branding=get_cafe_branding(session.get("cafe_id")),
+            order=data["order"],
+            items=data["items"],
+        )
+    except mysql.connector.Error as error:
+        flash(f"Database error: {error}")
+        return redirect(url_for("orders"))
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
 
 @app.route("/orders/<int:order_id>")
 def order_details(order_id):

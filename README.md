@@ -71,6 +71,7 @@ tests/hot_mirror_test.py Real-browser mirrored-card test suite
 tests/settings_test.py Tax-rate and profile-photo test suite
 tests/tablet_layout_test.py Real-browser tablet layout test suite
 tests/stock_alert_test.py Dashboard stock-alert test suite
+tests/print_test.py  Printable bill and kitchen ticket test suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
@@ -90,13 +91,14 @@ python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 39   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 33   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
+python tests/print_test.py        # expect PASSED: 29   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
 python tests/mobile_nav_test.py   # expect PASSED: 31   FAILED: 0
 ```
 
-All thirteen run in memory against a SQLite stand-in — no database or
+All fourteen run in memory against a SQLite stand-in — no database or
 network needed. The six suites that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
@@ -176,6 +178,13 @@ stock is reported as out rather than low (a zero satisfies the minimum test
 too), that the most urgent is listed first, that a long list is capped and
 says how many more there are, and that one café is never told about
 another's empty shelves.
+
+`print_test.py` covers the two printable documents. The bill carries the
+café's name, logo and every line of one order, with totals taken from the
+bill record so a receipt reprinted after a tax-rate change still shows what
+was actually charged. The kitchen ticket carries the order number, the
+dishes and how many — and the test asserts no price reaches it. Both are
+open to staff, and both stop at the café boundary.
 
 ## Security notes
 

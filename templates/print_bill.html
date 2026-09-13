@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bill · Order #{{ order.order_id }} · {{ branding.cafe_name }}</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css', v=asset_version) }}">
+</head>
+
+<body class="print-body">
+
+<div class="print-toolbar no-print">
+    <button type="button" class="print-toolbar__btn print-toolbar__btn--primary"
+            onclick="window.print()">Print bill</button>
+    <a href="{{ url_for('print_kot', order_id=order.order_id) }}"
+       class="print-toolbar__btn">Kitchen ticket</a>
+    <a href="{{ url_for('order_details', order_id=order.order_id) }}"
+       class="print-toolbar__btn">Back to order</a>
+</div>
+
+<div class="receipt" id="receipt">
+
+    <header class="receipt__head">
+        {% if branding.logo %}
+        <img src="{{ branding.logo }}" alt="" class="receipt__logo">
+        {% endif %}
+        <h1 class="receipt__cafe">{{ branding.cafe_name }}</h1>
+        <p class="receipt__kind">Tax Invoice</p>
+    </header>
+
+    <dl class="receipt__meta">
+        <div><dt>Order</dt><dd>#{{ order.order_id }}</dd></div>
+        {% if bill %}
+        <div><dt>Bill</dt><dd>#{{ bill.bill_id }}</dd></div>
+        {% endif %}
+        <div><dt>Date</dt><dd>{{ order.order_date }}</dd></div>
+        <div><dt>Status</dt><dd>{{ order.order_status }}</dd></div>
+    </dl>
+
+    <table class="receipt__items">
+        <thead>
+            <tr>
+                <th class="col-item">Item</th>
+                <th class="col-qty">Qty</th>
+                <th class="col-rate">Rate</th>
+                <th class="col-amount">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="col-item">{{ item.food_name }}</td>
+                <td class="col-qty">{{ item.quantity }}</td>
+                <td class="col-rate">{{ "%.2f"|format(item.price) }}</td>
+                <td class="col-amount">{{ "%.2f"|format(item.subtotal) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="receipt__empty">This order has no items.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {# Totals come from the bill when one exists, so a printed receipt always
+       matches what was actually charged - including a tax rate that has since
+       been changed. Before a bill is raised, the order total is all there is. #}
+    <div class="receipt__totals">
+        {% if bill %}
+        <div><span>Subtotal</span><span>{{ "%.2f"|format(bill.subtotal) }}</span></div>
+        <div><span>Tax</span><span>{{ "%.2f"|format(bill.tax) }}</span></div>
+        {% if bill.discount and bill.discount > 0 %}
+        <div><span>Discount</span><span>-{{ "%.2f"|format(bill.discount) }}</span></div>
+        {% endif %}
+        <div class="receipt__grand">
+            <span>Total</span><span>₹{{ "%.2f"|format(bill.total_amount) }}</span>
+        </div>
+        <div class="receipt__pay">
+            <span>{{ bill.payment_method or "Cash" }}</span>
+            <span class="receipt__status">{{ bill.payment_status or "Pending" }}</span>
+        </div>
+        {% else %}
+        <div class="receipt__grand">
+            <span>Total</span><span>₹{{ "%.2f"|format(order.total_amount) }}</span>
+        </div>
+        <div class="receipt__pay">
+            <span>Not billed yet</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <footer class="receipt__foot">
+        <p>Thank you, and see you again.</p>
+        {% if not bill %}
+        <p class="receipt__note">
+            This is an order summary. A tax invoice is issued once the bill
+            is raised on the Billing page.
+        </p>
+        {% endif %}
+    </footer>
+
+</div>
+
+<script>
+// Straight to the print dialog - this page is opened to print something.
+// The toolbar stays for a second copy, or to reach the kitchen ticket.
+window.addEventListener("load", function () {
+    window.print();
+});
+</script>
+
+</body>
+</html>
