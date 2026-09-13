@@ -3673,8 +3673,14 @@ def _verify_razorpay_signature(order_id, payment_id, signature):
     return hmac.compare_digest(expected, signature or "")
 
 
-def _mark_gateway_payment_paid(bill_id, order_id, payment_id, signature=None):
-    """Mark a bill paid only after a verified gateway event."""
+def _record_gateway_payment(bill_id, order_id, payment_id, signature=None):
+    """
+    Record a verified gateway payment against a bill.
+
+    Deliberately does not mark the bill Paid. Settling a bill is a person
+    pressing Paid on the Billing page - the gateway only leaves the evidence
+    that money arrived, so the counter can see it and confirm.
+    """
     connection = None
     cursor = None
     try:
@@ -3695,10 +3701,14 @@ def _mark_gateway_payment_paid(bill_id, order_id, payment_id, signature=None):
         if bill["gateway_order_id"] != order_id:
             return False, "Gateway order does not match this bill."
 
+        # The gateway records what it received; it does not settle the bill.
+        # Marking a bill Paid is a person pressing Paid on the Billing page,
+        # so nothing on the till changes status without someone deciding it
+        # has. The reference is stored either way, so the counter can see an
+        # online payment arrived and confirm it.
         cursor.execute("""
             UPDATE bills
             SET payment_method = 'Online',
-                payment_status = 'Paid',
                 gateway_payment_id = %s,
                 payment_reference = %s,
                 gateway_signature = COALESCE(%s, gateway_signature)
@@ -3707,7 +3717,7 @@ def _mark_gateway_payment_paid(bill_id, order_id, payment_id, signature=None):
         """, (payment_id, payment_id, signature, bill_id, order_id))
 
         connection.commit()
-        return True, "Payment verified successfully."
+        return True, "Payment received. Press Paid on the bill to settle it."
     finally:
         if cursor:
             cursor.close()
@@ -3815,7 +3825,7 @@ def verify_online_payment():
             flash("Payment verification failed. The bill was not marked Paid.")
             return redirect(url_for("billing"))
 
-        ok, message = _mark_gateway_payment_paid(
+        ok, message = _record_gateway_payment(
             int(bill_id), order_id, payment_id, signature
         )
         flash(message if ok else f"Payment verification failed: {message}")
@@ -3882,10 +3892,11 @@ def razorpay_webhook():
         if amount is not None and int(amount) != expected_amount:
             return "Payment amount does not match bill.", 400
 
+        # Same rule as the verify path: the webhook records the payment, it
+        # does not mark the bill Paid. Only the Paid button does.
         cursor.execute("""
             UPDATE bills
             SET payment_method = 'Online',
-                payment_status = 'Paid',
                 gateway_payment_id = %s,
                 payment_reference = %s
             WHERE bill_id = %s

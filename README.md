@@ -74,6 +74,7 @@ tests/stock_alert_test.py Dashboard stock-alert test suite
 tests/print_test.py  Printable bill and kitchen ticket test suite
 tests/staff_access_test.py Non-admin permission test suite
 tests/auto_print_test.py Automatic-printing settings test suite
+tests/billing_paid_test.py Bill settlement test suite
 tests/auto_print_browser_test.py Real-browser automatic-printing suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
@@ -97,6 +98,7 @@ python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 29   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 25   FAILED: 0
+python tests/billing_paid_test.py # expect PASSED: 18   FAILED: 0
 python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
@@ -104,7 +106,7 @@ python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
 python tests/mobile_nav_test.py   # expect PASSED: 31   FAILED: 0
 ```
 
-All seventeen run in memory against a SQLite stand-in — no database or
+All eighteen run in memory against a SQLite stand-in — no database or
 network needed. The seven suites that drive a browser use a headless Edge
 or Chrome when one is installed, and skip themselves when none is.
 
@@ -211,6 +213,12 @@ not, and that nothing prints while a switch is off.
 Note that a browser always shows its print dialog. To print silently, start
 Chrome or Edge with `--kiosk-printing` and set the till's receipt printer as
 the default.
+
+`billing_paid_test.py` pins down what settles a bill: only the Paid button.
+Choosing UPI or Card records how a bill will be paid, not that it has been,
+and a verified gateway payment leaves its reference against the bill while
+still waiting for someone to press Paid. It also checks the billing history
+lists every day until a period is asked for.
 
 ## Security notes
 
