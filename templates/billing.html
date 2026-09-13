@@ -386,6 +386,11 @@
         </form>
     </div>
 
+    {# Summary figures are a manager's view of the day, not something a
+       cashier needs in front of them while taking payment - and the revenue
+       card was already admin-only, so the row was half-empty for everyone
+       else anyway. #}
+    {% if session.get('role') == 'admin' %}
     <!-- SUMMARY -->
     <div class="stats-grid">
 
@@ -432,6 +437,7 @@
         {% endif %}
 
     </div>
+    {% endif %}
 
     <!-- ALL BILLS -->
     <div class="panel billing-table-panel">

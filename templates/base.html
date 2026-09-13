@@ -51,12 +51,10 @@
                 </a>
                 {% endif %}
 
-                {% if current_user and current_user.role == 'admin' %}
                 <a href="{{ url_for('categories') }}"
                    class="nav-link {{ 'active' if request.endpoint in ['categories', 'add_category', 'edit_category'] else '' }}">
                     <i class="bi bi-tags"></i><span>Categories</span>
                 </a>
-                {% endif %}
 
                 <a href="{{ url_for('foods') }}"
                    class="nav-link {{ 'active' if request.endpoint in ['foods', 'add_food', 'edit_food'] else '' }}">
@@ -451,52 +449,77 @@ window.CafeShell = {
                 });
         }
 
-        function loadOrderStatus() {
-            body.innerHTML = '<div class="order-status-loading">Loading orders…</div>';
+        // The badge poll below already asks for this exact feed every few
+        // seconds and used to throw the orders away, keeping only the count.
+        // Holding on to the last response means opening the popup paints
+        // from what is already in hand instead of showing a spinner and
+        // waiting for a round trip.
+        let lastFeed = null;
+        let tick = 0;
 
-            fetch("{{ url_for('order_status_feed') }}", { credentials: "same-origin" })
+        function renderOrderStatus(data) {
+            const orders = data.orders || [];
+
+            if (badge) {
+                badge.textContent = data.pending_count ? data.pending_count : "";
+            }
+
+            if (!orders.length) {
+                body.innerHTML = '<div class="order-status-empty">No orders yet.</div>';
+                return;
+            }
+
+            body.innerHTML = orders.map(function (order) {
+                const isPending = order.order_status === "Pending";
+                const statusTag = isPending
+                    ? '<button type="button" class="order-status-badge ' + badgeClass(order.order_status) + '" ' +
+                      'data-order-id="' + order.order_id + '" title="Click to mark this order as done">' +
+                          escapeHtml(order.order_status) +
+                      '</button>'
+                    : '<span class="order-status-badge ' + badgeClass(order.order_status) + '">' + escapeHtml(order.order_status) + '</span>';
+
+                return (
+                    '<div class="order-status-item">' +
+                        '<div>' +
+                            '<div class="order-status-item__id">Order #' + order.order_id + '</div>' +
+                            '<div class="order-status-item__meta">' + escapeHtml(order.order_date) + ' · ₹' + escapeHtml(order.total_amount) + '</div>' +
+                        '</div>' +
+                        statusTag +
+                    '</div>'
+                );
+            }).join("");
+
+            body.querySelectorAll("button.order-status-badge--pending").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    completeOrder(btn.getAttribute("data-order-id"), btn);
+                });
+            });
+        }
+
+        function fetchOrderStatus() {
+            return fetch("{{ url_for('order_status_feed') }}", { credentials: "same-origin" })
                 .then(function (response) { return response.json(); })
                 .then(function (data) {
-                    const orders = data.orders || [];
-
-                    if (badge) {
+                    lastFeed = data;
+                    if (overlay.classList.contains("open")) renderOrderStatus(data);
+                    else if (badge) {
                         badge.textContent = data.pending_count ? data.pending_count : "";
                     }
-
-                    if (!orders.length) {
-                        body.innerHTML = '<div class="order-status-empty">No orders yet.</div>';
-                        return;
-                    }
-
-                    body.innerHTML = orders.map(function (order) {
-                        const isPending = order.order_status === "Pending";
-                        const statusTag = isPending
-                            ? '<button type="button" class="order-status-badge ' + badgeClass(order.order_status) + '" ' +
-                              'data-order-id="' + order.order_id + '" title="Click to mark this order as done">' +
-                                  escapeHtml(order.order_status) +
-                              '</button>'
-                            : '<span class="order-status-badge ' + badgeClass(order.order_status) + '">' + escapeHtml(order.order_status) + '</span>';
-
-                        return (
-                            '<div class="order-status-item">' +
-                                '<div>' +
-                                    '<div class="order-status-item__id">Order #' + order.order_id + '</div>' +
-                                    '<div class="order-status-item__meta">' + escapeHtml(order.order_date) + ' · ₹' + escapeHtml(order.total_amount) + '</div>' +
-                                '</div>' +
-                                statusTag +
-                            '</div>'
-                        );
-                    }).join("");
-
-                    body.querySelectorAll("button.order-status-badge--pending").forEach(function (btn) {
-                        btn.addEventListener("click", function () {
-                            completeOrder(btn.getAttribute("data-order-id"), btn);
-                        });
-                    });
-                })
-                .catch(function () {
-                    body.innerHTML = '<div class="order-status-empty">Could not load orders right now.</div>';
+                    return data;
                 });
+        }
+
+        function loadOrderStatus() {
+            // Something on screen straight away: the last feed if there is
+            // one, the spinner only on a genuinely cold open.
+            if (lastFeed) renderOrderStatus(lastFeed);
+            else body.innerHTML = '<div class="order-status-loading">Loading orders…</div>';
+
+            fetchOrderStatus().catch(function () {
+                if (!lastFeed) {
+                    body.innerHTML = '<div class="order-status-empty">Could not load orders right now.</div>';
+                }
+            });
         }
 
         function pollBadge() {
@@ -505,14 +528,9 @@ window.CafeShell = {
             // queries every 30 seconds per open tab.
             if (document.hidden) return;
 
-            fetch("{{ url_for('order_status_feed') }}", { credentials: "same-origin" })
-                .then(function (response) { return response.json(); })
-                .then(function (data) {
-                    if (badge) {
-                        badge.textContent = data.pending_count ? data.pending_count : "";
-                    }
-                })
-                .catch(function () {});
+            // One fetch serves both: it refreshes the count, and it leaves
+            // the orders behind for the popup to open from.
+            fetchOrderStatus().catch(function () {});
         }
 
         fab.addEventListener("click", function () {
@@ -538,7 +556,12 @@ window.CafeShell = {
         // Show a live pending-orders count on the button right away,
         // then keep it fresh every 30 seconds without opening the popup.
         pollBadge();
-        setInterval(pollBadge, 30000);
+
+        // Slow while it is just a badge; brisk while someone has the list
+        // open and is watching for an order to come up.
+        setInterval(function () {
+            if (overlay.classList.contains("open") || tick++ % 6 === 0) pollBadge();
+        }, 5000);
 
         // Coming back to the tab should not wait out the rest of the interval.
         document.addEventListener("visibilitychange", function () {

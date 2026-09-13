@@ -72,6 +72,7 @@ tests/settings_test.py Tax-rate and profile-photo test suite
 tests/tablet_layout_test.py Real-browser tablet layout test suite
 tests/stock_alert_test.py Dashboard stock-alert test suite
 tests/print_test.py  Printable bill and kitchen ticket test suite
+tests/staff_access_test.py Non-admin permission test suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
@@ -92,13 +93,14 @@ python tests/settings_test.py     # expect PASSED: 39   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 33   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
+python tests/staff_access_test.py # expect PASSED: 25   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
 python tests/mobile_nav_test.py   # expect PASSED: 31   FAILED: 0
 ```
 
-All fourteen run in memory against a SQLite stand-in — no database or
+All fifteen run in memory against a SQLite stand-in — no database or
 network needed. The six suites that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
@@ -185,6 +187,12 @@ bill record so a receipt reprinted after a tax-rate change still shows what
 was actually charged. The kitchen ticket carries the order number, the
 dishes and how many — and the test asserts no price reaches it. Both are
 open to staff, and both stop at the café boundary.
+
+`staff_access_test.py` pins down what a non-admin can reach. Staff run the
+counter — orders, the menu, categories, stock and taking payment — and get
+neither the dashboard, the reports, user management, nor the manager's
+summary figures on Billing. It checks the sidebar and the server guard
+agree, because a link that is hidden but still served is a hole.
 
 ## Security notes
 

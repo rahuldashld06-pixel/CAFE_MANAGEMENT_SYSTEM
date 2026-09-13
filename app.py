@@ -1309,6 +1309,8 @@ STAFF_ALLOWED_ENDPOINTS = {
     "print_bill", "print_kot",
     "orders", "cancel_order", "complete_order", "delete_order",
     "foods", "add_food", "edit_food", "delete_food",
+    # Categories sit alongside food management, which staff already run.
+    "categories", "add_category", "edit_category", "delete_category",
     "inventory", "update_stock",
     "billing", "mark_bill_paid", "start_online_payment",
     "verify_online_payment", "edit_bill",
