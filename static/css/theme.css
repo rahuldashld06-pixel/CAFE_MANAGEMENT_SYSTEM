@@ -1,0 +1,64 @@
+/* ==========================================================
+   Cafe Manager — accent themes
+
+   A theme moves the accent colour only. The espresso surfaces
+   are the café's identity and stay put; what changes is the
+   colour the buttons, the active nav item, the focus rings and
+   the stat icons are painted in.
+
+   Every block carries two selectors on purpose:
+
+     .theme-ocean          paints a swatch in the picker
+     :root[data-theme=…]   paints the whole app
+
+   so the swatch an admin chooses from is the same palette they
+   get, with no second copy of the hexes to drift out of step.
+   ========================================================== */
+
+.theme-copper,
+:root[data-theme="copper"] {
+    --copper: #E08A3E;
+    --copper-light: #F0A85F;
+    --copper-dark: #B96A28;
+    --copper-rgb: 224, 138, 62;
+}
+
+.theme-sage,
+:root[data-theme="sage"] {
+    --copper: #6FB07E;
+    --copper-light: #8FC99B;
+    --copper-dark: #4A7C58;
+    --copper-rgb: 111, 176, 126;
+}
+
+.theme-ocean,
+:root[data-theme="ocean"] {
+    --copper: #4A9BD8;
+    --copper-light: #6FB4E6;
+    --copper-dark: #2E74A8;
+    --copper-rgb: 74, 155, 216;
+}
+
+.theme-berry,
+:root[data-theme="berry"] {
+    --copper: #E0645A;
+    --copper-light: #F0857C;
+    --copper-dark: #B03F36;
+    --copper-rgb: 224, 100, 90;
+}
+
+.theme-violet,
+:root[data-theme="violet"] {
+    --copper: #A07BD8;
+    --copper-light: #B99AE8;
+    --copper-dark: #7A54AC;
+    --copper-rgb: 160, 123, 216;
+}
+
+.theme-gold,
+:root[data-theme="gold"] {
+    --copper: #E5B53C;
+    --copper-light: #F2C95C;
+    --copper-dark: #B88A22;
+    --copper-rgb: 229, 181, 60;
+}

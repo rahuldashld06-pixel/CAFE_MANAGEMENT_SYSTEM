@@ -21,6 +21,10 @@
     --copper: #E08A3E;
     --copper-light: #F0A85F;
     --copper-dark: #B96A28;
+    /* The same accent as three numbers, for the rgba() tints below.
+       A theme has to be able to move these too, and rgba() cannot take
+       a hex variable - so the channels are their own token. */
+    --copper-rgb: 224, 138, 62;
 
     --gold: #F2C94C;
 
@@ -38,7 +42,7 @@
     --radius-pill: 999px;
 
     --shadow-soft: 0 10px 30px -12px rgba(15, 8, 4, 0.55);
-    --shadow-lift: 0 16px 40px -14px rgba(224, 138, 62, 0.35);
+    --shadow-lift: 0 16px 40px -14px rgba(var(--copper-rgb), 0.35);
 
     --font-display: "Fraunces", "Georgia", serif;
     --font-body: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -144,7 +148,7 @@ textarea:focus-visible {
     height: 220px;
     top: -80px;
     left: -80px;
-    background: radial-gradient(circle, rgba(224, 138, 62, 0.22) 0%, rgba(224, 138, 62, 0) 70%);
+    background: radial-gradient(circle, rgba(var(--copper-rgb), 0.22) 0%, rgba(var(--copper-rgb), 0) 70%);
 }
 .sidebar::after {
     width: 260px;
@@ -361,7 +365,7 @@ textarea:focus-visible {
     background: linear-gradient(145deg, var(--copper) 0%, var(--copper-dark) 100%);
     color: var(--espresso-950);
     font-size: 20px;
-    box-shadow: 0 6px 16px -6px rgba(224, 138, 62, 0.6);
+    box-shadow: 0 6px 16px -6px rgba(var(--copper-rgb), 0.6);
     flex-shrink: 0;
 }
 
@@ -417,7 +421,7 @@ textarea:focus-visible {
 .nav-link:hover i { color: var(--copper-light); }
 
 .nav-link.active {
-    background: linear-gradient(90deg, rgba(224, 138, 62, 0.22) 0%, rgba(224, 138, 62, 0.05) 100%);
+    background: linear-gradient(90deg, rgba(var(--copper-rgb), 0.22) 0%, rgba(var(--copper-rgb), 0.05) 100%);
     color: var(--cream);
     box-shadow: inset 3px 0 0 var(--copper);
 }
@@ -528,12 +532,12 @@ textarea:focus-visible {
     border-radius: var(--radius-md);
     font-size: 19px;
     flex-shrink: 0;
-    background: rgba(224, 138, 62, 0.16);
+    background: rgba(var(--copper-rgb), 0.16);
     color: var(--copper-light);
 }
 .stat-card__icon--categories { background: rgba(242, 201, 76, 0.16); color: var(--gold); }
 .stat-card__icon--orders { background: rgba(143, 187, 153, 0.16); color: var(--sage); }
-.stat-card__icon--today { background: rgba(224, 138, 62, 0.16); color: var(--copper-light); }
+.stat-card__icon--today { background: rgba(var(--copper-rgb), 0.16); color: var(--copper-light); }
 .stat-card__icon--sales { background: rgba(143, 187, 153, 0.16); color: var(--sage); }
 .stat-card__icon--warning { background: rgba(225, 97, 79, 0.18); color: var(--berry); }
 
@@ -605,7 +609,7 @@ textarea:focus-visible {
 .btn--primary {
     background: linear-gradient(135deg, var(--copper-light) 0%, var(--copper-dark) 100%);
     color: var(--espresso-950);
-    box-shadow: 0 8px 20px -8px rgba(224, 138, 62, 0.55);
+    box-shadow: 0 8px 20px -8px rgba(var(--copper-rgb), 0.55);
 }
 .btn--primary:hover { transform: translateY(-2px); }
 
@@ -847,7 +851,7 @@ textarea:focus-visible {
 .form-card textarea:focus {
     outline: none;
     border-color: var(--copper);
-    box-shadow: 0 0 0 3px rgba(224, 138, 62, 0.22);
+    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), 0.22);
 }
 
 .form-card textarea {
@@ -975,7 +979,7 @@ textarea:focus-visible {
 .filter-form input[type="date"]:focus {
     outline: none;
     border-color: var(--copper);
-    box-shadow: 0 0 0 3px rgba(224, 138, 62, 0.22);
+    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), 0.22);
 }
 
 .filter-form .filter-actions {
@@ -1824,7 +1828,7 @@ body.nav-locked {
 .form-panel textarea:focus {
     outline: none;
     border-color: var(--copper);
-    box-shadow: 0 0 0 3px rgba(224, 138, 62, .22);
+    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .22);
 }
 
 /* The file button is a separate control inside the field. */
@@ -2404,4 +2408,80 @@ body.nav-locked {
     border: 1px solid var(--espresso-700);
     font-size: 12px;
     color: var(--copper-light);
+}
+
+/* ---------- Theme picker (Profile -> Theme Colour) ---------- */
+.theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.theme-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-md);
+    background: var(--espresso-850);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.theme-option:hover { background: var(--espresso-800); }
+
+/* The radio itself is off-screen rather than display:none - a hidden input
+   cannot be focused, and the keyboard has to be able to reach these. */
+.theme-option input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.theme-option.is-chosen {
+    border-color: var(--copper);
+    background: rgba(var(--copper-rgb), .10);
+}
+
+.theme-option:focus-within {
+    border-color: var(--copper-light);
+    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .22);
+}
+
+/* Painted by .theme-copper / .theme-ocean / ... from theme.css, so the
+   swatch is the palette rather than a copy of it. */
+.theme-option__swatch {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(135deg, var(--copper-light) 0%, var(--copper-dark) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--espresso-950);
+    font-size: 1.05rem;
+}
+
+.theme-option__swatch i { opacity: 0; transition: opacity .15s ease; }
+.theme-option.is-chosen .theme-option__swatch i { opacity: 1; }
+
+.theme-option__text { display: flex; flex-direction: column; min-width: 0; }
+
+.theme-option__name {
+    font-weight: 700;
+    color: var(--cream);
+}
+
+.theme-option__hint {
+    font-size: .78rem;
+    color: var(--cream-faint);
+    line-height: 1.35;
+}
+
+@media (max-width: 520px) {
+    .theme-grid { grid-template-columns: 1fr; }
 }

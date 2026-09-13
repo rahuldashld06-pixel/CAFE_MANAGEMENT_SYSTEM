@@ -104,6 +104,9 @@ python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
 python tests/mobile_nav_test.py   # expect PASSED: 31   FAILED: 0
+python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
+python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
+python tests/food_number_test.py  # expect PASSED: 25   FAILED: 0
 ```
 
 All eighteen run in memory against a SQLite stand-in — no database or

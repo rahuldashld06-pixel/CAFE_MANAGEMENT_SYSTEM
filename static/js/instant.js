@@ -274,6 +274,16 @@
         return decoder.value.trim();
     }
 
+    // The accent colour is an attribute on <html>, which sits outside the
+    // swapped region. Without this, an admin changing the theme would leave
+    // everyone else's open session on the old colour until a full reload.
+    function themeOf(html) {
+        var tag = /<html[^>]*>/i.exec(html);
+        if (!tag) return null;
+        var match = /data-theme=["']([a-z0-9_-]+)["']/i.exec(tag[0]);
+        return match ? match[1] : null;
+    }
+
     function swap(html, url) {
         var viewHtml = between(html, VIEW_START, VIEW_END);
         var live = currentView();
@@ -290,6 +300,9 @@
 
         var title = titleOf(html);
         if (title) document.title = title;
+
+        var theme = themeOf(html);
+        if (theme) document.documentElement.setAttribute("data-theme", theme);
 
         // On the first, fully parsed load an early-closed #page-view leaves
         // the rest of that page as siblings. Clear them, or they would sit

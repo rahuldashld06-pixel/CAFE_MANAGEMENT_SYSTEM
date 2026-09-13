@@ -620,6 +620,7 @@ _CORE_TABLES = [
             login_photo_blob MEDIUMBLOB NULL,
             branding_version INT NOT NULL DEFAULT 1,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+            theme VARCHAR(20) NOT NULL DEFAULT 'copper',
             auto_kot_enabled TINYINT(1) NOT NULL DEFAULT 0,
             auto_kot_delay INT NOT NULL DEFAULT 5,
             auto_bill_enabled TINYINT(1) NOT NULL DEFAULT 0,
@@ -659,6 +660,12 @@ _CORE_TABLES = [
     ("foods", """
         CREATE TABLE IF NOT EXISTS foods (
             food_id INT AUTO_INCREMENT PRIMARY KEY,
+            -- The number shown on the Food Management list. Counts from
+            -- 1 within each cafe and is handed back out when a food is
+            -- deleted, so the list never grows holes. Deliberately not
+            -- the primary key: order history points at food_id, and a
+            -- reused primary key would silently re-label old bills.
+            food_no INT NULL,
             category_id INT NULL,
             food_name VARCHAR(150) NOT NULL,
             description TEXT NULL,
@@ -710,6 +717,11 @@ _CORE_TABLES = [
             order_item_id INT AUTO_INCREMENT PRIMARY KEY,
             order_id INT NOT NULL,
             food_id INT NULL,
+            -- What the item was called when it was sold. An order line
+            -- has to keep reading correctly after the food is removed
+            -- from the menu, and the price beside it is already a
+            -- snapshot for the same reason.
+            item_name VARCHAR(150) NULL,
             quantity INT NOT NULL DEFAULT 1,
             price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -773,8 +785,14 @@ _COLUMN_MIGRATIONS = [
     ("foods", "image_mime", "VARCHAR(80) NULL"),
     ("foods", "image_blob", "MEDIUMBLOB NULL"),
     ("foods", "image_version", "INT NOT NULL DEFAULT 1"),
+    # Menu numbering. Backfilled from food_id order on first boot by
+    # _backfill_food_numbers below.
+    ("foods", "food_no", "INT NULL"),
     ("orders", "user_id", "INT NULL"),
     ("orders", "cafe_id", "INT NULL"),
+    # The item's name as sold, so a deleted food does not blank out the
+    # lines of every bill it ever appeared on.
+    ("order_items", "item_name", "VARCHAR(150) NULL"),
     ("cafes", "logo_mime", "VARCHAR(80) NULL"),
     ("cafes", "logo_blob", "MEDIUMBLOB NULL"),
     ("cafes", "login_photo_mime", "VARCHAR(80) NULL"),
@@ -783,6 +801,9 @@ _COLUMN_MIGRATIONS = [
     # Per-café tax rate. 5.00 is what every bill was hard-coded to before
     # this was configurable, so existing cafés keep their current totals.
     ("cafes", "tax_percent", "DECIMAL(5,2) NOT NULL DEFAULT 5.00"),
+    # The accent colour. 'copper' is the look every café had before this
+    # was a choice, so nothing changes appearance on upgrade.
+    ("cafes", "theme", "VARCHAR(20) NOT NULL DEFAULT 'copper'"),
     # Automatic printing. Off by default: a café that has not asked for it
     # should never have a print dialog appear on its own.
     ("cafes", "auto_kot_enabled", "TINYINT(1) NOT NULL DEFAULT 0"),
@@ -1058,6 +1079,8 @@ def ensure_auth_schema():
 
         _adopt_legacy_single_cafe_data(cursor)
         _backfill_cafe_ids(cursor)
+        _backfill_food_numbers(cursor)
+        _backfill_order_item_names(cursor)
 
         connection.commit()
         AUTH_SCHEMA_READY = True
@@ -1067,6 +1090,104 @@ def ensure_auth_schema():
     finally:
         cursor.close()
         connection.close()
+
+
+def next_food_no(cursor, owner_id):
+    """
+    The lowest menu number this cafe is not already using.
+
+    Delete food number 3 and the next one added takes 3 back, so the list
+    stays 1..N with no gaps. The cafe's menu is a short list, so walking it
+    is cheaper than anything clever.
+    """
+    cursor.execute(
+        "SELECT food_no FROM foods "
+        "WHERE user_id = %s AND food_no IS NOT NULL",
+        (owner_id,)
+    )
+    taken = set()
+    for row in cursor.fetchall():
+        value = row["food_no"] if isinstance(row, dict) else row[0]
+        if value:
+            taken.add(int(value))
+
+    candidate = 1
+    while candidate in taken:
+        candidate += 1
+    return candidate
+
+
+def _backfill_order_item_names(cursor):
+    """
+    Name the order lines that were written before names were recorded.
+
+    Anything whose food still exists can be named from the menu. A line
+    whose food was already deleted cannot be recovered - that name is gone -
+    and it reads as "Removed item" from here on.
+    """
+    cursor.execute("""
+        UPDATE order_items
+        SET item_name = (
+            SELECT f.food_name FROM foods f
+            WHERE f.food_id = order_items.food_id
+        )
+        WHERE item_name IS NULL
+          AND food_id IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM foods f WHERE f.food_id = order_items.food_id
+          )
+    """)
+
+
+def _backfill_food_numbers(cursor):
+    """
+    Give menu numbers to food that predates them.
+
+    Runs once: after the first pass there is nothing left with a NULL
+    number, so this costs one cheap SELECT on every later boot. Numbers are
+    handed out in food_id order, so an existing menu keeps the order the
+    owner already knows.
+    """
+    cursor.execute(
+        "SELECT food_id, user_id FROM foods "
+        "WHERE food_no IS NULL ORDER BY user_id, food_id"
+    )
+    pending = cursor.fetchall()
+    if not pending:
+        return
+
+    def field(row, name, index):
+        return row[name] if isinstance(row, dict) else row[index]
+
+    owners = sorted({field(row, "user_id", 1) for row in pending},
+                    key=lambda value: (value is None, value))
+
+    # What each owner is already using, so a half-finished backfill - or a
+    # menu that gained numbered food in between - is not handed a duplicate.
+    used = {}
+    for owner in owners:
+        if owner is None:
+            cursor.execute("SELECT food_no FROM foods "
+                           "WHERE user_id IS NULL AND food_no IS NOT NULL")
+        else:
+            cursor.execute("SELECT food_no FROM foods "
+                           "WHERE user_id = %s AND food_no IS NOT NULL",
+                           (owner,))
+        used[owner] = {int(field(row, "food_no", 0))
+                       for row in cursor.fetchall()
+                       if field(row, "food_no", 0)}
+
+    nxt = {owner: 1 for owner in owners}
+    for row in pending:
+        owner = field(row, "user_id", 1)
+        number = nxt[owner]
+        while number in used[owner]:
+            number += 1
+        used[owner].add(number)
+        nxt[owner] = number + 1
+
+        cursor.execute("UPDATE foods SET food_no = %s WHERE food_id = %s",
+                       (number, field(row, "food_id", 0)))
 
 
 def _adopt_legacy_single_cafe_data(cursor):
@@ -1292,7 +1413,8 @@ def get_current_user():
             SELECT u.user_id, u.username, u.full_name, u.role, u.is_active,
                    (u.photo_blob IS NOT NULL) AS has_photo, u.photo_version,
                    c.owner_user_id, c.is_active AS cafe_active,
-                   c.auto_kot_enabled, c.auto_kot_delay, c.auto_bill_enabled
+                   c.auto_kot_enabled, c.auto_kot_delay, c.auto_bill_enabled,
+                   c.theme
             FROM users u
             LEFT JOIN cafes c ON c.cafe_id = u.cafe_id
             WHERE u.user_id = %s AND u.cafe_id = %s
@@ -1304,7 +1426,8 @@ def get_current_user():
         if connection:
             connection.close()
 
-    PRINTING_KEYS = ("auto_kot_enabled", "auto_kot_delay", "auto_bill_enabled")
+    PRINTING_KEYS = ("auto_kot_enabled", "auto_kot_delay",
+                     "auto_bill_enabled", "theme")
 
     user = None
     if row:
@@ -1320,6 +1443,9 @@ def get_current_user():
                 "kot_delay": int(row["auto_kot_delay"] or 0),
                 "auto_bill": bool(row["auto_bill_enabled"]),
             }
+            # Same idea for the accent colour: every page is painted in
+            # it, so it must not cost a query of its own.
+            g.cafe_theme = normalize_theme(row["theme"])
 
         # Only cache a settled answer. A missing owner still has to go
         # through get_cafe_owner_id(), which adopts the oldest admin and
@@ -1364,6 +1490,74 @@ STAFF_ALLOWED_ENDPOINTS = {
     # Whoever is on the till is the one who notices the tickets are wrong.
     "print_settings",
 }
+
+
+# The accent colours an admin can choose between. The hexes are not here on
+# purpose: they live once in static/css/theme.css, where the same block
+# paints both the picker's swatch and the app itself, so a swatch can never
+# show a colour the theme does not actually use.
+THEMES = [
+    ("copper", "Copper", "The original. Warm and roasted."),
+    ("sage", "Sage", "Soft green, easy on the eyes over a long shift."),
+    ("ocean", "Ocean", "Cool blue against the dark surfaces."),
+    ("berry", "Berry", "Deep red, high contrast."),
+    ("violet", "Violet", "Quieter than copper, still warm."),
+    ("gold", "Gold", "Bright brass, the boldest of the set."),
+]
+
+DEFAULT_THEME = "copper"
+THEME_IDS = {theme_id for theme_id, _, _ in THEMES}
+
+
+def normalize_theme(value):
+    """
+    A theme id we are willing to put in an HTML attribute.
+
+    Anything unrecognised falls back to the default rather than being
+    echoed into the page - the value reaches the template as
+    data-theme="...", so it is never allowed to be arbitrary text.
+    """
+    value = (value or "").strip().lower()
+    return value if value in THEME_IDS else DEFAULT_THEME
+
+
+def get_cafe_theme():
+    """
+    The café's accent colour.
+
+    Café-wide, not per person: it is the same room, and the admin who sets
+    it is setting how the café's screens look. get_current_user() already
+    reads it off the café row it joins, so this is normally just a lookup.
+    """
+    if has_request_context() and "cafe_theme" in g:
+        return g.cafe_theme
+
+    cafe_id = session.get("cafe_id")
+    if not cafe_id:
+        return DEFAULT_THEME
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("SELECT theme FROM cafes WHERE cafe_id = %s", (cafe_id,))
+        row = cursor.fetchone()
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+    theme = normalize_theme(row["theme"] if row else None)
+    if has_request_context():
+        g.cafe_theme = theme
+    return theme
+
+
+@app.context_processor
+def inject_theme():
+    return {"cafe_theme": get_cafe_theme(), "themes": THEMES}
 
 
 DEFAULT_PRINT_SETTINGS = {"auto_kot": False, "kot_delay": 5, "auto_bill": False}
@@ -1826,6 +2020,7 @@ def foods():
         cursor.execute("""
             SELECT
                 f.food_id,
+                COALESCE(f.food_no, f.food_id) AS food_no,
                 f.food_name,
                 f.description,
                 f.price,
@@ -1848,7 +2043,10 @@ def foods():
 
             WHERE f.user_id = %s
 
-            ORDER BY f.food_id DESC
+            -- By menu number, not newest first. The number is the column
+            -- the owner reads down, and a refilled gap would otherwise put
+            -- food 3 above food 5.
+            ORDER BY COALESCE(f.food_no, f.food_id) ASC
         """, (scope_user_id(),))
 
         food_list = cursor.fetchall()
@@ -1928,10 +2126,16 @@ def add_food():
             availability = 1 if quantity > 0 else 0
 
 
+            # The menu number shown on the Food Management list. Taken
+            # inside this transaction so it reflects anything deleted a
+            # moment ago, and low enough to fill a gap left behind.
+            food_no = next_food_no(cursor, scope_user_id())
+
             # Insert food
             cursor.execute("""
                 INSERT INTO foods
                 (
+                    food_no,
                     category_id,
                     food_name,
                     description,
@@ -1941,8 +2145,9 @@ def add_food():
                     cafe_id
                 )
 
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (
+                food_no,
                 category_id,
                 food_name,
                 description,
@@ -2457,6 +2662,25 @@ def orders():
     )
 
 
+def format_order_time(value):
+    """
+    An order's time as "13 Sep, 07:45 PM", whatever shape it arrives in.
+
+    MySQL hands back a datetime here. Other drivers - including the SQLite
+    stand-in the offline tests run on - hand back the same instant as text,
+    and the popup used to crash on it rather than render. A feed that every
+    page polls should not be the one place that trusts the driver.
+    """
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return value
+    return value.strftime("%d %b, %I:%M %p")
+
+
 @app.route("/api/order-status")
 def order_status_feed():
     """Lightweight JSON feed of the most recent orders and their status,
@@ -2487,7 +2711,7 @@ def order_status_feed():
         for row in rows:
             orders_out.append({
                 "order_id": row["order_id"],
-                "order_date": row["order_date"].strftime("%d %b, %I:%M %p") if row["order_date"] else "",
+                "order_date": format_order_time(row["order_date"]),
                 "total_amount": f'{row["total_amount"]:.2f}',
                 "order_status": row["order_status"] or "Pending",
             })
@@ -3027,6 +3251,7 @@ def add_order():
                 (
                     order_id,
                     food_id,
+                    item_name,
                     quantity,
                     price,
                     subtotal
@@ -3038,11 +3263,13 @@ def add_order():
                     %s,
                     %s,
                     %s,
+                    %s,
                     %s
                 )
             """, (
                 order_id,
                 item["food_id"],
+                item["food_name"],
                 item["quantity"],
                 item["price"],
                 item["subtotal"]
@@ -3212,9 +3439,11 @@ def load_order_for_print(cursor, order_id):
         return None
 
     cursor.execute("""
-        SELECT oi.quantity, oi.price, oi.subtotal, f.food_name
+        SELECT oi.quantity, oi.price, oi.subtotal,
+               COALESCE(oi.item_name, f.food_name, 'Removed item')
+                   AS food_name
         FROM order_items oi
-        INNER JOIN foods f ON oi.food_id = f.food_id
+        LEFT JOIN foods f ON oi.food_id = f.food_id
         WHERE oi.order_id = %s
         ORDER BY oi.order_item_id
     """, (order_id,))
@@ -3351,11 +3580,12 @@ def order_details(order_id):
                 oi.quantity,
                 oi.price,
                 oi.subtotal,
-                f.food_name
+                COALESCE(oi.item_name, f.food_name, 'Removed item')
+                    AS food_name
 
             FROM order_items oi
 
-            INNER JOIN foods f
+            LEFT JOIN foods f
                 ON oi.food_id = f.food_id
 
             WHERE oi.order_id = %s
@@ -4121,9 +4351,10 @@ def billing():
                     oi.quantity,
                     oi.price,
                     oi.subtotal,
-                    f.food_name
+                    COALESCE(oi.item_name, f.food_name, 'Removed item')
+                        AS food_name
                 FROM order_items oi
-                INNER JOIN foods f
+                LEFT JOIN foods f
                     ON oi.food_id = f.food_id
                 WHERE oi.order_id IN ({placeholders})
                 ORDER BY oi.order_id DESC, oi.order_item_id ASC
@@ -4426,7 +4657,8 @@ def reports():
         cursor.execute("""
             SELECT
 
-                f.food_name,
+                COALESCE(oi.item_name, f.food_name, 'Removed item')
+                    AS food_name,
 
                 COALESCE(
                     SUM(oi.quantity),
@@ -4442,7 +4674,7 @@ def reports():
 
             FROM order_items oi
 
-            INNER JOIN foods f
+            LEFT JOIN foods f
                 ON oi.food_id = f.food_id
 
             INNER JOIN orders o
@@ -4464,9 +4696,12 @@ def reports():
 
                 (%s IS NULL OR DATE(o.order_date) <= %s)
 
+            -- Grouped on the order line's own food_id, not the menu row's.
+            -- After a deletion the menu row is gone and every removed food
+            -- would otherwise collapse into one anonymous heap.
             GROUP BY
-                f.food_id,
-                f.food_name
+                oi.food_id,
+                COALESCE(oi.item_name, f.food_name, 'Removed item')
 
             ORDER BY
                 quantity_sold DESC
@@ -5653,6 +5888,55 @@ def tax_settings():
             "tax_settings.html",
             tax_percent=get_tax_percent(cafe_id),
         )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/settings/theme", methods=["GET", "POST"])
+def theme_settings():
+    """
+    The café's accent colour.
+
+    Admin only, and café-wide. Everyone signed in to the same café works off
+    the same screens, so this is a decision about the room rather than a
+    personal preference - which is also why a cashier sees the admin's
+    choice rather than being able to pick their own.
+
+    Leave it alone and it stays Copper, which is how the app has always
+    looked.
+    """
+    denied = require_role("admin")
+    if denied:
+        return denied
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cafe_id = require_cafe_session()
+
+        if request.method == "POST":
+            chosen = (request.form.get("theme") or "").strip().lower()
+            if chosen not in THEME_IDS:
+                flash("Pick one of the colours shown.")
+                return redirect(url_for("theme_settings"))
+
+            cursor.execute(
+                "UPDATE cafes SET theme = %s WHERE cafe_id = %s",
+                (chosen, cafe_id)
+            )
+            connection.commit()
+            g.pop("cafe_theme", None)
+
+            label = dict((t[0], t[1]) for t in THEMES)[chosen]
+            flash("Theme saved. Your cafe is now %s." % label)
+            return redirect(url_for("theme_settings"))
+
+        return render_template("theme_settings.html")
     finally:
         if cursor:
             cursor.close()

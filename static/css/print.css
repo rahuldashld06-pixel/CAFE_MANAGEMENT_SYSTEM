@@ -58,13 +58,16 @@
 
 .print-toolbar__btn:hover { background: rgba(255, 255, 255, .16); }
 
+/* The café's accent, so the Print button matches the app the user
+   just came from. theme.css supplies the token; the copper after the
+   comma is the fallback if this sheet is ever loaded on its own. */
 .print-toolbar__btn--primary {
-    background: #e08a3e;
-    border-color: #e08a3e;
+    background: var(--copper, #e08a3e);
+    border-color: var(--copper, #e08a3e);
     color: #2a1a10;
 }
 
-.print-toolbar__btn--primary:hover { background: #f0a85f; }
+.print-toolbar__btn--primary:hover { background: var(--copper-light, #f0a85f); }
 
 /* ---------- The receipt itself ---------- */
 

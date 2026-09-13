@@ -58,6 +58,10 @@
                 <tbody>
                 {% for food in foods %}
                     <tr>
+                        {# The cafe's own menu number, which fills back
+                           in when a food is deleted. The row's links
+                           still use the real food_id. #}
+                        <td>{{ food.food_no }}</td>
                         <td>
                             {% if food.image_path %}
                                 <img src="{{ food.image_path }}" alt="{{ food.food_name }}" style="width:64px;height:48px;object-fit:cover;border-radius:7px;">
@@ -65,7 +69,6 @@
                                 <span class="badge"><i class="bi bi-image"></i> No Photo</span>
                             {% endif %}
                         </td>
-                        <td>{{ food.food_id }}</td>
                         <td class="cell-strong">{{ food.food_name }}</td>
                         <td>{{ food.category_name }}</td>
                         <td class="cell-muted">{{ food.description }}</td>

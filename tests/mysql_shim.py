@@ -187,8 +187,27 @@ class _Cursor:
                 self._i = 0
                 return
 
-            # Everything else (column existence, role enum type) already
-            # exists, because the CREATE TABLE statements define it.
+            # Column existence, answered from the database rather than
+            # assumed. It used to return a flat "yes", on the grounds that
+            # the CREATE TABLE statements define every column - true for a
+            # fresh database, false for the hand-built legacy schema in
+            # upgrade_test, where the ADD COLUMN migrations are the whole
+            # point of the test and were being skipped.
+            if "COLUMN_NAME" in up and "COLUMN_TYPE" not in up                     and len(params or ()) >= 2:
+                table, column = params[0], params[1]
+                raw = self._conn._raw
+                try:
+                    info = raw.execute(
+                        f'PRAGMA table_info("{table}")').fetchall()
+                except sqlite3.Error:
+                    info = []
+                found = 1 if any(entry[1] == column for entry in info) else 0
+                self._rows = ([{"n": found, "COUNT(*)": found}]
+                              if self.dictionary else [(found,)])
+                self._i = 0
+                return
+
+            # The role enum type, and anything else that gets this far.
             row = {"n": 1, "COUNT(*)": 1,
                    "col_type": "enum('admin','manager','cashier','staff')"}
             self._rows = [row] if self.dictionary else [(1,)]

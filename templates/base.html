@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ cafe_theme }}">
 
 <head>
     <meta charset="UTF-8">
@@ -22,6 +22,10 @@
               href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     </noscript>
 
+    {# The accent palette, ahead of the sheet that uses it. Its own file
+       because the print pages need the same colours without pulling in
+       the whole app stylesheet. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=asset_version) }}">
 
     {# Loaded here, not deferred: every page script below relies on
@@ -187,6 +191,12 @@
                            charges, so it is not a cashier's to move. #}
                         <a href="{{ url_for('tax_settings') }}" class="profile-dropdown__item">
                             <i class="bi bi-percent"></i><span>Tax Percentage</span>
+                        </a>
+
+                        {# Admin only, and it changes the colour for the whole
+                           cafe - so it is not a personal setting to hand out. #}
+                        <a href="{{ url_for('theme_settings') }}" class="profile-dropdown__item">
+                            <i class="bi bi-droplet-half"></i><span>Theme Colour</span>
                         </a>
                         {% endif %}
 

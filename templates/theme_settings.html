@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Theme Colour · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Customize</div>
+        <h1><i class="bi bi-droplet-half"></i> Theme Colour</h1>
+        <p>The accent colour used across your cafe's screens.</p>
+    </div>
+    <a href="{{ home_url }}" class="btn btn--ghost" data-back>
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="panel form-panel" style="max-width:760px;">
+
+    <form method="POST">
+
+        <div class="form-group">
+            <label>Pick a colour</label>
+
+            {# Each swatch is painted by the very same CSS block that paints
+               the app, so what is shown here is what gets applied. #}
+            <div class="theme-grid">
+                {% for theme_id, label, hint in themes %}
+                <label class="theme-option{% if theme_id == cafe_theme %} is-chosen{% endif %}">
+                    <input type="radio"
+                           name="theme"
+                           value="{{ theme_id }}"
+                           {% if theme_id == cafe_theme %}checked{% endif %}>
+
+                    <span class="theme-option__swatch theme-{{ theme_id }}">
+                        <i class="bi bi-check-lg"></i>
+                    </span>
+
+                    <span class="theme-option__text">
+                        <span class="theme-option__name">{{ label }}</span>
+                        <span class="theme-option__hint">{{ hint }}</span>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+
+            <small>
+                Copper is the default. Only the accent changes &mdash; buttons,
+                the active menu item and highlights. The dark background stays
+                the same.
+            </small>
+        </div>
+
+        <div class="note-card">
+            <i class="bi bi-info-circle"></i>
+            <div>
+                This is your whole cafe's colour, not just yours. Everyone
+                signed in here sees it the next time their screen loads.
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-check2"></i> Save theme
+            </button>
+            <a href="{{ home_url }}" class="btn btn--ghost" data-back>Cancel</a>
+        </div>
+
+    </form>
+
+</div>
+
+<script>
+    // Move the chosen ring as soon as a swatch is picked, so the choice is
+    // visible before the form is saved.
+    (function () {
+        var grid = document.querySelector(".theme-grid");
+        if (!grid) return;
+
+        grid.addEventListener("change", function (event) {
+            if (event.target.name !== "theme") return;
+            var options = grid.querySelectorAll(".theme-option");
+            for (var i = 0; i < options.length; i++) {
+                options[i].classList.toggle(
+                    "is-chosen", options[i].contains(event.target));
+            }
+        });
+    }());
+</script>
+
+{% endblock %}
