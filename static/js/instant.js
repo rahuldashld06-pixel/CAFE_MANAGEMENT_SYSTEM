@@ -32,7 +32,18 @@
     var VIEW_END = "<!--pv:end-->";
     var NAV_START = "<!--nav:start-->";
     var NAV_END = "<!--nav:end-->";
-    var FRESH_MS = 45000;          // a cached page younger than this is used as-is
+    // A cached page is always painted immediately. These say how long that
+    // copy is trusted before a fresh one is fetched underneath it.
+    //
+    // REVALIDATE_AFTER_MS is short on purpose: returning to Orders or the
+    // menu should show what is true now, not what was true the last time
+    // you looked. The cached copy still appears instantly - the refresh
+    // lands a round trip later and only redraws if something changed.
+    var REVALIDATE_AFTER_MS = 1500;
+
+    // How long a warmed page is left alone before the background warm-up
+    // bothers to fetch it again.
+    var FRESH_MS = 45000;
     var MAX_ENTRIES = 24;
     var PROGRESS_DELAY_MS = 120;   // don't flash a bar for near-instant loads
 
@@ -383,7 +394,7 @@
         var cached = cache.get(url);
         if (cached) {
             apply(cached.html, url, options);
-            if (Date.now() - cached.at > FRESH_MS) revalidate(url);
+            if (Date.now() - cached.at > REVALIDATE_AFTER_MS) revalidate(url);
             return;
         }
 

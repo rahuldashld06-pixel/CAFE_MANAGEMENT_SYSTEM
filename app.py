@@ -1253,18 +1253,36 @@ def get_current_user():
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
+        # The café's owner id is joined in rather than fetched separately.
+        # Both lookups ran on every single request, against the same café
+        # row - so that was a whole extra network round trip per page, on
+        # every page, for one integer.
         cursor.execute("""
-            SELECT user_id, username, full_name, role, is_active,
-                   (photo_blob IS NOT NULL) AS has_photo, photo_version
-            FROM users
-            WHERE user_id = %s AND cafe_id = %s
+            SELECT u.user_id, u.username, u.full_name, u.role, u.is_active,
+                   (u.photo_blob IS NOT NULL) AS has_photo, u.photo_version,
+                   c.owner_user_id, c.is_active AS cafe_active
+            FROM users u
+            LEFT JOIN cafes c ON c.cafe_id = u.cafe_id
+            WHERE u.user_id = %s AND u.cafe_id = %s
         """, (user_id, cafe_id))
-        user = cursor.fetchone()
+        row = cursor.fetchone()
     finally:
         if cursor:
             cursor.close()
         if connection:
             connection.close()
+
+    user = None
+    if row:
+        user = {key: row[key] for key in row
+                if key not in ("owner_user_id", "cafe_active")}
+
+        # Only cache a settled answer. A missing owner still has to go
+        # through get_cafe_owner_id(), which adopts the oldest admin and
+        # writes it back; an inactive café must keep resolving to None so
+        # the session is sent back to sign-in rather than carrying on.
+        if row["owner_user_id"] and row["cafe_active"] and has_request_context():
+            g.cafe_owner_id = row["owner_user_id"]
 
     if has_request_context():
         g.current_user_row = user
@@ -1426,48 +1444,14 @@ def home():
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
 
-        cursor.execute("SELECT COUNT(*) AS total FROM foods WHERE user_id = %s", (scope_user_id(),))
-        total_foods = cursor.fetchone()["total"]
-
-        cursor.execute("""
-            SELECT COUNT(DISTINCT category_id) AS total
-            FROM foods
-            WHERE user_id = %s
-        """, (scope_user_id(),))
-        total_categories = cursor.fetchone()["total"]
-
-        cursor.execute("SELECT COUNT(*) AS total FROM orders WHERE user_id = %s", (scope_user_id(),))
-        total_orders = cursor.fetchone()["total"]
-
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-            FROM inventory i
-            INNER JOIN foods f ON i.food_id = f.food_id
-            WHERE f.user_id = %s
-        """, (scope_user_id(),))
-        total_inventory = cursor.fetchone()["total"]
-
-        cursor.execute("""
-            SELECT COUNT(*) AS total FROM orders
-            WHERE DATE(order_date) = CURDATE()
-            AND user_id = %s
-            AND LOWER(COALESCE(order_status, '')) != 'cancelled'
-        """, (scope_user_id(),))
-        today_orders = cursor.fetchone()["total"]
-
-        # Revenue is admin-only data (same rule as the Billing page).
-        today_revenue = None
-        if session.get("role") == "admin":
-            cursor.execute("""
-                SELECT COALESCE(SUM(b.total_amount), 0) AS total
-                FROM bills b
-                INNER JOIN orders o ON b.order_id = o.order_id
-                WHERE DATE(b.bill_date) = CURDATE()
-                AND o.user_id = %s
-                AND LOWER(COALESCE(o.order_status, '')) != 'cancelled'
-                AND LOWER(COALESCE(b.payment_status, '')) = 'paid'
-            """, (scope_user_id(),))
-            today_revenue = cursor.fetchone()["total"]
+        counts = dashboard_counts(
+            cursor, scope_user_id(), session.get("role") == "admin")
+        total_foods = counts["total_foods"]
+        total_categories = counts["total_categories"]
+        total_orders = counts["total_orders"]
+        total_inventory = counts["total_inventory"]
+        today_orders = counts["today_orders"]
+        today_revenue = counts["today_revenue"]
 
         alerts = stock_alerts(cursor, scope_user_id())
 
@@ -2431,6 +2415,58 @@ def order_status_feed():
 # ==========================================
 # CREATE MULTIPLE-ITEM ORDER
 # ==========================================
+
+def dashboard_counts(cursor, owner_id, include_revenue):
+    """
+    Every dashboard figure in one round trip.
+
+    These were six separate COUNT statements. Against a managed database
+    each one is its own network round trip, and the dashboard polls itself
+    every few seconds - so six trips became the dominant cost of the busiest
+    page in the app. Scalar subqueries fold them into a single statement
+    without changing what any of them mean.
+
+    Revenue stays admin-only, the same rule the Billing page follows, so it
+    is only added to the statement when the viewer is entitled to it.
+    """
+    revenue_select = """,
+            (SELECT COALESCE(SUM(b.total_amount), 0)
+               FROM bills b
+               INNER JOIN orders o ON b.order_id = o.order_id
+              WHERE DATE(b.bill_date) = CURDATE()
+                AND o.user_id = %s
+                AND LOWER(COALESCE(o.order_status, '')) != 'cancelled'
+                AND LOWER(COALESCE(b.payment_status, '')) = 'paid') AS today_revenue"""
+
+    sql = """
+        SELECT
+            (SELECT COUNT(*) FROM foods WHERE user_id = %s) AS total_foods,
+            (SELECT COUNT(DISTINCT category_id) FROM foods
+              WHERE user_id = %s) AS total_categories,
+            (SELECT COUNT(*) FROM orders WHERE user_id = %s) AS total_orders,
+            (SELECT COUNT(*)
+               FROM inventory i
+               INNER JOIN foods f ON i.food_id = f.food_id
+              WHERE f.user_id = %s) AS total_inventory,
+            (SELECT COUNT(*) FROM orders
+              WHERE DATE(order_date) = CURDATE()
+                AND user_id = %s
+                AND LOWER(COALESCE(order_status, '')) != 'cancelled')
+                AS today_orders""" + (revenue_select if include_revenue else "")
+
+    params = [owner_id] * 5 + ([owner_id] if include_revenue else [])
+    cursor.execute(sql, tuple(params))
+    row = cursor.fetchone()
+
+    return {
+        "total_foods": row["total_foods"],
+        "total_categories": row["total_categories"],
+        "total_orders": row["total_orders"],
+        "total_inventory": row["total_inventory"],
+        "today_orders": row["today_orders"],
+        "today_revenue": row["today_revenue"] if include_revenue else None,
+    }
+
 
 # How many names the stock alert lists before it stops and says "and N more".
 STOCK_ALERT_NAMES = 12
@@ -4447,48 +4483,16 @@ def dashboard_stats():
         cursor = connection.cursor(dictionary=True)
         uid = scope_user_id()
 
-        cursor.execute("SELECT COUNT(*) AS total FROM foods WHERE user_id=%s", (uid,))
-        total_foods = cursor.fetchone()["total"]
-
-        cursor.execute("""
-            SELECT COUNT(DISTINCT category_id) AS total
-            FROM foods
-            WHERE user_id = %s
-        """, (uid,))
-        total_categories = cursor.fetchone()["total"]
-
-        cursor.execute("SELECT COUNT(*) AS total FROM orders WHERE user_id=%s", (uid,))
-        total_orders = cursor.fetchone()["total"]
-
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-            FROM inventory i INNER JOIN foods f ON i.food_id=f.food_id
-            WHERE f.user_id=%s
-        """, (uid,))
-        total_inventory = cursor.fetchone()["total"]
-
-        cursor.execute("""
-            SELECT COUNT(*) AS total FROM orders
-            WHERE user_id=%s
-              AND DATE(order_date)=CURDATE()
-              AND LOWER(COALESCE(order_status,''))!='cancelled'
-        """, (uid,))
-        today_orders = cursor.fetchone()["total"]
-
-        # Revenue is admin-only data (same rule as the Billing page),
-        # so it's only computed and sent back for admins.
-        today_revenue = None
-        if session.get("role") == "admin":
-            cursor.execute("""
-                SELECT COALESCE(SUM(b.total_amount),0) AS total
-                FROM bills b
-                INNER JOIN orders o ON b.order_id=o.order_id
-                WHERE o.user_id=%s
-                  AND DATE(b.bill_date)=CURDATE()
-                  AND LOWER(COALESCE(o.order_status,''))!='cancelled'
-                  AND LOWER(COALESCE(b.payment_status,''))='paid'
-            """, (uid,))
-            today_revenue = cursor.fetchone()["total"]
+        # Same single statement the page itself uses. This endpoint is polled
+        # continuously, so it is the one place where trimming round trips
+        # matters most.
+        counts = dashboard_counts(cursor, uid, session.get("role") == "admin")
+        total_foods = counts["total_foods"]
+        total_categories = counts["total_categories"]
+        total_orders = counts["total_orders"]
+        total_inventory = counts["total_inventory"]
+        today_orders = counts["today_orders"]
+        today_revenue = counts["today_revenue"]
 
         alerts = stock_alerts(cursor, uid)
 

@@ -429,9 +429,17 @@
         }
     }
 
-    /* Update immediately, then every 5 seconds. */
+    /* Every two seconds rather than five: the whole statistics block is one
+       database round trip now, so a change made on the till shows here about
+       as fast as anyone can look up. The poll skips entirely while the tab is
+       in the background, so the cost only applies when someone is watching. */
     updateDashboard();
-    setInterval(updateDashboard, 5000);
+    setInterval(updateDashboard, 2000);
+
+    /* Coming back to the tab should not wait out the rest of the interval. */
+    document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) updateDashboard();
+    });
 </script>
 
 {% endblock %}
