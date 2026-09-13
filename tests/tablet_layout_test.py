@@ -244,6 +244,55 @@ try:
     check("the search field is finger-sized",
           sizes["search"] >= 44, "the search box is %(search)spx tall" % sizes)
 
+    print("\n=== The menu packs in without shrinking the type ===")
+
+    def menu_metrics():
+        return json.loads(b.evaluate("""
+            (function () {
+                var cards = [].slice.call(
+                    document.querySelectorAll('.food-card:not(.food-card--mirror)'));
+                if (!cards.length) return JSON.stringify({});
+                var first = cards[0].getBoundingClientRect();
+                var rows = {};
+                cards.forEach(function (c) {
+                    rows[Math.round(c.getBoundingClientRect().top)] = 1;
+                });
+                return JSON.stringify({
+                    height: Math.round(first.height),
+                    perRow: Math.round(cards.length / Object.keys(rows).length),
+                    name: parseFloat(getComputedStyle(
+                        cards[0].querySelector('.food-card-name')).fontSize),
+                    price: parseFloat(getComputedStyle(
+                        cards[0].querySelector('.food-card-price')).fontSize),
+                    hasStock: !!cards[0].querySelector('.food-card-stock'),
+                    hasCategory: !!cards[0].querySelector('.food-card-category'),
+                    hasControl: !!cards[0].querySelector('.quantity-plus')
+                });
+            })()
+        """))
+
+    for label, width, height in [("tablet landscape", 1194, 834),
+                                 ("tablet portrait ", 820, 1180),
+                                 ("phone           ", 390, 844)]:
+        viewport(width, height, touch=True)
+        b.call("Page.navigate", url=BASE + "/orders/add")
+        wait("!!document.querySelector('.food-card')", "the menu")
+        time.sleep(0.7)
+        m = menu_metrics()
+
+        check("%s fits at least two cards per row" % label,
+              m["perRow"] >= 2, "%(perRow)s per row" % m)
+        check("%s keeps the card short enough to stack" % label,
+              m["height"] <= 275, "cards are %(height)spx tall" % m)
+        # Denser must not mean unreadable: this is the floor for a name read
+        # at arm's length across a counter.
+        check("%s keeps the name readable" % label,
+              m["name"] >= 14, "name font is %(name)spx" % m)
+        check("%s keeps the price readable" % label,
+              m["price"] >= 16, "price font is %(price)spx" % m)
+        check("%s still shows everything the card carried" % label,
+              m["hasStock"] and m["hasCategory"] and m["hasControl"],
+              "something was dropped to save space: %s" % m)
     print("\n=== A laptop with a mouse is left alone ===")
     # Same width as an iPad Pro 12.9 in landscape, so this is precisely the
     # case width alone cannot separate.

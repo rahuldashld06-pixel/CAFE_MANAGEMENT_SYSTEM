@@ -89,7 +89,13 @@ seed.post("/categories/add", data={"category_name": "Beverages",
           follow_redirects=True)
 cat = re.search(r'<option value="(\d+)">',
                 seed.get("/foods/add").get_data(as_text=True)).group(1)
-for food in ["Cold Coffee", "Masala Chai"]:
+# Enough of a menu that a phone page is taller than the screen. The cards
+# were made denser, and with only a couple of items the New Order page now
+# fits without scrolling - which left the sticky-bar check below with
+# nothing to scroll.
+for food in ["Cold Coffee", "Masala Chai", "Espresso", "Flat White",
+             "Cortado", "Cold Brew", "Mocha", "Americano",
+             "Croissant", "Blueberry Muffin"]:
     seed.post("/foods/add", data={"food_name": food, "category_id": cat,
                                   "price": "40", "quantity": "10",
                                   "description": "", "_csrf_token": csrf()},

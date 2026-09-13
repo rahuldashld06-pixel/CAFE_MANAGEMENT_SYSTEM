@@ -90,7 +90,7 @@ python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 39   FAILED: 0
-python tests/tablet_layout_test.py # expect PASSED: 33   FAILED: 0
+python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 25   FAILED: 0
@@ -172,7 +172,10 @@ crossed back over the old breakpoint and handed the user the laptop layout
 mid-session. Width cannot tell a tablet from a small laptop, so the
 stylesheet also asks whether the pointer is coarse — the test checks every
 tablet gets the drawer and finger-sized controls while a 1366px laptop with
-a mouse, the exact width of an iPad Pro in landscape, is left alone.
+a mouse, the exact width of an iPad Pro in landscape, is left alone. It
+also measures the New Order menu at each size: at least two cards to a row,
+cards short enough to stack, and type no smaller than a name can be read
+at — density must not be bought with unreadable text.
 
 `stock_alert_test.py` covers the dashboard's stock alert, which names the
 food that needs reordering rather than only counting it. Checks that zero

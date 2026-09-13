@@ -1289,10 +1289,14 @@ button, input, select, textarea {
     }
 }
 
-/* Form grids collapse naturally on narrow screens. */
+/* Form grids collapse naturally on narrow screens.
+
+   .food-grid is deliberately not in this list. The menu sizes its own
+   columns from the width available, and this blanket `1fr !important` beat
+   that outright - a phone showed one enormous food card per row no matter
+   what the menu's own rules asked for. */
 @media (max-width: 700px) {
     .form-grid,
-    .food-grid,
     .order-grid,
     .dashboard-grid,
     .two-column,
