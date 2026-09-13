@@ -7,12 +7,22 @@
 <div class="page-header">
     <div>
         <h1><i class="bi bi-receipt-cutoff"></i> Order Management</h1>
-        <p class="page-subtitle">Track and manage customer orders while preserving billing history</p>
+        <p class="page-subtitle">
+            Today's orders. Earlier ones stay in Billing, which lists every day.
+        </p>
     </div>
 
     <div class="page-header__actions">
+        {# Staff cannot open the dashboard, so do not offer it to them - the
+           button only bounced them back with a permission message. #}
+        {% if session.get('role') == 'admin' %}
         <a href="{{ url_for('home') }}" class="btn btn--ghost">
             <i class="bi bi-arrow-left"></i> Dashboard
+        </a>
+        {% endif %}
+
+        <a href="{{ url_for('billing') }}" class="btn btn--ghost">
+            <i class="bi bi-receipt"></i> Billing History
         </a>
     </div>
 </div>
@@ -95,7 +105,7 @@
                 <tr>
                     <td colspan="5" class="empty-row">
                         <i class="bi bi-inbox"></i>
-                        No orders found.
+                        No orders today yet.
                     </td>
                 </tr>
             {% endfor %}

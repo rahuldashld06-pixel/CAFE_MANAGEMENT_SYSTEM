@@ -98,7 +98,7 @@ python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 29   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 25   FAILED: 0
-python tests/billing_paid_test.py # expect PASSED: 18   FAILED: 0
+python tests/billing_paid_test.py # expect PASSED: 23   FAILED: 0
 python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
@@ -217,8 +217,10 @@ the default.
 `billing_paid_test.py` pins down what settles a bill: only the Paid button.
 Choosing UPI or Card records how a bill will be paid, not that it has been,
 and a verified gateway payment leaves its reference against the bill while
-still waiting for someone to press Paid. It also checks the billing history
-lists every day until a period is asked for.
+still waiting for someone to press Paid. It also checks which list shows what: Billing
+history keeps every day until a period is asked for, while Order Management
+shows only today — the shift the till is on. An older order still opens by
+its own link and its bill stays in Billing.
 
 ## Security notes
 

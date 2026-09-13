@@ -2420,6 +2420,7 @@ def orders():
                 order_status
             FROM orders
             WHERE user_id = %s
+              AND DATE(order_date) = CURDATE()
             ORDER BY order_id DESC
         """, (scope_user_id(),))
 

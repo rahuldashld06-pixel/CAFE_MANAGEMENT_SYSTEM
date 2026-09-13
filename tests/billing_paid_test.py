@@ -5,8 +5,10 @@ Changing a bill to UPI or Card is a note about how it will be settled, not
 a statement that it has been. Even a verified gateway payment only leaves
 its reference behind - the counter still presses Paid.
 
-Also pins the billing history down: every day is listed until a period is
-asked for.
+Also pins down which list shows what: Billing history keeps every day until
+a period is asked for, while Order Management shows only today - the shift
+the till is actually on. Nothing is lost either way; an older order still
+opens by its own link and its bill stays in Billing.
 
 Run with:  python tests/billing_paid_test.py
 """
@@ -162,6 +164,32 @@ check("a period narrows it to that period",
 check("clearing the dates brings them all back", len(listed()) == 4,
       "listed %s" % listed())
 
+
+print("\n=== 6. Order Management is today's work ===")
+# Bills 1-3 were raised today; bill 4 was moved to February above, and its
+# order with it. The till wants the list in front of it to be this shift.
+mysql_shim._DB.execute(
+    "UPDATE orders SET order_date = '2026-02-03 09:00:00' WHERE order_id = 4")
+mysql_shim._DB.commit()
+
+listed_orders = sorted(set(re.findall(
+    r'/orders/(\d+)"', client.get("/orders").get_data(as_text=True))))
+
+check("a February order is not in Order Management",
+      "4" not in listed_orders, "listed %s" % listed_orders)
+check("today's orders are",
+      {"1", "2", "3"}.issubset(set(listed_orders)),
+      "listed %s" % listed_orders)
+check("the page says it is showing today",
+      "Today" in client.get("/orders").get_data(as_text=True),
+      "nothing tells the user why older orders are absent")
+
+# Nothing is lost: the order is still reachable and still billed.
+check("the older order still opens by its own link",
+      client.get("/orders/4").status_code == 200,
+      "an order that dropped off the list became unreachable")
+check("and its bill is still in Billing history",
+      "4" in listed(), "the bill vanished along with the order")
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
