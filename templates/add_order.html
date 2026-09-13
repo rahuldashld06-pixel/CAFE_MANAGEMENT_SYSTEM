@@ -1352,6 +1352,18 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
                             closeSummary();
                             showPageToast(data.message || "Order has been placed.");
 
+                            // Kitchen ticket, if the café has asked for it.
+                            // The delay is its own setting: a few seconds
+                            // leaves room to catch a mistaken order before
+                            // the kitchen starts on it.
+                            const printing = (window.CafeShell || {}).printing || {};
+                            if (printing.auto_kot && data.order_id) {
+                                window.setTimeout(function () {
+                                    window.CafeShell.autoPrint(
+                                        "/orders/" + data.order_id + "/kot");
+                                }, Math.max(0, Number(printing.kot_delay) || 0) * 1000);
+                            }
+
                         } else {
 
                             showStatus("error", data.message || "Could not create the order. Please try again.");

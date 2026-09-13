@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Automatic Printing · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Printing</div>
+        <h1><i class="bi bi-printer-fill"></i> Automatic Printing</h1>
+        <p>Send the kitchen ticket and the bill to the printer on their own.</p>
+    </div>
+    <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="panel form-panel" style="max-width:640px;">
+
+    <form method="POST">
+
+        <div class="setting-row">
+            <label class="switch-field" for="auto_kot">
+                <input type="checkbox" id="auto_kot" name="auto_kot"
+                       {% if settings.auto_kot %}checked{% endif %}>
+                {# The native box is hidden by .switch-field; this sibling is
+                   what actually draws the toggle. #}
+                <span class="switch-slider"></span>
+                <span>
+                    <strong>Print the kitchen ticket after an order</strong>
+                    <small>
+                        The KOT goes to the printer once an order is saved,
+                        without anyone opening it.
+                    </small>
+                </span>
+            </label>
+
+            <div class="form-group setting-row__child">
+                <label for="kot_delay">Wait before printing</label>
+                <div class="input-suffix">
+                    <input type="number"
+                           id="kot_delay"
+                           name="kot_delay"
+                           value="{{ settings.kot_delay }}"
+                           min="0"
+                           max="{{ max_delay }}"
+                           step="1"
+                           autocomplete="off">
+                    <span class="input-suffix__unit">sec</span>
+                </div>
+                <small>
+                    Enter 0 to print immediately. A few seconds leaves room
+                    to cancel a mistaken order before the kitchen starts it.
+                </small>
+            </div>
+        </div>
+
+        <div class="setting-row">
+            <label class="switch-field" for="auto_bill">
+                <input type="checkbox" id="auto_bill" name="auto_bill"
+                       {% if settings.auto_bill %}checked{% endif %}>
+                {# The native box is hidden by .switch-field; this sibling is
+                   what actually draws the toggle. #}
+                <span class="switch-slider"></span>
+                <span>
+                    <strong>Print the bill when it is marked paid</strong>
+                    <small>
+                        The receipt prints the moment Paid is pressed on the
+                        Billing page. No delay - the customer is waiting.
+                    </small>
+                </span>
+            </label>
+        </div>
+
+        <div class="note-card">
+            <i class="bi bi-info-circle"></i>
+            <div>
+                Browsers always show their print dialog before sending a page
+                to the printer. To have these print silently, start the
+                browser with kiosk printing on — for Chrome or Edge, launch it
+                with <code>--kiosk-printing</code> and set the till's receipt
+                printer as the default. Without that, each print still opens
+                the dialog and someone has to press Print.
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-check2"></i> Save printing settings
+            </button>
+            <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>Cancel</a>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

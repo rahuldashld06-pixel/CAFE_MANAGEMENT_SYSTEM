@@ -73,6 +73,8 @@ tests/tablet_layout_test.py Real-browser tablet layout test suite
 tests/stock_alert_test.py Dashboard stock-alert test suite
 tests/print_test.py  Printable bill and kitchen ticket test suite
 tests/staff_access_test.py Non-admin permission test suite
+tests/auto_print_test.py Automatic-printing settings test suite
+tests/auto_print_browser_test.py Real-browser automatic-printing suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
@@ -94,15 +96,17 @@ python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 29   FAILED: 0
+python tests/auto_print_test.py   # expect PASSED: 25   FAILED: 0
+python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
 python tests/mobile_nav_test.py   # expect PASSED: 31   FAILED: 0
 ```
 
-All fifteen run in memory against a SQLite stand-in — no database or
-network needed. The six suites that drive a browser use a headless Edge or
-Chrome when one is installed, and skip themselves when none is.
+All seventeen run in memory against a SQLite stand-in — no database or
+network needed. The seven suites that drive a browser use a headless Edge
+or Chrome when one is installed, and skip themselves when none is.
 
 `smoke_test.py` takes two cafes through the full lifecycle and asserts
 that neither can read or modify the other's data.
@@ -197,6 +201,16 @@ neither the dashboard, the reports, nor user management. They do get the
 Billing summary, fixed to today rather than the filtered period, with
 revenue left off. It checks the sidebar and the server guard
 agree, because a link that is hidden but still served is a hole.
+
+`auto_print_test.py` and `auto_print_browser_test.py` cover automatic
+printing: that both switches start off, that the delay is validated, that
+anyone who works at the café can change them, and — in a real browser —
+that the kitchen ticket waits its configured delay while the receipt does
+not, and that nothing prints while a switch is off.
+
+Note that a browser always shows its print dialog. To print silently, start
+Chrome or Edge with `--kiosk-printing` and set the till's receipt printer as
+the default.
 
 ## Security notes
 

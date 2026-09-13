@@ -168,6 +168,14 @@
                             <i class="bi bi-shield-lock"></i><span>Change Password</span>
                         </a>
 
+                        <div class="profile-dropdown__section">Printing</div>
+
+                        {# Not admin-only: whoever is on the till is the one
+                           who notices the tickets are wrong. #}
+                        <a href="{{ url_for('print_settings') }}" class="profile-dropdown__item">
+                            <i class="bi bi-printer"></i><span>Automatic Printing</span>
+                        </a>
+
                         {% if session.get('role') == 'admin' %}
                         <div class="profile-dropdown__section">Customize</div>
 
@@ -260,6 +268,43 @@
 // newly loaded page have not been through this yet.
 window.CafeShell = {
     csrfToken: {{ csrf_token_value|tojson }},
+
+    // Set under Profile -> Automatic Printing. Read by the New Order page
+    // (kitchen ticket, after a delay) and the Billing page (receipt, the
+    // moment a bill is marked paid).
+    printing: {{ print_settings|tojson }},
+
+    /**
+     * Send a printable page to the printer without leaving this one.
+     *
+     * The document is loaded into a hidden iframe and printed from there,
+     * so the till keeps whatever it was doing. The print pages call
+     * window.print() themselves on load, which is what actually opens the
+     * dialog - browsers will not print silently unless the browser itself
+     * was started with kiosk printing on.
+     */
+    autoPrint: function (url) {
+        const frame = document.createElement("iframe");
+        frame.setAttribute("aria-hidden", "true");
+        frame.style.position = "fixed";
+        frame.style.width = "0";
+        frame.style.height = "0";
+        frame.style.border = "0";
+        frame.style.opacity = "0";
+        frame.src = url;
+
+        // Whether the user prints or cancels, the frame has done its job.
+        // A generous window, because the dialog blocks until dismissed.
+        frame.addEventListener("load", function () {
+            window.setTimeout(function () {
+                if (frame.parentNode) frame.parentNode.removeChild(frame);
+            }, 60000);
+        });
+
+        document.body.appendChild(frame);
+        return frame;
+    },
+
     applyCsrf: function (root) {
         (root || document)
             .querySelectorAll("form[method='POST'], form[method='post']")

@@ -165,6 +165,14 @@ def inject_asset_version():
     return {"asset_version": ASSET_VERSION}
 
 
+@app.context_processor
+def inject_print_settings():
+    """Every page needs these to decide whether to arm an automatic print."""
+    if not session.get("user_id"):
+        return {"print_settings": dict(DEFAULT_PRINT_SETTINGS)}
+    return {"print_settings": get_print_settings()}
+
+
 def _is_prefetch():
     """True for a page instant.js fetched speculatively, not one a user asked for."""
     return request.headers.get("X-Instant-Prefetch") == "1"
@@ -597,6 +605,9 @@ _CORE_TABLES = [
             login_photo_blob MEDIUMBLOB NULL,
             branding_version INT NOT NULL DEFAULT 1,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+            auto_kot_enabled TINYINT(1) NOT NULL DEFAULT 0,
+            auto_kot_delay INT NOT NULL DEFAULT 5,
+            auto_bill_enabled TINYINT(1) NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             is_active TINYINT(1) NOT NULL DEFAULT 1
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -757,6 +768,11 @@ _COLUMN_MIGRATIONS = [
     # Per-café tax rate. 5.00 is what every bill was hard-coded to before
     # this was configurable, so existing cafés keep their current totals.
     ("cafes", "tax_percent", "DECIMAL(5,2) NOT NULL DEFAULT 5.00"),
+    # Automatic printing. Off by default: a café that has not asked for it
+    # should never have a print dialog appear on its own.
+    ("cafes", "auto_kot_enabled", "TINYINT(1) NOT NULL DEFAULT 0"),
+    ("cafes", "auto_kot_delay", "INT NOT NULL DEFAULT 5"),
+    ("cafes", "auto_bill_enabled", "TINYINT(1) NOT NULL DEFAULT 0"),
     # A staff member's own photo, shown in place of their initial.
     ("users", "photo_mime", "VARCHAR(80) NULL"),
     ("users", "photo_blob", "MEDIUMBLOB NULL"),
@@ -1260,7 +1276,8 @@ def get_current_user():
         cursor.execute("""
             SELECT u.user_id, u.username, u.full_name, u.role, u.is_active,
                    (u.photo_blob IS NOT NULL) AS has_photo, u.photo_version,
-                   c.owner_user_id, c.is_active AS cafe_active
+                   c.owner_user_id, c.is_active AS cafe_active,
+                   c.auto_kot_enabled, c.auto_kot_delay, c.auto_bill_enabled
             FROM users u
             LEFT JOIN cafes c ON c.cafe_id = u.cafe_id
             WHERE u.user_id = %s AND u.cafe_id = %s
@@ -1272,10 +1289,22 @@ def get_current_user():
         if connection:
             connection.close()
 
+    PRINTING_KEYS = ("auto_kot_enabled", "auto_kot_delay", "auto_bill_enabled")
+
     user = None
     if row:
         user = {key: row[key] for key in row
-                if key not in ("owner_user_id", "cafe_active")}
+                if key not in ("owner_user_id", "cafe_active") + PRINTING_KEYS}
+
+        # Carried on the same row, so the printing settings cost no query of
+        # their own - every page needs them to decide whether to arm the
+        # automatic print.
+        if has_request_context():
+            g.print_settings = {
+                "auto_kot": bool(row["auto_kot_enabled"]),
+                "kot_delay": int(row["auto_kot_delay"] or 0),
+                "auto_bill": bool(row["auto_bill_enabled"]),
+            }
 
         # Only cache a settled answer. A missing owner still has to go
         # through get_cafe_owner_id(), which adopts the oldest admin and
@@ -1317,7 +1346,56 @@ STAFF_ALLOWED_ENDPOINTS = {
     "order_status_feed",
     "change_password", "logout",
     "account_photo", "user_media",
+    # Whoever is on the till is the one who notices the tickets are wrong.
+    "print_settings",
 }
+
+
+DEFAULT_PRINT_SETTINGS = {"auto_kot": False, "kot_delay": 5, "auto_bill": False}
+
+# A delay long enough to be useful, short enough that the ticket is still
+# ahead of the food. Zero means print the moment the order is saved.
+MAX_KOT_DELAY = 120
+
+
+def get_print_settings():
+    """
+    Whether this café prints its tickets by itself, and how long it waits.
+
+    get_current_user() already reads these off the café row it joins, so in
+    a normal request this is just a lookup. The fallback query is for the
+    handful of paths that reach here without a user row in hand.
+    """
+    if has_request_context() and "print_settings" in g:
+        return g.print_settings
+
+    cafe_id = session.get("cafe_id")
+    if not cafe_id:
+        return dict(DEFAULT_PRINT_SETTINGS)
+
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT auto_kot_enabled, auto_kot_delay, auto_bill_enabled
+            FROM cafes WHERE cafe_id = %s
+        """, (cafe_id,))
+        row = cursor.fetchone()
+        settings = dict(DEFAULT_PRINT_SETTINGS) if not row else {
+            "auto_kot": bool(row["auto_kot_enabled"]),
+            "kot_delay": int(row["auto_kot_delay"] or 0),
+            "auto_bill": bool(row["auto_bill_enabled"]),
+        }
+    except mysql.connector.Error:
+        # Printing preferences must never take a page down.
+        settings = dict(DEFAULT_PRINT_SETTINGS)
+    finally:
+        cursor.close()
+        connection.close()
+
+    if has_request_context():
+        g.print_settings = settings
+    return settings
 
 
 def format_percent(value):
@@ -3526,6 +3604,9 @@ def mark_bill_paid(bill_id):
             payload = {"success": success, "message": message, "bill_id": bill_id}
             if bill_row is not None:
                 payload["total_amount"] = float(bill_row.get("total_amount") or 0)
+                # The printable bill is addressed by order, not by bill, so
+                # the page needs this to print the receipt automatically.
+                payload["order_id"] = bill_row.get("order_id")
             return jsonify(payload), status_code
         flash(message)
         return redirect(url_for("billing"))
@@ -3535,7 +3616,8 @@ def mark_bill_paid(bill_id):
         cursor = connection.cursor(dictionary=True)
 
         cursor.execute("""
-            SELECT b.bill_id, b.payment_status, b.total_amount, o.order_status
+            SELECT b.bill_id, b.order_id, b.payment_status, b.total_amount,
+                   o.order_status
             FROM bills b
             INNER JOIN orders o ON b.order_id = o.order_id
             WHERE b.bill_id = %s
@@ -5543,6 +5625,70 @@ def tax_settings():
         return render_template(
             "tax_settings.html",
             tax_percent=get_tax_percent(cafe_id),
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/settings/printing", methods=["GET", "POST"])
+def print_settings():
+    """
+    Automatic printing: the kitchen ticket after an order, the bill when it
+    is marked paid.
+
+    Open to everyone, not just admins. Whoever is on the till is the person
+    who notices the tickets are coming out too early or not at all, and they
+    should be able to fix it without finding a manager. The settings belong
+    to the café, so a change applies to every device in it.
+    """
+    user = get_current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cafe_id = require_cafe_session()
+
+        if request.method == "POST":
+            auto_kot = request.form.get("auto_kot") == "on"
+            auto_bill = request.form.get("auto_bill") == "on"
+
+            raw = (request.form.get("kot_delay") or "").strip()
+            try:
+                delay = int(raw)
+            except (TypeError, ValueError):
+                flash("Enter the delay as a whole number of seconds.")
+                return redirect(url_for("print_settings"))
+
+            if delay < 0 or delay > MAX_KOT_DELAY:
+                flash("The delay must be between 0 and %d seconds."
+                      % MAX_KOT_DELAY)
+                return redirect(url_for("print_settings"))
+
+            cursor.execute("""
+                UPDATE cafes
+                SET auto_kot_enabled = %s,
+                    auto_kot_delay = %s,
+                    auto_bill_enabled = %s
+                WHERE cafe_id = %s
+            """, (1 if auto_kot else 0, delay,
+                  1 if auto_bill else 0, cafe_id))
+            connection.commit()
+            g.pop("print_settings", None)
+
+            flash("Printing settings saved.")
+            return redirect(url_for("print_settings"))
+
+        return render_template(
+            "print_settings.html",
+            settings=get_print_settings(),
+            max_delay=MAX_KOT_DELAY,
         )
     finally:
         if cursor:

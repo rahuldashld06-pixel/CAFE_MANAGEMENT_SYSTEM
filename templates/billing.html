@@ -735,6 +735,13 @@
                         adjustRevenue(data.total_amount);
                     }
                     showBillingToast(data.message, false);
+
+                    // Receipt, straight away - the customer is standing there.
+                    const printing = (window.CafeShell || {}).printing || {};
+                    if (printing.auto_bill && data.order_id) {
+                        window.CafeShell.autoPrint(
+                            '/orders/' + data.order_id + '/bill');
+                    }
                 } else {
                     if (button) button.disabled = false;
                     showBillingToast(data.message || 'Could not update payment status.', true);
