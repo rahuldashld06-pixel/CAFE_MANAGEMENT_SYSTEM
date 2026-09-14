@@ -24,7 +24,8 @@ branding, fully isolated from the others.
 - **Admin OTP login.** Admins with a mobile number on file confirm a
   6-digit code after their password.
 - **Per-cafe branding.** Each cafe sets its own display name, logo and
-  sign-in photo.
+  sign-in photo. Both appear in the sidebar on every page, and in the bar
+  that stays at the top on a phone, where the sidebar is a drawer.
 - **Theme colour.** An admin picks the accent the whole cafe's screens are
   painted in. Copper by default.
 - **Menu from a photo.** An admin photographs the printed menu card and the
@@ -103,7 +104,7 @@ python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
-python tests/settings_test.py     # expect PASSED: 39   FAILED: 0
+python tests/settings_test.py     # expect PASSED: 51   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
@@ -114,7 +115,7 @@ python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 31   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 40   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0

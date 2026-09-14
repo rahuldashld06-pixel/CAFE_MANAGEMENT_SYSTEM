@@ -351,6 +351,74 @@ try:
     b.evaluate("window.scrollTo(0, 0)")
     time.sleep(0.3)
 
+    print("\n=== The cafe's name and logo in the sticky bar ===")
+    # On a phone the sidebar is a drawer, so the brand it carries is out of
+    # sight on every page. A copy lives in the bar that stays at the top.
+    b.evaluate("window.scrollTo(0, 0)")
+    time.sleep(0.3)
+
+    check("the brand is in the top bar on a phone",
+          b.evaluate("getComputedStyle("
+                     "document.querySelector('.topbar-brand')).display")
+          == "flex",
+          "it is hidden on a phone, where the sidebar is shut")
+    check("it names the cafe",
+          "Mobile Cafe" in (b.evaluate(
+              "document.querySelector('.topbar-brand__name').textContent")
+              or ""),
+          "it reads %r" % b.evaluate(
+              "document.querySelector('.topbar-brand__name').textContent"))
+
+    # The hamburger and the profile are the only way off a page. Neither may
+    # be pushed off by a long cafe name.
+    layout = json.loads(b.evaluate("""
+        (function () {
+            function box(sel) {
+                var r = document.querySelector(sel).getBoundingClientRect();
+                return {left: Math.round(r.left), right: Math.round(r.right),
+                        width: Math.round(r.width)};
+            }
+            return JSON.stringify({
+                toggle: box('#navToggle'),
+                brand: box('.topbar-brand'),
+                profile: box('#profileTrigger'),
+                screen: window.innerWidth,
+                scrollWidth: document.documentElement.scrollWidth
+            });
+        })()
+    """))
+
+    check("the hamburger keeps its place at the left",
+          layout["toggle"]["left"] >= 0
+          and layout["toggle"]["width"] > 30,
+          "the hamburger is at %s" % layout["toggle"])
+    check("the profile button is wholly on screen",
+          layout["profile"]["right"] <= layout["screen"] + 1
+          and layout["profile"]["width"] > 30,
+          "the profile is at %s on a %spx screen"
+          % (layout["profile"], layout["screen"]))
+    check("the brand sits between them",
+          layout["toggle"]["right"] <= layout["brand"]["left"] + 1
+          and layout["brand"]["right"] <= layout["profile"]["left"] + 1,
+          "the three do not line up: %s" % layout)
+    check("and nothing pushes the page sideways",
+          layout["scrollWidth"] <= layout["screen"] + 1,
+          "the page scrolls sideways by %dpx"
+          % (layout["scrollWidth"] - layout["screen"]))
+
+    check("the brand is still tappable", hit_test(".topbar-brand"),
+          "something is covering it")
+
+    b.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(0.6)
+    check("it stays put when the page scrolls",
+          -2 <= int(b.evaluate(
+              "Math.round(document.querySelector('.topbar-brand')"
+              ".getBoundingClientRect().top)")) <= 60,
+          "it scrolled away with the page")
+    b.evaluate("window.scrollTo(0, 0)")
+    time.sleep(0.3)
+
     print("\n=== The floating order summary stays in the corner ===")
     tap("#navToggle")
     tap_nav("New Order")
@@ -389,6 +457,11 @@ try:
     check("the hamburger is hidden again",
           b.evaluate("getComputedStyle(document.getElementById('navToggle')).display") == "none")
     check("the sidebar is back on screen permanently", sidebar_on_screen())
+    check("and the top bar's copy of the brand steps aside",
+          b.evaluate("getComputedStyle("
+                     "document.querySelector('.topbar-brand')).display")
+          == "none",
+          "the cafe name is drawn twice on a desktop")
 
 finally:
     try:

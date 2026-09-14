@@ -43,9 +43,18 @@
              see .nav-toggle below and the drawer block in style.css. -->
         <aside class="sidebar" id="appSidebar">
 
+            {# The cafe's own name and logo, set by its admin under
+               Cafe Branding. The cup is the fallback for a cafe that has
+               not uploaded one yet. #}
             <div class="sidebar-brand">
-                <span class="brand-mark"><i class="bi bi-cup-hot-fill"></i></span>
-                <span class="brand-text">Cafe Manager<small>Food &amp; Service Admin</small></span>
+                <span class="brand-mark">
+                    {% if cafe_branding.logo %}
+                    <img src="{{ cafe_branding.logo }}" alt="">
+                    {% else %}
+                    <i class="bi bi-cup-hot-fill"></i>
+                    {% endif %}
+                </span>
+                <span class="brand-text">{{ cafe_branding.cafe_name }}</span>
             </div>
 
             <nav class="sidebar-nav"><!--nav:start-->
@@ -120,6 +129,21 @@
                         aria-expanded="false">
                     <span class="nav-toggle__bars" aria-hidden="true"></span>
                 </button>
+
+                {# On a phone or a small tablet the sidebar is a drawer, so
+                   the cafe's name and logo would be out of sight on every
+                   page. This puts them in the bar that stays at the top.
+                   Hidden on desktop, where the sidebar already shows them. #}
+                <a href="{{ home_url }}" class="topbar-brand">
+                    <span class="topbar-brand__mark">
+                        {% if cafe_branding.logo %}
+                        <img src="{{ cafe_branding.logo }}" alt="">
+                        {% else %}
+                        <i class="bi bi-cup-hot-fill"></i>
+                        {% endif %}
+                    </span>
+                    <span class="topbar-brand__name">{{ cafe_branding.cafe_name }}</span>
+                </a>
 
                 <div class="profile-menu" id="profileMenu">
 

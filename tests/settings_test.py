@@ -262,6 +262,123 @@ check("café B is untouched by café A's rate",
       "café B is on %s" % application.get_tax_percent(beta_cafe))
 
 
+print("\n=== 10. The cafe's own name and logo in the shell ===")
+# The sidebar used to read "Cafe Manager / Food & Service Admin" on every
+# page of every cafe. It shows the name and logo the admin set instead.
+SHELL_PAGES = ["/orders/add", "/orders", "/foods", "/inventory",
+               "/categories", "/billing"]
+
+a.post("/settings/branding", data={
+    "cafe_name": "Bluebird Coffee House", "_csrf_token": csrf(a)},
+    content_type="multipart/form-data", follow_redirects=True)
+
+missing = [path for path in SHELL_PAGES
+           if "Bluebird Coffee House" not in a.get(path).get_data(as_text=True)]
+check("the cafe's name is on every page", not missing,
+      "missing from: %s" % missing)
+
+shell = a.get("/orders/add").get_data(as_text=True)
+check("the hard-coded platform name is gone",
+      "Food &amp; Service Admin" not in shell,
+      "the old sidebar subtitle is still there")
+check("a cafe with no logo falls back to the cup",
+      shell.count("bi-cup-hot-fill") == 2,
+      "found %d fallback icons, expected one per brand spot"
+      % shell.count("bi-cup-hot-fill"))
+check("the small-screen top bar carries it too",
+      'class="topbar-brand"' in shell,
+      "no brand in the bar that stays at the top on a phone")
+
+a.post("/settings/branding", data={
+    "cafe_name": "Bluebird Coffee House",
+    "logo": (io.BytesIO(PNG), "logo.png"),
+    "_csrf_token": csrf(a)}, content_type="multipart/form-data",
+    follow_redirects=True)
+
+shell = a.get("/orders/add").get_data(as_text=True)
+alpha_logos = re.findall(r'src="(/media/cafe/\d+/logo[^"]*)"', shell)
+check("an uploaded logo is used in both brand spots", len(alpha_logos) == 2,
+      "found %d logo images" % len(alpha_logos))
+check("and the fallback icon steps aside",
+      "bi-cup-hot-fill" not in shell,
+      "the cup is still drawn next to the logo")
+
+
+print("\n=== 11. One cafe's name never shows in another's shell ===")
+sign_in(b, "beta")
+b.post("/settings/branding", data={
+    "cafe_name": "Second Cafe", "_csrf_token": csrf(b)},
+    content_type="multipart/form-data", follow_redirects=True)
+
+other_shell = b.get("/orders/add").get_data(as_text=True)
+check("cafe B sees its own name", "Second Cafe" in other_shell,
+      "cafe B's shell does not name it")
+check("and not cafe A's", "Bluebird Coffee House" not in other_shell,
+      "cafe A's name leaked into cafe B's shell")
+# Each logo URL carries its own cafe's id, so cafe A's exact URL appearing
+# in cafe B's page would be a leak of the image itself.
+check("nor cafe A's logo",
+      not any(url in other_shell for url in alpha_logos),
+      "cafe A's logo URL appears in cafe B's shell")
+
+
+print("\n=== 12. Showing the brand costs no extra query ===")
+# It rides on the cafe row get_current_user() already joins. Asking the
+# template to fetch it instead would be a whole extra round trip on every
+# page load, on every page.
+_real_connect = application.get_db_connection
+_queries = {"n": 0}
+
+
+class _CountingCursor:
+    def __init__(self, inner):
+        self._inner = inner
+
+    def execute(self, *args, **kwargs):
+        _queries["n"] += 1
+        return self._inner.execute(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class _CountingConnection:
+    def __init__(self, inner):
+        self._inner = inner
+
+    def cursor(self, *args, **kwargs):
+        return _CountingCursor(self._inner.cursor(*args, **kwargs))
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+application.get_db_connection = (
+    lambda *args, **kwargs: _CountingConnection(_real_connect(*args, **kwargs)))
+try:
+    with app.test_request_context("/orders/add"):
+        from flask import session as flask_session
+        with a.session_transaction() as sess:
+            flask_session.update(dict(sess))
+
+        application.get_current_user()       # what every request does anyway
+        cafe_id = flask_session.get("cafe_id")
+
+        _queries["n"] = 0
+        branding = application.get_cafe_branding(cafe_id)
+        after_user = _queries["n"]
+finally:
+    application.get_db_connection = _real_connect
+
+check("asking for the branding again runs no query at all",
+      after_user == 0,
+      "it ran %d extra queries per page" % after_user)
+check("and it is the right cafe's branding",
+      branding["cafe_name"] == "Bluebird Coffee House",
+      "the cached branding says %r" % branding["cafe_name"])
+check("the logo is in there too", bool(branding["logo"]),
+      "the cached branding has no logo")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

@@ -1414,7 +1414,10 @@ def get_current_user():
                    (u.photo_blob IS NOT NULL) AS has_photo, u.photo_version,
                    c.owner_user_id, c.is_active AS cafe_active,
                    c.auto_kot_enabled, c.auto_kot_delay, c.auto_bill_enabled,
-                   c.theme
+                   c.theme,
+                   c.cafe_name, c.branding_version,
+                   (c.logo_blob IS NOT NULL) AS has_logo,
+                   (c.login_photo_blob IS NOT NULL) AS has_login_photo
             FROM users u
             LEFT JOIN cafes c ON c.cafe_id = u.cafe_id
             WHERE u.user_id = %s AND u.cafe_id = %s
@@ -1426,8 +1429,12 @@ def get_current_user():
         if connection:
             connection.close()
 
+    # Café columns carried on this row for the shell to use. They are kept
+    # out of the user dict so nothing mistakes a café's name for a person's.
     PRINTING_KEYS = ("auto_kot_enabled", "auto_kot_delay",
-                     "auto_bill_enabled", "theme")
+                     "auto_bill_enabled", "theme",
+                     "cafe_name", "branding_version",
+                     "has_logo", "has_login_photo")
 
     user = None
     if row:
@@ -1446,6 +1453,26 @@ def get_current_user():
             # Same idea for the accent colour: every page is painted in
             # it, so it must not cost a query of its own.
             g.cafe_theme = normalize_theme(row["theme"])
+
+            # And the café's own name and logo, which the sidebar and the
+            # mobile top bar show on every page. Reading them here rather
+            # than letting the template ask for them saves a whole extra
+            # query per page load, on every page.
+            version = row["branding_version"] or 1
+            g.cafe_branding_id = cafe_id
+            g.cafe_branding = {
+                "cafe_name": row["cafe_name"] or app.config["CAFE_NAME"],
+                "logo": (
+                    url_for("cafe_media", cafe_id=cafe_id, kind="logo",
+                            v=version)
+                    if row["has_logo"] else ""
+                ),
+                "login_photo": (
+                    url_for("cafe_media", cafe_id=cafe_id, kind="login",
+                            v=version)
+                    if row["has_login_photo"] else ""
+                ),
+            }
 
         # Only cache a settled answer. A missing owner still has to go
         # through get_cafe_owner_id(), which adopts the oldest admin and
@@ -6109,6 +6136,12 @@ def delete_user(user_id):
 
 def get_cafe_branding(cafe_id):
     """Branding for one café, or the platform defaults when unknown."""
+    # get_current_user() already read this off the café row it joins, so in
+    # a normal signed-in request there is nothing left to fetch.
+    if (cafe_id and has_request_context() and "cafe_branding" in g
+            and g.get("cafe_branding_id") == cafe_id):
+        return g.cafe_branding
+
     defaults = {
         "cafe_name": app.config["CAFE_NAME"],
         "logo": "",
