@@ -93,7 +93,7 @@ check("an admin still sees everything",
 
 print("\n=== 2. Hidden means unreachable, not just unlinked ===")
 for path in ["/dashboard", "/", "/reports", "/users", "/settings/tax",
-             "/settings/branding"]:
+             "/settings/theme"]:
     response = staff.get(path)
     check("staff are turned away from %s" % path,
           response.status_code in REDIRECTS,

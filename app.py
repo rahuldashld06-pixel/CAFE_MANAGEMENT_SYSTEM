@@ -1587,317 +1587,6 @@ def inject_theme():
     return {"cafe_theme": get_cafe_theme(), "themes": THEMES}
 
 
-# ==========================================
-# MENU IMPORT FROM A PHOTOGRAPH
-# ==========================================
-#
-# Typing a forty-item menu in by hand is the worst part of setting this
-# system up, so a photograph of the printed menu card is read instead and
-# turned into foods, prices and categories.
-#
-# Nothing is written straight from the photograph. The reading comes back
-# as a list the owner checks and corrects before anything is saved: a
-# misread 8 for a 3 is a price customers get charged, and that is not a
-# mistake worth discovering from a till receipt.
-
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_VERSION = "2023-06-01"
-
-# Set in the hosting environment. Without it the page explains what is
-# missing instead of failing halfway through an upload.
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-
-MENU_IMPORT_MODEL = os.environ.get(
-    "MENU_IMPORT_MODEL", "claude-sonnet-5").strip()
-
-# A menu card with more rows than this is almost certainly a misread, and
-# a runaway list should not be able to fill someone's menu with rubbish.
-MENU_IMPORT_MAX_ITEMS = 200
-
-MENU_IMPORT_TIMEOUT = int(os.environ.get("MENU_IMPORT_TIMEOUT", "90"))
-
-# Anthropic accepts these four. They are the same four the rest of the
-# app already allows, so nothing extra has to be rejected here.
-_MENU_IMPORT_MIMES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-
-MENU_IMPORT_PROMPT = """You are reading a photograph of a cafe's printed menu.
-
-List every orderable item you can see. Reply with ONLY a JSON array, no
-explanation and no markdown fence. Each element must be an object:
-
-  {"name": "Flat White", "category": "Coffee", "price": 180}
-
-Rules:
-- name: the item as printed, trimmed. Never include the price in the name.
-- category: the section heading the item sits under on the card. If the
-  card has no headings, choose a short sensible one such as "Coffee",
-  "Snacks" or "Desserts".
-- price: the number only. No currency symbol, no thousands separator. If
-  several sizes are priced, use the smallest.
-- Skip anything that is not an orderable item: the cafe name, addresses,
-  phone numbers, opening hours, slogans, allergy notes, "all prices
-  inclusive of tax".
-- Skip an item whose price you genuinely cannot read, rather than guessing.
-- If the photograph is not a menu, or you can read nothing from it, reply
-  with exactly: []
-"""
-
-
-def menu_import_available():
-    """Whether this deployment is configured to read menu photographs."""
-    return bool(ANTHROPIC_API_KEY)
-
-
-def parse_menu_items(text):
-    """
-    Turn the model's reply into a clean list of {name, category, price}.
-
-    Kept apart from the network call so the messy part - a reply wrapped in
-    a markdown fence, a stray sentence before the array, a price written as
-    a string with a rupee sign - can be tested without an API key.
-
-    Anything that cannot be read as an item is dropped rather than guessed
-    at. A short list the owner can correct beats a long one they cannot
-    trust.
-    """
-    if not text:
-        return []
-
-    body = text.strip()
-
-    # ```json ... ``` fences, which models add even when asked not to.
-    if body.startswith("```"):
-        body = body.split("\n", 1)[-1]
-        if body.rstrip().endswith("```"):
-            body = body.rstrip()[:-3]
-
-    start, end = body.find("["), body.rfind("]")
-    if start == -1 or end == -1 or end < start:
-        return []
-
-    try:
-        raw = json.loads(body[start:end + 1])
-    except (ValueError, TypeError):
-        return []
-
-    if not isinstance(raw, list):
-        return []
-
-    items = []
-    for entry in raw[:MENU_IMPORT_MAX_ITEMS]:
-        if not isinstance(entry, dict):
-            continue
-
-        name = str(entry.get("name") or "").strip()
-        if not name:
-            continue
-
-        category = str(entry.get("category") or "").strip() or "Uncategorised"
-
-        price = entry.get("price")
-        if isinstance(price, str):
-            # "₹180", "180.00", "Rs 180", "1,180"
-            price = "".join(ch for ch in price if ch.isdigit() or ch == ".")
-        try:
-            price = Decimal(str(price))
-        except (InvalidOperation, ValueError, TypeError):
-            continue
-        if price < 0:
-            continue
-
-        items.append({
-            "name": name[:150],
-            "category": category[:120],
-            "price": price.quantize(Decimal("0.01")),
-        })
-
-    return items
-
-
-def read_menu_photo(image_bytes, mime):
-    """
-    Ask the model what is on the menu card. Returns the parsed items.
-
-    Raises ValueError with something worth showing the owner when the
-    reading cannot happen at all - no key configured, the service refusing
-    the request, the network timing out.
-    """
-    if not menu_import_available():
-        raise ValueError(
-            "Reading menu photos is not switched on for this site yet. "
-            "An ANTHROPIC_API_KEY has to be set in the hosting environment "
-            "first."
-        )
-
-    if mime not in _MENU_IMPORT_MIMES:
-        raise ValueError(
-            "That image format cannot be read. Use a JPG, PNG, WEBP or GIF "
-            "photo of the menu."
-        )
-
-    import base64
-    import requests
-
-    payload = {
-        "model": MENU_IMPORT_MODEL,
-        "max_tokens": 8000,
-        "messages": [{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": mime,
-                        "data": base64.b64encode(image_bytes).decode("ascii"),
-                    },
-                },
-                {"type": "text", "text": MENU_IMPORT_PROMPT},
-            ],
-        }],
-    }
-
-    try:
-        response = requests.post(
-            ANTHROPIC_API_URL,
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": ANTHROPIC_VERSION,
-                "content-type": "application/json",
-            },
-            json=payload,
-            timeout=MENU_IMPORT_TIMEOUT,
-        )
-    except Exception as error:                      # noqa: BLE001
-        app.logger.warning("Menu photo request failed: %s", error)
-        raise ValueError(
-            "Could not reach the reading service. Check the connection and "
-            "try again."
-        )
-
-    if response.status_code == 401 or response.status_code == 403:
-        raise ValueError(
-            "The reading service rejected this site's API key. Check "
-            "ANTHROPIC_API_KEY in the hosting environment."
-        )
-
-    if response.status_code == 429:
-        raise ValueError(
-            "The reading service is rate limiting this site. Wait a minute "
-            "and try again."
-        )
-
-    if response.status_code >= 400:
-        app.logger.warning("Menu photo read failed: HTTP %s %s",
-                           response.status_code, response.text[:400])
-        raise ValueError(
-            "The reading service could not handle that photo. Try a "
-            "clearer picture, or one section of the menu at a time."
-        )
-
-    try:
-        blocks = response.json().get("content") or []
-    except ValueError:
-        raise ValueError("The reading service sent something unreadable back.")
-
-    text = "".join(block.get("text", "") for block in blocks
-                   if isinstance(block, dict) and block.get("type") == "text")
-
-    return parse_menu_items(text)
-
-
-def _existing_categories(cursor, owner_id):
-    """{lowercased name: category_id} for this cafe."""
-    cursor.execute(
-        "SELECT category_id, category_name FROM categories WHERE user_id = %s",
-        (owner_id,)
-    )
-    return {(row["category_name"] or "").strip().lower(): row["category_id"]
-            for row in cursor.fetchall()}
-
-
-def _existing_foods(cursor, owner_id):
-    """{lowercased name: food_id} for this cafe."""
-    cursor.execute(
-        "SELECT food_id, food_name FROM foods WHERE user_id = %s",
-        (owner_id,)
-    )
-    return {(row["food_name"] or "").strip().lower(): row["food_id"]
-            for row in cursor.fetchall()}
-
-
-def apply_menu_items(cursor, owner_id, cafe_id, rows):
-    """
-    Write the corrected list into the menu.
-
-    An item already on the menu has its price and category updated rather
-    than being added a second time - re-importing the same card after a
-    price rise is the obvious thing to do with this, and it should not
-    leave two of everything.
-
-    Returns (added, updated, categories_created).
-    """
-    categories = _existing_categories(cursor, owner_id)
-    foods = _existing_foods(cursor, owner_id)
-
-    added = updated = made_categories = 0
-
-    for row in rows:
-        name = (row.get("name") or "").strip()
-        if not name:
-            continue
-
-        category_name = (row.get("category") or "").strip() or "Uncategorised"
-        price = row.get("price")
-        quantity = int(row.get("quantity") or 0)
-        minimum_stock = int(row.get("minimum_stock") or 0)
-
-        key = category_name.lower()
-        category_id = categories.get(key)
-        if category_id is None:
-            cursor.execute(
-                "INSERT INTO categories (category_name, description, "
-                "user_id, cafe_id) VALUES (%s, %s, %s, %s)",
-                (category_name, "", owner_id, cafe_id)
-            )
-            category_id = cursor.lastrowid
-            categories[key] = category_id
-            made_categories += 1
-
-        food_id = foods.get(name.lower())
-
-        if food_id is not None:
-            cursor.execute(
-                "UPDATE foods SET price = %s, category_id = %s "
-                "WHERE food_id = %s AND user_id = %s",
-                (price, category_id, food_id, owner_id)
-            )
-            updated += 1
-            continue
-
-        cursor.execute("""
-            INSERT INTO foods
-            (food_no, category_id, food_name, description, price,
-             availability, user_id, cafe_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            next_food_no(cursor, owner_id), category_id, name, "",
-            price, 1 if quantity > 0 else 0, owner_id, cafe_id
-        ))
-        food_id = cursor.lastrowid
-        foods[name.lower()] = food_id
-
-        cursor.execute(
-            "INSERT INTO inventory (food_id, quantity, minimum_stock) "
-            "VALUES (%s, %s, %s)",
-            (food_id, quantity, minimum_stock)
-        )
-        added += 1
-
-    return added, updated, made_categories
-
-
-
 DEFAULT_PRINT_SETTINGS = {"auto_kot": False, "kot_delay": 5, "auto_bill": False}
 
 # A delay long enough to be useful, short enough that the ticket is still
@@ -5655,6 +5344,10 @@ def require_login():
         "login", "login_verify_otp", "login_resend_otp",
         "register", "forgot_password", "static", "razorpay_webhook",
         "healthz", "cafe_media",
+        # The manifest is what lets the site be installed as an app.
+        # It falls back to the platform name with no session, so it
+        # is safe to answer before sign-in.
+        "web_manifest",
         # The browser asks for the icon on the sign-in screen too. Without
         # this it is redirected to /login, and the browser then renders the
         # whole login page again - a wasted database round-trip on every
@@ -6247,156 +5940,81 @@ def tax_settings():
             connection.close()
 
 
-@app.route("/settings/menu-import", methods=["GET", "POST"])
-def menu_import():
+@app.route("/manifest.webmanifest")
+def web_manifest():
     """
-    Photograph the menu card, check what was read, save it.
+    What the browser needs to install this as an app.
 
-    Admin only. This writes prices for the whole menu at once, which is a
-    different thing from adding one dish, and it sits with the other
-    cafe-wide settings for that reason.
+    Installed from the browser's "Add to Home Screen" or "Install", the
+    site then opens with no address bar and no browser chrome at all, every
+    time, on phones and on desktop. That is the only way a web page gets a
+    genuinely full screen on open: the Fullscreen API refuses to run
+    without a user gesture, so nothing a page does on load can take over
+    the screen.
 
-    The photo is read and the result shown for correction; nothing reaches
-    the menu until the second step confirms it.
+    Named and iconed per café where there is a session, so a till installed
+    at the Bluebird says Bluebird on the home screen rather than the
+    platform name. The link tag carries crossorigin="use-credentials" for
+    that reason - a manifest is fetched without cookies otherwise.
     """
-    denied = require_role("admin")
-    if denied:
-        return denied
+    branding = get_cafe_branding(session.get("cafe_id"))
+    name = branding["cafe_name"] or app.config["CAFE_NAME"]
 
-    if request.method == "GET":
-        return render_template("menu_import.html",
-                               available=menu_import_available())
+    # A home screen gives a name about twelve characters before it
+    # ellipsises, so the short one stops at a word rather than mid-syllable:
+    # "Bluebird", not "Bluebird Cof".
+    short = name
+    if len(short) > 12:
+        short = ""
+        for word in name.split():
+            if not short:
+                short = word[:12]
+            elif len(short) + 1 + len(word) <= 12:
+                short += " " + word
+            else:
+                break
 
-    try:
-        data, mime = read_image_upload(request.files.get("photo"))
-    except ValueError as error:
-        flash(str(error))
-        return redirect(url_for("menu_import"))
+    icons = [
+        {
+            "src": url_for("static", filename="icons/app-192.png",
+                           v=ASSET_VERSION),
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable",
+        },
+        {
+            "src": url_for("static", filename="icons/app-512.png",
+                           v=ASSET_VERSION),
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable",
+        },
+    ]
 
-    if data is None:
-        flash("Choose a photo of your menu card first.")
-        return redirect(url_for("menu_import"))
+    manifest = {
+        "name": name,
+        "short_name": short,
+        "description": "Orders, stock and billing for %s." % name,
+        "start_url": url_for("home"),
+        "scope": "/",
+        # fullscreen first, standalone as the fallback: a platform that
+        # will not give up its status bar should still drop the address
+        # bar rather than refusing to install.
+        "display": "fullscreen",
+        "display_override": ["fullscreen", "standalone", "minimal-ui"],
+        "orientation": "any",
+        "background_color": "#170F0B",
+        "theme_color": "#170F0B",
+        "icons": icons,
+    }
 
-    try:
-        items = read_menu_photo(data, mime)
-    except ValueError as error:
-        flash(str(error))
-        return redirect(url_for("menu_import"))
-
-    if not items:
-        flash("Nothing readable was found on that photo. Try a straight-on "
-              "picture in good light, or one section of the menu at a time.")
-        return redirect(url_for("menu_import"))
-
-    # What is already on the menu, so the review can say which rows would
-    # be added and which would change a price that is already set.
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        known = _existing_foods(cursor, scope_user_id())
-        # Offered as suggestions on the review screen, so a reading of
-        # "Coffees" can be snapped back to the "Coffee" already in use
-        # rather than quietly creating a near-duplicate category.
-        cursor.execute(
-            "SELECT category_name FROM categories WHERE user_id = %s "
-            "ORDER BY category_name", (scope_user_id(),))
-        category_names = [row["category_name"] for row in cursor.fetchall()]
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-    for item in items:
-        item["exists"] = item["name"].lower() in known
-
-    return render_template("menu_import_review.html", items=items,
-                           category_names=category_names)
-
-
-@app.route("/settings/menu-import/apply", methods=["POST"])
-def menu_import_apply():
-    """Save the rows the owner kept, after they have checked them."""
-    denied = require_role("admin")
-    if denied:
-        return denied
-
-    rows = []
-    for index in request.form.getlist("row"):
-        if not request.form.get("include_%s" % index):
-            continue
-
-        name = (request.form.get("name_%s" % index) or "").strip()
-        if not name:
-            continue
-
-        raw_price = (request.form.get("price_%s" % index) or "").strip()
-        try:
-            price = Decimal(raw_price or "0")
-        except (InvalidOperation, ValueError):
-            flash("'%s' has a price that is not a number. Nothing was saved."
-                  % name)
-            return redirect(url_for("menu_import"))
-
-        if price < 0:
-            flash("'%s' has a negative price. Nothing was saved." % name)
-            return redirect(url_for("menu_import"))
-
-        def whole(field, default=0):
-            raw = (request.form.get("%s_%s" % (field, index)) or "").strip()
-            try:
-                value = int(raw or default)
-            except ValueError:
-                return default
-            return max(0, value)
-
-        rows.append({
-            "name": name[:150],
-            "category": (request.form.get("category_%s" % index)
-                         or "").strip()[:120],
-            "price": price.quantize(Decimal("0.01")),
-            "quantity": whole("quantity"),
-            "minimum_stock": whole("minimum_stock"),
-        })
-
-    if not rows:
-        flash("No items were ticked, so nothing was saved.")
-        return redirect(url_for("menu_import"))
-
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        added, updated, categories = apply_menu_items(
-            cursor, scope_user_id(), require_cafe_session(), rows)
-        connection.commit()
-    except mysql.connector.Error as error:
-        if connection:
-            connection.rollback()
-        flash("Database error: %s" % error)
-        return redirect(url_for("menu_import"))
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-    parts = []
-    if added:
-        parts.append("%d food%s added" % (added, "" if added == 1 else "s"))
-    if updated:
-        parts.append("%d price%s updated" % (updated,
-                                             "" if updated == 1 else "s"))
-    if categories:
-        parts.append("%d new categor%s" % (categories,
-                                           "y" if categories == 1 else "ies"))
-
-    flash("Menu saved: %s. Stock starts at zero, so set it in Inventory "
-          "before these can be ordered." % ", ".join(parts))
-    return redirect(url_for("foods"))
+    response = app.response_class(
+        json.dumps(manifest, indent=2),
+        mimetype="application/manifest+json",
+    )
+    # Per-café, and it follows the signed-in session.
+    response.headers["Cache-Control"] = "private, max-age=300"
+    return response
 
 
 @app.route("/settings/theme", methods=["GET", "POST"])
@@ -6649,71 +6267,6 @@ def cafe_media(cafe_id, kind):
     # the URL carries a branding_version that changes on every upload.
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
-
-
-@app.route("/settings/branding", methods=["GET", "POST"])
-def branding():
-    denied = require_role("admin")
-    if denied:
-        return denied
-
-    cafe_id = require_cafe_session()
-
-    if request.method == "POST":
-        connection = None
-        cursor = None
-        try:
-            cafe_name = form_text("cafe_name", "Café name", max_length=150)
-
-            logo_data, logo_mime = read_image_upload(
-                request.files.get("logo")
-            )
-            photo_data, photo_mime = read_image_upload(
-                request.files.get("login_photo")
-            )
-
-            connection = get_db_connection()
-            cursor = connection.cursor(dictionary=True)
-
-            updates = ["cafe_name = %s", "branding_version = branding_version + 1"]
-            params = [cafe_name]
-
-            if logo_data is not None:
-                updates += ["logo_blob = %s", "logo_mime = %s"]
-                params += [logo_data, logo_mime]
-
-            if photo_data is not None:
-                updates += ["login_photo_blob = %s", "login_photo_mime = %s"]
-                params += [photo_data, photo_mime]
-
-            params.append(cafe_id)
-            cursor.execute(
-                f"UPDATE cafes SET {', '.join(updates)} WHERE cafe_id = %s",
-                tuple(params)
-            )
-            connection.commit()
-
-            flash("Café branding updated successfully.")
-            return redirect(url_for("branding"))
-
-        except (ValidationError, ValueError) as error:
-            if connection:
-                connection.rollback()
-            flash(str(error))
-            return redirect(url_for("branding"))
-        except mysql.connector.Error as error:
-            if connection:
-                connection.rollback()
-            app.logger.exception("branding update failed")
-            flash(f"Could not update branding: {error.msg}")
-            return redirect(url_for("branding"))
-        finally:
-            if cursor:
-                cursor.close()
-            if connection:
-                connection.close()
-
-    return render_template("branding.html", branding=get_cafe_branding(cafe_id))
 
 
 class _LazyBranding:

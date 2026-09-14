@@ -738,12 +738,6 @@ textarea:focus-visible {
     color: var(--amber-warn);
 }
 
-/* "this row changes something that already exists", in the cafe's own
-   accent so it reads as neutral rather than as a warning. */
-.badge--update {
-    background: rgba(var(--copper-rgb), .16);
-    color: var(--copper-light);
-}
 
 /* legacy inline-style compatible classes used in original markup */
 .available {
@@ -2493,109 +2487,6 @@ body.nav-locked {
     .theme-grid { grid-template-columns: 1fr; }
 }
 
-/* ---------- Menu import: the review table ---------- */
-/* A note that is a warning rather than an aside. */
-.note-card--warn {
-    border-color: var(--amber-warn);
-    background: rgba(242, 166, 90, .08);
-    color: var(--cream-dim);
-}
-
-.note-card--warn i { color: var(--amber-warn); }
-
-.note-card strong { color: var(--cream); }
-
-/* The review rows are editable, so the table is full of inputs. Without
-   this they inherit the form-panel's block styling and each cell becomes
-   a paragraph tall. */
-.data-table input[type="text"],
-.data-table input[type="number"] {
-    width: 100%;
-    min-width: 0;
-    padding: 7px 9px;
-    font-size: 13px;
-    font-family: inherit;
-    color: var(--cream);
-    background: var(--espresso-900);
-    border: 1px solid var(--espresso-700);
-    border-radius: var(--radius-sm);
-}
-
-.data-table input[type="text"]:focus,
-.data-table input[type="number"]:focus {
-    outline: none;
-    border-color: var(--copper);
-    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .22);
-}
-
-.data-table input[type="checkbox"] {
-    width: 17px;
-    height: 17px;
-    accent-color: var(--copper);
-    cursor: pointer;
-}
-
-/* The review table has more columns than a phone has room for, so it
-   scrolls sideways inside its own wrapper rather than squeezing every
-   field down to nothing. */
-.data-table input[type="text"] { min-width: 120px; }
-.data-table input[type="number"] { min-width: 80px; }
-
-/* ---------- Menu import: fill stock for every row at once ---------- */
-.bulk-fill {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 9px;
-    margin: 14px 0 4px;
-    padding: 11px 14px;
-    border: 1px solid var(--espresso-700);
-    border-radius: var(--radius-sm);
-    background: var(--espresso-850);
-    font-size: 13px;
-    color: var(--cream-dim);
-}
-
-.bulk-fill label,
-.bulk-fill__and {
-    color: var(--cream-dim);
-    font-size: 13px;
-    font-weight: 600;
-    margin: 0;
-}
-
-/* Narrow on purpose: these hold a stock count, not a name. The table's
-   own input rule is wider, and this has to win over it. */
-.bulk-fill input[type="number"] {
-    width: 86px;
-    min-width: 0;
-    padding: 6px 9px;
-    font-size: 13px;
-    font-family: inherit;
-    color: var(--cream);
-    background: var(--espresso-900);
-    border: 1px solid var(--espresso-700);
-    border-radius: var(--radius-sm);
-}
-
-.bulk-fill input[type="number"]:focus {
-    outline: none;
-    border-color: var(--copper);
-    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .22);
-}
-
-/* No display property here on purpose - the "Applied" note is toggled
-   with the hidden attribute, and a display rule would override it. */
-.bulk-fill__done {
-    color: var(--sage);
-    font-weight: 700;
-}
-
-@media (max-width: 620px) {
-    .bulk-fill { font-size: 12px; }
-    .bulk-fill input[type="number"] { width: 72px; }
-}
-
 /* ---------- The cafe's own name and logo in the shell ---------- */
 /* The sidebar mark holds an uploaded logo now, not only an icon. */
 .brand-mark img {
@@ -2678,4 +2569,66 @@ body.nav-locked {
 
 @media (max-width: 430px) {
     .topbar-brand__name { font-size: 14px; }
+}
+
+/* ---------- The fill-the-screen button ---------- */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px solid var(--espresso-700);
+    border-radius: 12px;
+    background: var(--espresso-850);
+    color: var(--cream-dim);
+    font-size: 16px;
+    cursor: pointer;
+    transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+
+.icon-btn:hover {
+    background: var(--espresso-800);
+    border-color: var(--copper-dark);
+    color: var(--copper-light);
+}
+
+.icon-btn:focus-visible {
+    outline: none;
+    border-color: var(--copper);
+    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .26);
+}
+
+/* The top bar puts the profile at the right; this sits just inside it. */
+.fullscreen-btn { margin-left: auto; }
+
+/* Two icons, one drawn at a time: arrows out to fill, arrows in to leave.
+   Both selectors carry two classes so neither can be outranked by the
+   plain `.icon-btn i` rule the way the password eye once was. */
+.fullscreen-btn .bi-fullscreen-exit { display: none; }
+.fullscreen-btn[aria-pressed="true"] .bi-arrows-fullscreen { display: none; }
+.fullscreen-btn[aria-pressed="true"] .bi-fullscreen-exit { display: inline-block; }
+
+/* Once the brand is in the top bar the profile no longer needs pushing
+   right - the brand does it. Two auto margins would split the gap. */
+@media (max-width: 1024px),
+       (max-width: 1400px) and (pointer: coarse) {
+    .fullscreen-btn { margin-left: 0; }
+}
+
+@media (pointer: coarse) {
+    .icon-btn { width: 44px; height: 44px; }
+}
+
+/* A screen with no browser chrome has no back button either, so the app's
+   own chrome should not sit under a phone's rounded corners or camera. */
+@supports (padding: max(0px)) {
+    .app-shell {
+        padding-left: max(0px, env(safe-area-inset-left));
+        padding-right: max(0px, env(safe-area-inset-right));
+    }
+
+    .topbar { padding-top: max(0px, env(safe-area-inset-top)); }
 }

@@ -106,21 +106,14 @@ check("it does not drag in the app chrome",
       "the receipt is rendering inside the app shell")
 
 
-print("\n=== 2. The logo is printed when the café has one ===")
-check("no logo tag before one is uploaded",
+print("\n=== 2. The receipt names the cafe, with no empty logo frame ===")
+# Logos are left at the platform default now that there is no page to
+# upload one from, so the receipt must not print a frame where a logo
+# would have gone.
+check("no empty logo box is printed",
       "receipt__logo" not in html, "an empty logo box is being printed")
-
-a.post("/settings/branding", data={
-    "cafe_name": "Bean Scene",
-    "logo": (io.BytesIO(PNG), "logo.png"),
-    "_csrf_token": csrf(a)},
-    content_type="multipart/form-data", follow_redirects=True)
-
-html = a.get("/orders/%s/bill" % order_id).get_data(as_text=True)
-check("the logo appears once it is set",
-      "receipt__logo" in html and "/media/cafe/" in html,
-      "the uploaded logo is not on the receipt")
-
+check("the cafe is still named on the receipt",
+      "Bean Scene" in html, "the receipt does not name the cafe")
 
 print("\n=== 3. The kitchen ticket is the kitchen's ===")
 kot = a.get("/orders/%s/kot" % order_id)

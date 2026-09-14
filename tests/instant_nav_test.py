@@ -53,7 +53,7 @@ sign_up(client, "Instant Cafe", "instant_admin")
 
 PAGES = ["/dashboard", "/categories", "/foods", "/inventory",
          "/orders/add", "/orders", "/billing", "/reports", "/users",
-         "/account/password", "/settings/branding"]
+         "/account/password"]
 
 missing_view, missing_js = [], []
 for path in PAGES:
@@ -91,12 +91,12 @@ print("\n=== 1b. The swap region carries every script its page needs ===")
 # What this checks is the other half of the contract: that base.html really
 # does keep every page script between the markers.
 #
-# These are the shell's own scripts, the same three on every page and the
-# only ones allowed outside the markers: instant.js and password-view.js in
-# <head>, and the shell block at the end of <body>. Adding another to
-# base.html means raising this number - a page's own script appearing out
-# there is the thing being guarded against.
-SHELL_SCRIPTS = 3
+# These are the shell's own scripts, the same four on every page and the
+# only ones allowed outside the markers: instant.js, password-view.js and
+# fullscreen.js in <head>, and the shell block at the end of <body>.
+# Adding another to base.html means raising this number - a page's own
+# script appearing out there is the thing being guarded against.
+SHELL_SCRIPTS = 4
 
 missing_markers, stranded = [], []
 for path in PAGES:

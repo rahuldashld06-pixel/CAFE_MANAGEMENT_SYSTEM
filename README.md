@@ -23,16 +23,16 @@ branding, fully isolated from the others.
   are restricted to ordering, food, inventory and billing.
 - **Admin OTP login.** Admins with a mobile number on file confirm a
   6-digit code after their password.
-- **Per-cafe branding.** Each cafe sets its own display name, logo and
-  sign-in photo. Both appear in the sidebar on every page, and in the bar
-  that stays at the top on a phone, where the sidebar is a drawer.
+- **Cafe name in the shell.** The name a cafe signed up with appears in
+  the sidebar on every page, and in the bar that stays at the top on a
+  phone, where the sidebar is a drawer. Logo and sign-in photo are left at
+  the platform defaults.
 - **Theme colour.** An admin picks the accent the whole cafe's screens are
   painted in. Copper by default.
-- **Menu from a photo.** An admin photographs the printed menu card and the
-  foods, prices and categories are read off it. Everything read is shown
-  for correction before any of it is saved, with stock settable for every
-  row at once. Needs `ANTHROPIC_API_KEY` in the environment; without it the
-  page says so and nothing else changes.
+- **Installs as an app.** A web manifest asking for fullscreen display, so
+  "Install" in a browser or "Add to Home Screen" on a phone opens the site
+  with no address bar and no browser chrome. In an ordinary tab a button in
+  the top bar fills the screen instead, and remembers the choice.
 
 ## How tenant isolation works
 
@@ -48,10 +48,6 @@ is resolved, so it cannot drift when admins are added or deactivated.
 
 - Python 3.12
 - MySQL 8 (any managed provider — Aiven, PlanetScale, Railway)
-- Optional: an Anthropic API key, for reading a menu from a photograph.
-  Set `ANTHROPIC_API_KEY`; see `.env.example` for the two settings that go
-  with it. The photograph is sent to Anthropic's API to be read, so this
-  stays off until a key is set.
 
 No database dump to import: the app creates and migrates its own schema
 on first run. `docs/schema.sql` is a reference copy for review, or for
@@ -104,7 +100,7 @@ python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
-python tests/settings_test.py     # expect PASSED: 51   FAILED: 0
+python tests/settings_test.py     # expect PASSED: 48   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
@@ -120,8 +116,7 @@ python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
-python tests/menu_import_test.py  # expect PASSED: 56   FAILED: 0
-python tests/menu_review_test.py  # expect PASSED: 15   FAILED: 0
+python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
 ```
 
 All eighteen run in memory against a SQLite stand-in — no database or

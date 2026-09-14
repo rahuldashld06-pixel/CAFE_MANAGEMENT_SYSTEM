@@ -179,17 +179,18 @@ check("Demoting the only admin is refused",
       b"only active admin" in r.data or b"cannot deactivate" in r.data.lower(),
       r.data[:400])
 
-print("\n=== 7. Per-café branding ===")
-r = a.post("/settings/branding", data={
-    "cafe_name": "Alpha Coffee House", "_csrf_token": csrf(a)},
-    follow_redirects=True)
-check("Café A can rename its branding",
-      b"Alpha Coffee House" in r.data, r.data[:400])
+print("\n=== 7. Each cafe is named in its own shell ===")
+# Branding used to be a single JSON file at the project root, so one cafe
+# renaming itself renamed every cafe. The name now comes from what each
+# cafe signed up with, and this is what guards the isolation.
+r = a.get("/orders/add")
+check("cafe A's shell carries cafe A's name",
+      "Alpha".encode() in r.data, r.data[:400])
 
-r = b.get("/settings/branding")
-check("Café B's branding is unaffected by café A's change "
-      "(branding was a single shared JSON file)",
-      b"Alpha Coffee House" not in r.data, r.data[:400])
+r = b.get("/orders/add")
+check("and cafe B's carries its own, not cafe A's",
+      "Beta".encode() in r.data and "Alpha".encode() not in r.data,
+      r.data[:400])
 
 print("\n=== 8. Password reset hardening ===")
 r = b.get("/logout", follow_redirects=True)

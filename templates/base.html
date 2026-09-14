@@ -7,6 +7,22 @@
 
     <title>{% block title %}Cafe Manager{% endblock %}</title>
 
+    {# Installed from the browser's "Install" or "Add to Home Screen", the
+       site opens with no address bar and no browser chrome at all, every
+       time. That is the only way a page gets a genuinely full screen the
+       moment it opens - the Fullscreen API will not run without a tap.
+       use-credentials so the manifest is fetched with the session and can
+       carry this cafe's own name and icon. #}
+    <link rel="manifest" href="{{ url_for('web_manifest') }}"
+          crossorigin="use-credentials">
+    <meta name="theme-color" content="#170F0B">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="{{ cafe_branding.cafe_name }}">
+    <link rel="apple-touch-icon"
+          href="{{ url_for('static', filename='icons/app-192.png', v=asset_version) }}">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -33,6 +49,7 @@
        window.Instant already existing when it runs. #}
     <script src="{{ url_for('static', filename='js/instant.js', v=asset_version) }}"></script>
     <script src="{{ url_for('static', filename='js/password-view.js', v=asset_version) }}" defer></script>
+    <script src="{{ url_for('static', filename='js/fullscreen.js', v=asset_version) }}" defer></script>
 </head>
 
 <body>
@@ -145,6 +162,20 @@
                     <span class="topbar-brand__name">{{ cafe_branding.cafe_name }}</span>
                 </a>
 
+                {# Hidden by script where the browser has no Fullscreen
+                   API - an iPhone in Safari has none, and there the
+                   installed app is the way to a full screen. #}
+                <button type="button"
+                        class="icon-btn fullscreen-btn"
+                        id="fullscreenBtn"
+                        hidden
+                        aria-pressed="false"
+                        aria-label="Fill the screen"
+                        title="Fill the screen">
+                    <i class="bi bi-arrows-fullscreen" aria-hidden="true"></i>
+                    <i class="bi bi-fullscreen-exit" aria-hidden="true"></i>
+                </button>
+
                 <div class="profile-menu" id="profileMenu">
 
                     <button type="button" class="profile-trigger" id="profileTrigger">
@@ -209,10 +240,6 @@
                         {% if session.get('role') == 'admin' %}
                         <div class="profile-dropdown__section">Customize</div>
 
-                        <a href="{{ url_for('branding') }}" class="profile-dropdown__item">
-                            <i class="bi bi-palette"></i><span>Cafe Branding &amp; Login Photo</span>
-                        </a>
-
                         {# Admin only: the rate decides what every future bill
                            charges, so it is not a cashier's to move. #}
                         <a href="{{ url_for('tax_settings') }}" class="profile-dropdown__item">
@@ -223,13 +250,6 @@
                            cafe - so it is not a personal setting to hand out. #}
                         <a href="{{ url_for('theme_settings') }}" class="profile-dropdown__item">
                             <i class="bi bi-droplet-half"></i><span>Theme Colour</span>
-                        </a>
-
-                        {# Admin only: this writes prices across the whole
-                           menu at once, which is not the same thing as
-                           adding one dish. #}
-                        <a href="{{ url_for('menu_import') }}" class="profile-dropdown__item">
-                            <i class="bi bi-card-image"></i><span>Menu from a Photo</span>
                         </a>
                         {% endif %}
 
