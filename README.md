@@ -29,8 +29,9 @@ branding, fully isolated from the others.
   painted in. Copper by default.
 - **Menu from a photo.** An admin photographs the printed menu card and the
   foods, prices and categories are read off it. Everything read is shown
-  for correction before any of it is saved. Needs `ANTHROPIC_API_KEY` in
-  the environment; without it the page says so and nothing else changes.
+  for correction before any of it is saved, with stock settable for every
+  row at once. Needs `ANTHROPIC_API_KEY` in the environment; without it the
+  page says so and nothing else changes.
 
 ## How tenant isolation works
 
@@ -119,6 +120,7 @@ python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
 python tests/menu_import_test.py  # expect PASSED: 56   FAILED: 0
+python tests/menu_review_test.py  # expect PASSED: 15   FAILED: 0
 ```
 
 All eighteen run in memory against a SQLite stand-in — no database or

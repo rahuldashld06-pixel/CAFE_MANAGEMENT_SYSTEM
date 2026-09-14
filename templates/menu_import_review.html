@@ -26,12 +26,30 @@
         <div class="note-card">
             <i class="bi bi-info-circle"></i>
             <div>
-                Stock starts at zero, which means nothing here can be ordered
-                until you set it. Fill the Stock column now, or leave it and
-                set it in Inventory afterwards. An item already on your menu
-                is marked &mdash; saving updates its price rather than adding
-                a second copy.
+                Stock starts at zero, which means nothing here can be
+                ordered until you set it. Set it below &mdash; one row at a
+                time, or every row at once with the box underneath &mdash; or
+                leave it and use Inventory afterwards. An item already on your
+                menu is marked: saving updates its price rather than adding a
+                second copy.
             </div>
+        </div>
+
+        {# Setting stock one row at a time is fine for five items and
+           miserable for forty, which is the size of menu this feature
+           exists for. #}
+        <div class="bulk-fill">
+            <label for="bulkStock">Set every row to</label>
+            <input type="number" id="bulkStock" value="0" min="0" step="1"
+                   aria-label="Stock for every row">
+            <span class="bulk-fill__and">in stock, minimum</span>
+            <input type="number" id="bulkMin" value="0" min="0" step="1"
+                   aria-label="Minimum stock for every row">
+            <button type="button" class="btn btn--ghost btn--sm"
+                    id="bulkApply">
+                <i class="bi bi-arrow-down-up"></i> Apply to all
+            </button>
+            <span class="bulk-fill__done" id="bulkDone" hidden>Applied</span>
         </div>
 
         <div class="table-wrap">
@@ -141,13 +159,39 @@
 <script>
     (function () {
         var all = document.getElementById("checkAll");
-        if (!all) return;
+        if (all) {
+            all.addEventListener("change", function () {
+                var ticks = document.querySelectorAll(".row-tick");
+                for (var i = 0; i < ticks.length; i++) {
+                    ticks[i].checked = all.checked;
+                }
+            });
+        }
 
-        all.addEventListener("change", function () {
-            var ticks = document.querySelectorAll(".row-tick");
-            for (var i = 0; i < ticks.length; i++) {
-                ticks[i].checked = all.checked;
+        var apply = document.getElementById("bulkApply");
+        if (!apply) return;
+
+        apply.addEventListener("click", function () {
+            var stock = document.getElementById("bulkStock").value;
+            var minimum = document.getElementById("bulkMin").value;
+
+            function fill(prefix, value) {
+                var fields = document.querySelectorAll(
+                    'input[name^="' + prefix + '"]');
+                for (var i = 0; i < fields.length; i++) {
+                    fields[i].value = value;
+                }
             }
+
+            fill("quantity_", stock);
+            fill("minimum_stock_", minimum);
+
+            // Say it happened. Filling forty fields that were already 0
+            // with 0 looks like the button did nothing.
+            var done = document.getElementById("bulkDone");
+            if (!done) return;
+            done.hidden = false;
+            window.setTimeout(function () { done.hidden = true; }, 1800);
         });
     }());
 </script>

@@ -2540,3 +2540,58 @@ body.nav-locked {
    field down to nothing. */
 .data-table input[type="text"] { min-width: 120px; }
 .data-table input[type="number"] { min-width: 80px; }
+
+/* ---------- Menu import: fill stock for every row at once ---------- */
+.bulk-fill {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 9px;
+    margin: 14px 0 4px;
+    padding: 11px 14px;
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-sm);
+    background: var(--espresso-850);
+    font-size: 13px;
+    color: var(--cream-dim);
+}
+
+.bulk-fill label,
+.bulk-fill__and {
+    color: var(--cream-dim);
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* Narrow on purpose: these hold a stock count, not a name. The table's
+   own input rule is wider, and this has to win over it. */
+.bulk-fill input[type="number"] {
+    width: 86px;
+    min-width: 0;
+    padding: 6px 9px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--cream);
+    background: var(--espresso-900);
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-sm);
+}
+
+.bulk-fill input[type="number"]:focus {
+    outline: none;
+    border-color: var(--copper);
+    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .22);
+}
+
+/* No display property here on purpose - the "Applied" note is toggled
+   with the hidden attribute, and a display rule would override it. */
+.bulk-fill__done {
+    color: var(--sage);
+    font-weight: 700;
+}
+
+@media (max-width: 620px) {
+    .bulk-fill { font-size: 12px; }
+    .bulk-fill input[type="number"] { width: 72px; }
+}
