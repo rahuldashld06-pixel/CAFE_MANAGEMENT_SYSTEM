@@ -89,8 +89,15 @@ print("\n=== 1b. The swap region carries every script its page needs ===")
 # payment handler. Slicing the raw text makes that markup defect harmless.
 #
 # What this checks is the other half of the contract: that base.html really
-# does keep every page script between the markers. Each page ships exactly
-# two outside them - instant.js in <head>, the shell script at end of <body>.
+# does keep every page script between the markers.
+#
+# These are the shell's own scripts, the same three on every page and the
+# only ones allowed outside the markers: instant.js and password-view.js in
+# <head>, and the shell block at the end of <body>. Adding another to
+# base.html means raising this number - a page's own script appearing out
+# there is the thing being guarded against.
+SHELL_SCRIPTS = 3
+
 missing_markers, stranded = [], []
 for path in PAGES:
     body = client.get(path).get_data(as_text=True)
@@ -100,8 +107,9 @@ for path in PAGES:
     region = body[body.index("<!--pv:start-->"):body.rindex("<!--pv:end-->")]
     total = len(re.findall(r"<script", body))
     inside = len(re.findall(r"<script", region))
-    if inside != total - 2:
-        stranded.append("%s (%d of %d inside)" % (path, inside, total - 2))
+    if inside != total - SHELL_SCRIPTS:
+        stranded.append("%s (%d of %d inside)"
+                        % (path, inside, total - SHELL_SCRIPTS))
 
 check("every page marks its swap region exactly once",
       not missing_markers, "markers wrong on: %s" % missing_markers)

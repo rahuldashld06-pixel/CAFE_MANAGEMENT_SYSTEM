@@ -27,10 +27,12 @@
        the whole app stylesheet. #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=asset_version) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/password-view.css', v=asset_version) }}">
 
     {# Loaded here, not deferred: every page script below relies on
        window.Instant already existing when it runs. #}
     <script src="{{ url_for('static', filename='js/instant.js', v=asset_version) }}"></script>
+    <script src="{{ url_for('static', filename='js/password-view.js', v=asset_version) }}" defer></script>
 </head>
 
 <body>
