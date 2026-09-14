@@ -25,6 +25,12 @@ branding, fully isolated from the others.
   6-digit code after their password.
 - **Per-cafe branding.** Each cafe sets its own display name, logo and
   sign-in photo.
+- **Theme colour.** An admin picks the accent the whole cafe's screens are
+  painted in. Copper by default.
+- **Menu from a photo.** An admin photographs the printed menu card and the
+  foods, prices and categories are read off it. Everything read is shown
+  for correction before any of it is saved. Needs `ANTHROPIC_API_KEY` in
+  the environment; without it the page says so and nothing else changes.
 
 ## How tenant isolation works
 
@@ -40,6 +46,10 @@ is resolved, so it cannot drift when admins are added or deactivated.
 
 - Python 3.12
 - MySQL 8 (any managed provider — Aiven, PlanetScale, Railway)
+- Optional: an Anthropic API key, for reading a menu from a photograph.
+  Set `ANTHROPIC_API_KEY`; see `.env.example` for the two settings that go
+  with it. The photograph is sent to Anthropic's API to be read, so this
+  stays off until a key is set.
 
 No database dump to import: the app creates and migrates its own schema
 on first run. `docs/schema.sql` is a reference copy for review, or for
@@ -108,6 +118,7 @@ python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
+python tests/menu_import_test.py  # expect PASSED: 56   FAILED: 0
 ```
 
 All eighteen run in memory against a SQLite stand-in — no database or

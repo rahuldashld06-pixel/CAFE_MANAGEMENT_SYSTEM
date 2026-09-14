@@ -200,6 +200,13 @@
                         <a href="{{ url_for('theme_settings') }}" class="profile-dropdown__item">
                             <i class="bi bi-droplet-half"></i><span>Theme Colour</span>
                         </a>
+
+                        {# Admin only: this writes prices across the whole
+                           menu at once, which is not the same thing as
+                           adding one dish. #}
+                        <a href="{{ url_for('menu_import') }}" class="profile-dropdown__item">
+                            <i class="bi bi-card-image"></i><span>Menu from a Photo</span>
+                        </a>
                         {% endif %}
 
                         <div class="profile-dropdown__divider"></div>

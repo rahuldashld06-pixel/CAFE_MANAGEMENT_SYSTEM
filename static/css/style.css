@@ -738,6 +738,13 @@ textarea:focus-visible {
     color: var(--amber-warn);
 }
 
+/* "this row changes something that already exists", in the cafe's own
+   accent so it reads as neutral rather than as a warning. */
+.badge--update {
+    background: rgba(var(--copper-rgb), .16);
+    color: var(--copper-light);
+}
+
 /* legacy inline-style compatible classes used in original markup */
 .available {
     color: var(--sage);
@@ -2485,3 +2492,51 @@ body.nav-locked {
 @media (max-width: 520px) {
     .theme-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- Menu import: the review table ---------- */
+/* A note that is a warning rather than an aside. */
+.note-card--warn {
+    border-color: var(--amber-warn);
+    background: rgba(242, 166, 90, .08);
+    color: var(--cream-dim);
+}
+
+.note-card--warn i { color: var(--amber-warn); }
+
+.note-card strong { color: var(--cream); }
+
+/* The review rows are editable, so the table is full of inputs. Without
+   this they inherit the form-panel's block styling and each cell becomes
+   a paragraph tall. */
+.data-table input[type="text"],
+.data-table input[type="number"] {
+    width: 100%;
+    min-width: 0;
+    padding: 7px 9px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--cream);
+    background: var(--espresso-900);
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-sm);
+}
+
+.data-table input[type="text"]:focus,
+.data-table input[type="number"]:focus {
+    outline: none;
+    border-color: var(--copper);
+    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .22);
+}
+
+.data-table input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    accent-color: var(--copper);
+    cursor: pointer;
+}
+
+/* The review table has more columns than a phone has room for, so it
+   scrolls sideways inside its own wrapper rather than squeezing every
+   field down to nothing. */
+.data-table input[type="text"] { min-width: 120px; }
+.data-table input[type="number"] { min-width: 80px; }
