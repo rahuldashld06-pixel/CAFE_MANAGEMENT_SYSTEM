@@ -289,6 +289,54 @@ check("and they follow the order the menu was built in",
       "the backfill scrambled the order: %s" % by_owner)
 
 
+print("\n=== 10. Inventory shows the same numbers as Food Management ===")
+# These were two different sequences: Food Management counted foods and
+# Inventory counted its own rows, so the same item had two ids depending
+# on which screen you were looking at.
+numbered = sign_up("Shelf Cafe", "shelf")
+for item in ("Espresso", "Muffin", "Scone", "Tart"):
+    add_food(numbered, item)
+
+
+def inventory(client):
+    return ROW.findall(client.get("/inventory").get_data(as_text=True))
+
+
+check("both screens list the same items with the same numbers",
+      inventory(numbered) == menu(numbered),
+      "Food Management %s, Inventory %s"
+      % (menu(numbered), inventory(numbered)))
+
+delete_food(numbered, id_of(numbered, "Scone"))
+add_food(numbered, "Flapjack")
+
+check("and they stay in step when a number is freed and refilled",
+      inventory(numbered) == menu(numbered),
+      "Food Management %s, Inventory %s"
+      % (menu(numbered), inventory(numbered)))
+check("the refilled number is the freed one on both",
+      ("3", "Flapjack") in inventory(numbered),
+      "Inventory reads %s" % inventory(numbered))
+
+
+print("\n=== 11. Deleting a category does not empty the shelf ===")
+# foods.category_id is ON DELETE SET NULL, and Inventory used to join
+# categories with an inner join - so every food of a deleted category
+# dropped off Inventory while still sitting in Food Management.
+listing = numbered.get("/categories").get_data(as_text=True)
+category_id = re.search(r"/categories/edit/(\d+)", listing).group(1)
+numbered.post("/categories/delete/%s" % category_id,
+              data={"_csrf_token": csrf(numbered)}, follow_redirects=True)
+
+check("the food is still on Food Management", len(menu(numbered)) == 4,
+      "Food Management reads %s" % menu(numbered))
+check("and still on Inventory", len(inventory(numbered)) == 4,
+      "Inventory reads %s" % inventory(numbered))
+check("with the two still agreeing",
+      inventory(numbered) == menu(numbered),
+      "Food Management %s, Inventory %s"
+      % (menu(numbered), inventory(numbered)))
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

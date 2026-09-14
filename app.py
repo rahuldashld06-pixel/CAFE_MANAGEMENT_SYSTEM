@@ -2449,6 +2449,10 @@ def inventory():
             SELECT
                 i.inventory_id,
                 i.food_id,
+                -- The same number Food Management shows, so a member of
+                -- staff reading one list against the other is looking at
+                -- one set of ids rather than two.
+                COALESCE(f.food_no, f.food_id) AS food_no,
                 f.food_name,
                 c.category_name,
                 f.price,
@@ -2465,12 +2469,16 @@ def inventory():
             JOIN foods f
                 ON i.food_id = f.food_id
 
-            JOIN categories c
+            -- LEFT, not INNER: a food whose category was deleted has a
+            -- NULL category_id, and an inner join dropped it out of
+            -- Inventory altogether while it still sat in Food Management.
+            LEFT JOIN categories c
                 ON f.category_id = c.category_id
 
             WHERE f.user_id = %s
 
-            ORDER BY i.inventory_id ASC
+            -- Same order as Food Management, for the same reason.
+            ORDER BY COALESCE(f.food_no, f.food_id) ASC
         """, (scope_user_id(),))
 
         inventory_list = cursor.fetchall()

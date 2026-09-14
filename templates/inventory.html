@@ -55,7 +55,10 @@
                 <tbody>
                 {% for item in inventory %}
                     <tr>
-                        <td>{{ item.inventory_id }}</td>
+                        {# The menu number from Food Management, not the
+                           inventory row's own id - they are different
+                           sequences and showing both confused people. #}
+                        <td>{{ item.food_no }}</td>
                         <td class="cell-strong">{{ item.food_name }}</td>
                         <td>{{ item.category_name }}</td>
                         <td>₹{{ item.price }}</td>
