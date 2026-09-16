@@ -1,3 +1,4 @@
+{% from "_brand_mark.html" import coffee_mark %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ cafe_theme }}">
 <head>
@@ -22,83 +23,123 @@
 
 <div class="receipt" id="receipt">
 
-    <header class="receipt__head">
+    {# The cafe's own symbol, very pale, behind everything. Printers drop
+       backgrounds by default, so print.css asks for it explicitly. #}
+    <div class="receipt__watermark" aria-hidden="true">
         {% if branding.logo %}
-        <img src="{{ branding.logo }}" alt="" class="receipt__logo">
-        {% endif %}
-        <h1 class="receipt__cafe">{{ branding.cafe_name }}</h1>
-        <p class="receipt__kind">Tax Invoice</p>
-    </header>
-
-    <dl class="receipt__meta">
-        <div><dt>Order</dt><dd>#{{ order.order_id }}</dd></div>
-        {% if bill %}
-        <div><dt>Bill</dt><dd>#{{ bill.bill_id }}</dd></div>
-        {% endif %}
-        <div><dt>Date</dt><dd>{{ order.order_date }}</dd></div>
-        <div><dt>Status</dt><dd>{{ order.order_status }}</dd></div>
-    </dl>
-
-    <table class="receipt__items">
-        <thead>
-            <tr>
-                <th class="col-item">Item</th>
-                <th class="col-qty">Qty</th>
-                <th class="col-rate">Rate</th>
-                <th class="col-amount">Amount</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in items %}
-            <tr>
-                <td class="col-item">{{ item.food_name }}</td>
-                <td class="col-qty">{{ item.quantity }}</td>
-                <td class="col-rate">{{ "%.2f"|format(item.price) }}</td>
-                <td class="col-amount">{{ "%.2f"|format(item.subtotal) }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4" class="receipt__empty">This order has no items.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    {# Totals come from the bill when one exists, so a printed receipt always
-       matches what was actually charged - including a tax rate that has since
-       been changed. Before a bill is raised, the order total is all there is. #}
-    <div class="receipt__totals">
-        {% if bill %}
-        <div><span>Subtotal</span><span>{{ "%.2f"|format(bill.subtotal) }}</span></div>
-        <div><span>Tax</span><span>{{ "%.2f"|format(bill.tax) }}</span></div>
-        {% if bill.discount and bill.discount > 0 %}
-        <div><span>Discount</span><span>-{{ "%.2f"|format(bill.discount) }}</span></div>
-        {% endif %}
-        <div class="receipt__grand">
-            <span>Total</span><span>₹{{ "%.2f"|format(bill.total_amount) }}</span>
-        </div>
-        <div class="receipt__pay">
-            <span>{{ bill.payment_method or "Cash" }}</span>
-            <span class="receipt__status">{{ bill.payment_status or "Pending" }}</span>
-        </div>
+        <img src="{{ branding.logo }}" alt="">
         {% else %}
-        <div class="receipt__grand">
-            <span>Total</span><span>₹{{ "%.2f"|format(order.total_amount) }}</span>
-        </div>
-        <div class="receipt__pay">
-            <span>Not billed yet</span>
-        </div>
+        {{ coffee_mark() }}
         {% endif %}
     </div>
 
-    <footer class="receipt__foot">
-        <p>Thank you, and see you again.</p>
-        {% if not bill %}
-        <p class="receipt__note">
-            This is an order summary. A tax invoice is issued once the bill
-            is raised on the Billing page.
-        </p>
-        {% endif %}
-    </footer>
+    <div class="receipt__sheet">
 
+        <header class="receipt__head">
+            {% if branding.logo %}
+            <img src="{{ branding.logo }}" alt="" class="receipt__logo">
+            {% endif %}
+
+            <h1 class="receipt__cafe">{{ branding.cafe_name }}</h1>
+
+            <div class="receipt__rule" aria-hidden="true">
+                <span></span><i>&#10022;</i><span></span>
+            </div>
+
+            <p class="receipt__kind">{{ "Tax Invoice" if bill else "Order Summary" }}</p>
+        </header>
+
+        <dl class="receipt__meta">
+            <div><dt>Order</dt><dd>#{{ order.order_id }}</dd></div>
+            {% if bill %}
+            <div><dt>Bill</dt><dd>#{{ bill.bill_id }}</dd></div>
+            {% endif %}
+            <div class="receipt__meta--wide"><dt>Date</dt><dd>{{ order.order_date|receipt_time }}</dd></div>
+            <div><dt>Status</dt><dd>{{ order.order_status }}</dd></div>
+        </dl>
+
+        <table class="receipt__items">
+            <thead>
+                <tr>
+                    <th class="col-item">Item</th>
+                    <th class="col-qty">Qty</th>
+                    <th class="col-rate">Rate</th>
+                    <th class="col-amount">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="col-item">{{ item.food_name }}</td>
+                    <td class="col-qty">{{ item.quantity }}</td>
+                    <td class="col-rate">{{ "%.2f"|format(item.price|float) }}</td>
+                    <td class="col-amount">{{ "%.2f"|format((item.price|float) * (item.quantity|int)) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="receipt__empty">This order has no items.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="receipt__totals">
+            {% if bill %}
+            <div class="receipt__line">
+                <span>Subtotal</span>
+                <span>{{ "%.2f"|format(bill.subtotal|float) }}</span>
+            </div>
+            <div class="receipt__line">
+                <span>Tax ({{ tax_percent }}%)</span>
+                <span>{{ "%.2f"|format(bill.tax|float) }}</span>
+            </div>
+            <div class="receipt__grand">
+                <span>Total</span>
+                <span>₹{{ "%.2f"|format(bill.total_amount|float) }}</span>
+            </div>
+            <div class="receipt__pay">
+                <span>{{ bill.payment_method or "Cash" }}</span>
+                <span class="receipt__status">{{ bill.payment_status or "Pending" }}</span>
+            </div>
+            {% else %}
+            <div class="receipt__grand">
+                <span>Order total</span>
+                <span>₹{{ "%.2f"|format(order.total_amount|float) }}</span>
+            </div>
+            <div class="receipt__pay">
+                <span>Not yet billed</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <footer class="receipt__foot">
+
+            <p class="receipt__thanks">Thank you, and see you again.</p>
+
+            <p class="receipt__quote">&ldquo;{{ quote }}&rdquo;</p>
+
+            {% if not bill %}
+            <p class="receipt__note">
+                This is an order summary. A tax invoice is issued once the
+                bill is raised on the Billing page.
+            </p>
+            {% endif %}
+
+            <div class="receipt__rule receipt__rule--fine" aria-hidden="true">
+                <span></span><i>&#10022;</i><span></span>
+            </div>
+
+            <p class="receipt__served">
+                Served by <strong>{{ branding.cafe_name }}</strong>
+            </p>
+            <p class="receipt__printed">
+                Printed {{ printed_at.strftime("%d %b %Y, %I:%M %p") }}
+            </p>
+            <p class="receipt__system">
+                Orders, stock and billing run on Cafe Manager
+            </p>
+
+        </footer>
+
+    </div>
 </div>
 
 <script>

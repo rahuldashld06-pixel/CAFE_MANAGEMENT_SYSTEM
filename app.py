@@ -2730,6 +2730,27 @@ def format_order_time(value):
     return value.strftime("%d %b, %I:%M %p")
 
 
+def format_receipt_time(value):
+    """
+    The same instant on a printed bill, with the year.
+
+    A receipt outlives the day it was printed on, so "13 Sep" alone is not
+    enough on something a customer keeps. Handles the same two shapes
+    format_order_time does, for the same reason.
+    """
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return value
+    return value.strftime("%d %b %Y, %I:%M %p")
+
+
+app.jinja_env.filters["receipt_time"] = format_receipt_time
+
+
 @app.route("/api/order-status")
 def order_status_feed():
     """Lightweight JSON feed of the most recent orders and their status,
@@ -3531,6 +3552,8 @@ def print_bill(order_id):
             "print_bill.html",
             branding=get_cafe_branding(session.get("cafe_id")),
             tax_percent=get_tax_percent(),
+            quote=quote_for(order_id),
+            printed_at=datetime.now(),
             **data
         )
     except mysql.connector.Error as error:
@@ -5846,6 +5869,39 @@ def delete_user(user_id):
 # exactly what every café saw before the wording was customisable.
 DEFAULT_BRAND_NAME = "Cafe Manager"
 DEFAULT_BRAND_TAGLINE = "Food & Service Admin"
+
+
+# A line for the foot of a customer's bill. Plain sayings rather than
+# quotations, so nothing is put in anyone's mouth: attributing a famous
+# line to the wrong person on a printed receipt is not a mistake a café
+# should be making on our behalf.
+CAFE_QUOTES = [
+    "Life begins after coffee.",
+    "Brewed with care, served with a smile.",
+    "Come for the coffee, stay for the company.",
+    "A little coffee, a lot of happiness.",
+    "Good food, good mood.",
+    "Where every cup tells a story.",
+    "Made fresh this morning, served warm just now.",
+    "Happiness is a full cup and good company.",
+    "The best conversations start over a warm cup.",
+    "Every order here is made one at a time.",
+]
+
+
+def quote_for(seed):
+    """
+    The line printed on one bill.
+
+    Chosen from the order's own number rather than at random, so the same
+    bill reprinted says the same thing - a customer handed two copies
+    should not find two different footers.
+    """
+    try:
+        index = int(seed)
+    except (TypeError, ValueError):
+        index = 0
+    return CAFE_QUOTES[index % len(CAFE_QUOTES)]
 
 
 def today_weekday():

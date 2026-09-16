@@ -80,6 +80,8 @@
     box-shadow: 0 12px 40px rgba(0, 0, 0, .45);
     font-size: 12px;
     line-height: 1.45;
+    position: relative;
+    overflow: hidden;
 }
 
 .receipt__head {
@@ -97,9 +99,45 @@
 
 .receipt__cafe {
     margin: 0;
-    font-size: 17px;
-    font-weight: 800;
+    /* A serif for the name only. It is the one line a customer reads as
+       the cafe rather than as data, and every machine has one of these. */
+    font-family: "Georgia", "Iowan Old Style", "Times New Roman", serif;
+    font-size: 20px;
+    font-weight: 700;
     letter-spacing: .01em;
+    line-height: 1.2;
+}
+
+/* A thin rule with a small diamond in the middle, above the invoice
+   kind and again above the footer. Drawn from borders so it survives a
+   printer that refuses backgrounds. */
+.receipt__rule {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin: 7px 0 5px;
+}
+
+.receipt__rule span {
+    flex: 1 1 auto;
+    height: 0;
+    border-top: 1px solid var(--rule);
+}
+
+.receipt__rule i {
+    font-style: normal;
+    font-size: 8px;
+    line-height: 1;
+    color: var(--ink-soft);
+}
+
+.receipt__rule--fine {
+    margin: 9px 0 7px;
+}
+
+.receipt__rule--fine span {
+    border-top-style: dashed;
 }
 
 .receipt__kind {
@@ -121,8 +159,22 @@
 }
 
 .receipt__meta div { display: flex; gap: 5px; }
-.receipt__meta dt { margin: 0; color: var(--ink-soft); }
+.receipt__meta dt { margin: 0; color: var(--ink-soft); white-space: nowrap; }
 .receipt__meta dd { margin: 0; font-weight: 700; }
+
+/* The date carries the year, so it is too long for half the width and
+   broke "05:13 AM" across two lines. It takes a row of its own. */
+.receipt__meta div:has(> dt:first-child) {
+    min-width: 0;
+}
+
+.receipt__meta .receipt__meta--wide {
+    grid-column: 1 / -1;
+}
+
+.receipt__meta .receipt__meta--wide dd {
+    white-space: nowrap;
+}
 
 .receipt__items {
     width: 100%;
@@ -193,6 +245,69 @@
 
 .receipt__foot p { margin: 0 0 4px; }
 .receipt__note { font-size: 10px; }
+
+.receipt__thanks {
+    font-size: 11.5px;
+    color: var(--ink);
+}
+
+/* The cafe's own line. Italic serif, so it reads as a saying rather
+   than as another row of the bill. */
+.receipt__quote {
+    font-family: "Georgia", "Iowan Old Style", "Times New Roman", serif;
+    font-style: italic;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--ink);
+    margin: 6px 10px 2px !important;
+}
+
+.receipt__served {
+    font-size: 11px;
+    color: var(--ink);
+}
+
+.receipt__served strong { font-weight: 700; }
+
+.receipt__printed,
+.receipt__system {
+    font-size: 9.5px;
+    letter-spacing: .04em;
+    color: var(--ink-soft);
+}
+
+.receipt__system {
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    opacity: .75;
+}
+
+/* ---------- The symbol behind the bill ---------- */
+/* Pale enough to read straight through, and centred on the whole
+   receipt rather than on any one section. */
+.receipt__sheet {
+    position: relative;
+    z-index: 1;
+}
+
+.receipt__watermark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 62%;
+    transform: translate(-50%, -50%);
+    opacity: .06;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.receipt__watermark img,
+.receipt__watermark svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    color: var(--ink);
+}
 
 /* ---------- Kitchen ticket ---------- */
 /* Read at a glance across a pass, so everything is larger and there is
@@ -282,6 +397,15 @@
         padding: 0;
         border-radius: 0;
         box-shadow: none;
+    }
+
+    /* Printers drop backgrounds and pale artwork unless asked not to.
+       Without this the symbol behind the bill simply would not come
+       out, which is the whole point of it. */
+    .receipt__watermark {
+        opacity: .07;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 
     /* Keep a line's quantity with its name rather than splitting one

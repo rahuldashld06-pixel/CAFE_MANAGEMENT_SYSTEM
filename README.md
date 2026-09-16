@@ -29,6 +29,9 @@ branding, fully isolated from the others.
   cup, and clearing a field puts that default back rather than leaving a
   blank corner. The same name is in the bar that stays at the top on a
   phone.
+- **A customer's bill is dressed for a customer.** The cafe's name in a
+  serif, its symbol pale behind the text, a line at the foot chosen from
+  the order's own number so a reprint reads the same, and who served it.
 - **Nothing reloads the whole page.** Following a link swaps only the page
   region, and saving a form now does the same: the post is sent in the
   background and the page that comes back is swapped in, so the sidebar,
@@ -120,8 +123,8 @@ python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 66   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
-python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
-python tests/print_test.py        # expect PASSED: 29   FAILED: 0
+python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
+python tests/print_test.py        # expect PASSED: 39   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 35   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 25   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 23   FAILED: 0
@@ -129,7 +132,7 @@ python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 62   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 84   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0

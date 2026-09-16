@@ -96,7 +96,8 @@ check("it shows quantities and rates",
       "line detail is missing")
 
 totals = dict(re.findall(
-    r'<span>(Subtotal|Tax|Total)</span><span>[^\d-]*([\d.]+)</span>', html))
+    r'<span>(Subtotal|Tax|Total)[^<]*</span>\s*<span>[^\d-]*([\d.]+)</span>',
+    html))
 check("subtotal, tax and total are all printed",
       totals.get("Subtotal") == "360.00" and totals.get("Tax") == "18.00"
       and totals.get("Total") == "378.00",
@@ -194,17 +195,23 @@ html = a.get("/orders/%s/bill" % fresh).get_data(as_text=True)
 check("it still prints the items", "Latte" in html, "the receipt is empty")
 check("it falls back to the order total", "120.00" in html,
       "no total was printed")
+# The heading, not the footnote - which mentions a tax invoice precisely
+# to explain that this is not one.
+kind = re.search(r'class="receipt__kind">([^<]+)<', html)
 check("and does not claim to be a tax invoice",
-      "not billed yet" in html.lower(),
-      "the receipt claims to be a tax invoice when no bill exists")
+      kind is not None and kind.group(1).strip() == "Order Summary",
+      "the receipt is headed %r"
+      % (kind.group(1).strip() if kind else None))
 
 
 print("\n=== 9. A printed bill keeps the rate it was charged at ===")
-before = re.search(r'<span>Tax</span><span>[^\d]*([\d.]+)</span>',
+TAX_LINE = r'<span>Tax[^<]*</span>\s*<span>[^\d-]*([\d.]+)</span>'
+
+before = re.search(TAX_LINE,
                    a.get("/orders/%s/bill" % order_id).get_data(as_text=True))
 a.post("/settings/tax", data={"tax_percent": "25", "_csrf_token": csrf(a)},
        follow_redirects=True)
-after = re.search(r'<span>Tax</span><span>[^\d]*([\d.]+)</span>',
+after = re.search(TAX_LINE,
                   a.get("/orders/%s/bill" % order_id).get_data(as_text=True))
 check("changing the tax rate does not rewrite an old receipt",
       before and after and before.group(1) == after.group(1) == "18.00",
@@ -222,6 +229,58 @@ check("they open in their own tab",
       page.count('target="_blank"') >= 2,
       "printing would navigate away from the order")
 
+
+print("\n=== 6. The customer's bill is dressed for a customer ===")
+bill_html = a.get("/orders/%s/bill" % order_id).get_data(as_text=True)
+
+check("the cafe's symbol sits behind the bill",
+      'class="receipt__watermark"' in bill_html,
+      "there is nothing behind the text")
+check("and a cafe with no symbol still gets one drawn",
+      "brand-glyph" in bill_html,
+      "an empty watermark is rendered when no logo is uploaded")
+
+quote = re.search(r'class="receipt__quote">\s*&ldquo;(.+?)&rdquo;',
+                  bill_html, re.S)
+check("a line is printed at the foot", quote is not None,
+      "no quote on the bill")
+check("and it is one of the cafe's own",
+      quote and quote.group(1).strip() in application.CAFE_QUOTES,
+      "printed %r, which is not in the list"
+      % (quote.group(1).strip() if quote else None))
+
+check("the bill says who served it",
+      "Served by" in bill_html and "Bean Scene" in bill_html,
+      "the cafe is not named as the server")
+check("and what it was run on",
+      "Cafe Manager" in bill_html,
+      "the system is not credited")
+check("it carries the time it was printed",
+      'class="receipt__printed"' in bill_html,
+      "a reprint could not be told from the original")
+
+# A reprint must say the same thing. A customer handed two copies should
+# not find two different footers.
+again = re.search(r'class="receipt__quote">\s*&ldquo;(.+?)&rdquo;',
+                  a.get("/orders/%s/bill" % order_id).get_data(as_text=True),
+                  re.S)
+check("reprinting it says the same line",
+      again and quote and again.group(1) == quote.group(1),
+      "the second copy quoted something else")
+
+# The date on something a customer keeps needs its year.
+check("the date carries the year",
+      re.search(r'receipt__meta--wide.*?<dd>\d{2} \w{3} \d{4},', bill_html,
+                re.S) is not None,
+      "the date is not printed with a year")
+
+# Printers drop pale artwork unless told not to.
+print_css = open(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "static", "css", "print.css"),
+    encoding="utf-8").read()
+check("the symbol behind it survives an actual printer",
+      "print-color-adjust: exact" in print_css,
+      "the watermark would be dropped when printed")
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
