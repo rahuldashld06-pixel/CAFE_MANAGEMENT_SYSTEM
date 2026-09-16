@@ -262,43 +262,134 @@ check("café B is untouched by café A's rate",
       "café B is on %s" % application.get_tax_percent(beta_cafe))
 
 
-print("\n=== 10. The cafe's own name in the shell ===")
-# The sidebar used to read "Cafe Manager / Food & Service Admin" on every
-# page of every cafe. It shows the name the cafe signed up with instead.
+print("\n=== 10. What the top corner says, by default ===")
 SHELL_PAGES = ["/orders/add", "/orders", "/foods", "/inventory",
                "/categories", "/billing"]
 
+
+def corner(client):
+    """The name, the tagline and the symbol the shell actually draws."""
+    html = client.get("/orders/add").get_data(as_text=True)
+    found = re.search(
+        r'<span class="brand-text">(.*?)<small>(.*?)</small>', html, re.S)
+    logo = re.search(r'class="brand-mark">\s*<img src="([^"]+)"', html)
+    return (found.group(1).strip() if found else None,
+            found.group(2).strip() if found else None,
+            logo.group(1) if logo else None)
+
+
+name, tagline, logo = corner(a)
+check("a cafe that has chosen nothing reads Cafe Manager",
+      name == "Cafe Manager", "it reads %r" % name)
+check("with the line that has always gone under it",
+      tagline == "Food &amp; Service Admin", "it reads %r" % tagline)
+check("and no symbol beside it", logo is None,
+      "a symbol is drawn where none was set")
+
 missing = [path for path in SHELL_PAGES
-           if "Alpha Cafe" not in a.get(path).get_data(as_text=True)]
-check("the cafe's name is on every page", not missing,
-      "missing from: %s" % missing)
-
-shell = a.get("/orders/add").get_data(as_text=True)
-check("the hard-coded platform name is gone",
-      "Food &amp; Service Admin" not in shell,
-      "the old sidebar subtitle is still there")
-check("the logo is left at the default cup in both brand spots",
-      shell.count("bi-cup-hot-fill") == 2,
-      "found %d fallback icons, expected one per brand spot"
-      % shell.count("bi-cup-hot-fill"))
-check("the small-screen top bar carries the name too",
-      'class="topbar-brand"' in shell,
-      "no brand in the bar that stays at the top on a phone")
-check("and there is no page offering to change any of it",
-      a.get("/settings/branding").status_code in (404, 302, 301),
-      "the branding page is still served")
+           if "Food &amp; Service Admin" not in a.get(path).get_data(as_text=True)]
+check("it is on every page", not missing, "missing from: %s" % missing)
+check("no cup icon is drawn either",
+      "bi-cup-hot-fill" not in a.get("/orders/add").get_data(as_text=True),
+      "the old cup placeholder is back")
 
 
-print("\n=== 11. One cafe's name never shows in another's shell ===")
+print("\n=== 11. An admin can make it their own ===")
+check("the page is reachable",
+      a.get("/settings/branding").status_code == 200,
+      "got HTTP %s" % a.get("/settings/branding").status_code)
+check("and offered in the profile menu",
+      "Name &amp; Symbol" in a.get("/orders/add").get_data(as_text=True),
+      "there is no way into it")
+
+a.post("/settings/branding", data={
+    "brand_name": "Spice Garden", "brand_tagline": "Family Restaurant",
+    "_csrf_token": csrf(a)}, content_type="multipart/form-data",
+    follow_redirects=True)
+
+name, tagline, logo = corner(a)
+check("the name they typed is what every page says", name == "Spice Garden",
+      "it reads %r" % name)
+check("and the tagline with it", tagline == "Family Restaurant",
+      "it reads %r" % tagline)
+
+a.post("/settings/branding", data={
+    "brand_name": "Spice Garden", "brand_tagline": "Family Restaurant",
+    "logo": (io.BytesIO(PNG), "logo.png"), "_csrf_token": csrf(a)},
+    content_type="multipart/form-data", follow_redirects=True)
+check("a symbol appears once one is uploaded",
+      corner(a)[2] and "/media/cafe/" in corner(a)[2],
+      "no symbol is drawn: %r" % (corner(a)[2],))
+check("and it is on the small-screen bar too",
+      "topbar-brand__mark" in a.get("/orders/add").get_data(as_text=True),
+      "the phone bar has no symbol")
+
+a.post("/settings/branding", data={
+    "action": "remove_logo", "_csrf_token": csrf(a)}, follow_redirects=True)
+check("removing the symbol takes it away", corner(a)[2] is None,
+      "the symbol is still drawn")
+check("but leaves the name alone", corner(a)[0] == "Spice Garden",
+      "the name became %r" % corner(a)[0])
+
+
+print("\n=== 12. Emptying a field means the default, not a blank corner ===")
+a.post("/settings/branding", data={
+    "brand_name": "", "brand_tagline": "", "_csrf_token": csrf(a)},
+    content_type="multipart/form-data", follow_redirects=True)
+name, tagline, _ = corner(a)
+check("the name falls back", name == "Cafe Manager", "it reads %r" % name)
+check("and so does the tagline", tagline == "Food &amp; Service Admin",
+      "it reads %r" % tagline)
+
+# Put it back for the checks below.
+a.post("/settings/branding", data={
+    "brand_name": "Spice Garden", "brand_tagline": "Family Restaurant",
+    "_csrf_token": csrf(a)}, content_type="multipart/form-data",
+    follow_redirects=True)
+
+
+print("\n=== 13. Only an admin may change it, but everyone sees it ===")
+a.post("/users/add", data={
+    "full_name": "Cash", "username": "cash2", "role": "cashier",
+    "phone_number": "", "password": "password123",
+    "_csrf_token": csrf(a)}, follow_redirects=True)
+
+cashier = app.test_client()
+cashier.post("/login", data={"username": "cash2", "password": "password123"},
+             follow_redirects=True)
+
+check("a cashier sees the name the admin chose",
+      corner(cashier)[0] == "Spice Garden",
+      "the cashier's corner reads %r" % corner(cashier)[0])
+check("but is not offered the page",
+      "Name &amp; Symbol" not in
+      cashier.get("/orders/add").get_data(as_text=True),
+      "the menu entry is visible to a cashier")
+check("and cannot open it",
+      cashier.get("/settings/branding",
+                  follow_redirects=False).status_code in (302, 303),
+      "a cashier got in")
+
+cashier.post("/settings/branding", data={
+    "brand_name": "Hijacked", "_csrf_token": csrf(cashier)},
+    content_type="multipart/form-data", follow_redirects=True)
+check("posting to it changes nothing", corner(a)[0] == "Spice Garden",
+      "a cashier renamed the cafe to %r" % corner(a)[0])
+check("the endpoint is not on the staff allowlist",
+      "branding" not in application.STAFF_ALLOWED_ENDPOINTS,
+      "the allowlist would let a non-admin through")
+
+
+print("\n=== 14. One cafe's corner is not another's ===")
 sign_in(b, "beta")
-other_shell = b.get("/orders/add").get_data(as_text=True)
-check("cafe B sees its own name", "Beta Cafe" in other_shell,
-      "cafe B's shell does not name it")
-check("and not cafe A's", "Alpha Cafe" not in other_shell,
-      "cafe A's name leaked into cafe B's shell")
+check("cafe B is still on the default",
+      corner(b)[0] == "Cafe Manager",
+      "cafe B reads %r" % corner(b)[0])
+check("and cafe A keeps its own", corner(a)[0] == "Spice Garden",
+      "cafe A reads %r" % corner(a)[0])
 
 
-print("\n=== 12. Showing the brand costs no extra query ===")
+print("\n=== 15. Showing the corner costs no extra query ===")
 # It rides on the cafe row get_current_user() already joins. Asking the
 # template to fetch it instead would be a whole extra round trip on every
 # page load, on every page.
@@ -346,12 +437,11 @@ try:
 finally:
     application.get_db_connection = _real_connect
 
-check("asking for the branding again runs no query at all",
-      after_user == 0,
+check("asking for it again runs no query at all", after_user == 0,
       "it ran %d extra queries per page" % after_user)
 check("and it is the right cafe's name",
-      branding["cafe_name"] == "Alpha Cafe",
-      "the cached branding says %r" % branding["cafe_name"])
+      branding["brand_name"] == "Spice Garden",
+      "the cached branding says %r" % branding["brand_name"])
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))

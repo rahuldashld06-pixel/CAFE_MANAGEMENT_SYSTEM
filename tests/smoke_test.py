@@ -7,6 +7,7 @@ cafés) and asserts that neither tenant can see or touch the other's data.
 Run with:  python tests/smoke_test.py
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -179,18 +180,34 @@ check("Demoting the only admin is refused",
       b"only active admin" in r.data or b"cannot deactivate" in r.data.lower(),
       r.data[:400])
 
-print("\n=== 7. Each cafe is named in its own shell ===")
+print("\n=== 7. The shell is the product; the cafe name is still per-cafe ===")
 # Branding used to be a single JSON file at the project root, so one cafe
-# renaming itself renamed every cafe. The name now comes from what each
-# cafe signed up with, and this is what guards the isolation.
-r = a.get("/orders/add")
-check("cafe A's shell carries cafe A's name",
-      "Alpha".encode() in r.data, r.data[:400])
+# renaming itself renamed every cafe. The shell now reads "Cafe Manager"
+# for everyone, and each cafe's own name reaches only its own pages.
+shell_a = a.get("/orders/add").get_data(as_text=True)
+shell_b = b.get("/orders/add").get_data(as_text=True)
 
-r = b.get("/orders/add")
-check("and cafe B's carries its own, not cafe A's",
-      "Beta".encode() in r.data and "Alpha".encode() not in r.data,
-      r.data[:400])
+
+def installed_name(html):
+    """The name a home screen icon would carry, read off the page."""
+    found = re.search(
+        r'apple-mobile-web-app-title" content="([^"]*)"', html)
+    return found.group(1) if found else None
+
+
+check("both cafes see the same product name in the shell",
+      "Food &amp; Service Admin" in shell_a
+      and "Food &amp; Service Admin" in shell_b,
+      shell_a[:300])
+
+# Where the name is still per-cafe, it must not cross over.
+name_a, name_b = installed_name(shell_a), installed_name(shell_b)
+check("each cafe has its own installed-app name",
+      name_a and name_b and name_a != name_b,
+      "cafe A is %r and cafe B is %r" % (name_a, name_b))
+check("and it is the name each one signed up with",
+      "Alpha" in (name_a or "") and "Beta" in (name_b or ""),
+      "cafe A is %r and cafe B is %r" % (name_a, name_b))
 
 print("\n=== 8. Password reset hardening ===")
 r = b.get("/logout", follow_redirects=True)

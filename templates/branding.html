@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Name &amp; Symbol · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Customize</div>
+        <h1><i class="bi bi-bookmark-star"></i> Name &amp; Symbol</h1>
+        <p>What every page says in the top corner.</p>
+    </div>
+    <a href="{{ home_url }}" class="btn btn--ghost" data-back>
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="panel form-panel" style="max-width:680px;">
+
+    {# The same two pieces the sidebar draws, in the same order, so what
+       is on this page is what will be up there. #}
+    <div class="brand-preview">
+        {% if branding.logo %}
+        <span class="brand-preview__mark">
+            <img src="{{ branding.logo }}" alt="Your current symbol">
+        </span>
+        {% endif %}
+        <span class="brand-preview__text">
+            {{ branding.brand_name }}
+            <small>{{ branding.brand_tagline }}</small>
+        </span>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+
+        <div class="form-group">
+            <label for="brand_name">Name</label>
+            <input type="text"
+                   id="brand_name"
+                   name="brand_name"
+                   value="{{ branding.brand_name if branding.brand_name != default_name else '' }}"
+                   placeholder="{{ default_name }}"
+                   maxlength="150"
+                   autocomplete="off">
+            <small>
+                Your cafe or restaurant name. Leave it empty for
+                &ldquo;{{ default_name }}&rdquo;.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="brand_tagline">Tagline</label>
+            <input type="text"
+                   id="brand_tagline"
+                   name="brand_tagline"
+                   value="{{ branding.brand_tagline if branding.brand_tagline != default_tagline else '' }}"
+                   placeholder="{{ default_tagline }}"
+                   maxlength="150"
+                   autocomplete="off">
+            <small>
+                The small line underneath. Leave it empty for
+                &ldquo;{{ default_tagline }}&rdquo;.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="logo">Symbol</label>
+            <input type="file"
+                   id="logo"
+                   name="logo"
+                   accept=".png,.jpg,.jpeg,.webp,.gif">
+            <small>
+                A square image works best &mdash; it is drawn small, beside
+                the name. Leave this empty to keep the current one.
+            </small>
+        </div>
+
+        <div class="note-card">
+            <i class="bi bi-info-circle"></i>
+            <div>
+                This is your whole cafe's name, not just yours. Everyone
+                signed in here sees it the next time their screen loads.
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-check2"></i> Save
+            </button>
+            <a href="{{ home_url }}" class="btn btn--ghost" data-back>Cancel</a>
+        </div>
+
+    </form>
+
+    {% if branding.logo %}
+    <form method="POST"
+          class="photo-remove"
+          onsubmit="return confirm('Remove the symbol? The name will stand on its own.');">
+        <input type="hidden" name="action" value="remove_logo">
+        <button type="submit" class="btn btn--small btn--delete">
+            <i class="bi bi-trash"></i> Remove symbol
+        </button>
+    </form>
+    {% endif %}
+
+</div>
+
+{% endblock %}

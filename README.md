@@ -23,10 +23,12 @@ branding, fully isolated from the others.
   are restricted to ordering, food, inventory and billing.
 - **Admin OTP login.** Admins with a mobile number on file confirm a
   6-digit code after their password.
-- **Cafe name in the shell.** The name a cafe signed up with appears in
-  the sidebar on every page, and in the bar that stays at the top on a
-  phone, where the sidebar is a drawer. Logo and sign-in photo are left at
-  the platform defaults.
+- **Name and symbol in the top corner.** An admin sets the name, the
+  tagline and the symbol the sidebar shows, under Profile -> Name & Symbol.
+  Left alone it reads "Cafe Manager / Food & Service Admin", and clearing a
+  field puts that default back rather than leaving a blank corner. The same
+  name is in the bar that stays at the top on a phone. On a big screen it
+  is pinned to the top of the sidebar and the page links scroll beneath it.
 - **Theme colour.** An admin picks the accent the whole cafe's screens are
   painted in. Copper by default.
 - **Installs as an app.** A web manifest asking for fullscreen display, so
@@ -76,7 +78,7 @@ tests/instant_nav_test.py Instant-navigation test suite
 tests/user_delete_test.py Staff-account deletion test suite
 tests/hot_sellers_test.py Hot-selling shelf test suite
 tests/hot_mirror_test.py Real-browser mirrored-card test suite
-tests/settings_test.py Tax-rate and profile-photo test suite
+tests/settings_test.py Tax rate, profile photo, name and symbol suite
 tests/tablet_layout_test.py Real-browser tablet layout test suite
 tests/stock_alert_test.py Dashboard stock-alert test suite
 tests/print_test.py  Printable bill and kitchen ticket test suite
@@ -94,24 +96,24 @@ tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ## Tests
 
 ```bash
-python tests/smoke_test.py        # expect PASSED: 37   FAILED: 0
+python tests/smoke_test.py        # expect PASSED: 38   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
 python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
-python tests/settings_test.py     # expect PASSED: 48   FAILED: 0
+python tests/settings_test.py     # expect PASSED: 63   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
-python tests/staff_access_test.py # expect PASSED: 34   FAILED: 0
+python tests/staff_access_test.py # expect PASSED: 35   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 25   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 23   FAILED: 0
 python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 40   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 48   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0

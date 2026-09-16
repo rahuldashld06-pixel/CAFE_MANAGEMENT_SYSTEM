@@ -63,15 +63,16 @@
             {# The cafe's own name and logo, set by its admin under
                Cafe Branding. The cup is the fallback for a cafe that has
                not uploaded one yet. #}
+            {# Set under Profile -> Name & Symbol. Left alone it reads
+               "Cafe Manager / Food & Service Admin", as it always did.
+               The symbol is drawn only when there is a real one. #}
             <div class="sidebar-brand">
+                {% if cafe_branding.logo %}
                 <span class="brand-mark">
-                    {% if cafe_branding.logo %}
                     <img src="{{ cafe_branding.logo }}" alt="">
-                    {% else %}
-                    <i class="bi bi-cup-hot-fill"></i>
-                    {% endif %}
                 </span>
-                <span class="brand-text">{{ cafe_branding.cafe_name }}</span>
+                {% endif %}
+                <span class="brand-text">{{ cafe_branding.brand_name }}<small>{{ cafe_branding.brand_tagline }}</small></span>
             </div>
 
             <nav class="sidebar-nav"><!--nav:start-->
@@ -152,14 +153,12 @@
                    page. This puts them in the bar that stays at the top.
                    Hidden on desktop, where the sidebar already shows them. #}
                 <a href="{{ home_url }}" class="topbar-brand">
+                    {% if cafe_branding.logo %}
                     <span class="topbar-brand__mark">
-                        {% if cafe_branding.logo %}
                         <img src="{{ cafe_branding.logo }}" alt="">
-                        {% else %}
-                        <i class="bi bi-cup-hot-fill"></i>
-                        {% endif %}
                     </span>
-                    <span class="topbar-brand__name">{{ cafe_branding.cafe_name }}</span>
+                    {% endif %}
+                    <span class="topbar-brand__name">{{ cafe_branding.brand_name }}</span>
                 </a>
 
                 {# Hidden by script where the browser has no Fullscreen
@@ -239,6 +238,12 @@
 
                         {% if session.get('role') == 'admin' %}
                         <div class="profile-dropdown__section">Customize</div>
+
+                        {# Admin only: this is the name every member of the
+                           cafe sees on every page. #}
+                        <a href="{{ url_for('branding') }}" class="profile-dropdown__item">
+                            <i class="bi bi-bookmark-star"></i><span>Name &amp; Symbol</span>
+                        </a>
 
                         {# Admin only: the rate decides what every future bill
                            charges, so it is not a cashier's to move. #}

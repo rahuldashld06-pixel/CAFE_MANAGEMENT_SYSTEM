@@ -619,6 +619,8 @@ _CORE_TABLES = [
             login_photo_mime VARCHAR(80) NULL,
             login_photo_blob MEDIUMBLOB NULL,
             branding_version INT NOT NULL DEFAULT 1,
+            brand_name VARCHAR(150) NULL,
+            brand_tagline VARCHAR(150) NULL,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 5.00,
             theme VARCHAR(20) NOT NULL DEFAULT 'copper',
             auto_kot_enabled TINYINT(1) NOT NULL DEFAULT 0,
@@ -798,6 +800,11 @@ _COLUMN_MIGRATIONS = [
     ("cafes", "login_photo_mime", "VARCHAR(80) NULL"),
     ("cafes", "login_photo_blob", "MEDIUMBLOB NULL"),
     ("cafes", "branding_version", "INT NOT NULL DEFAULT 1"),
+    # What the sidebar reads. Left empty a cafe gets the product's own
+    # name and line, which is what every cafe had before this was a
+    # choice - so nothing changes appearance on upgrade.
+    ("cafes", "brand_name", "VARCHAR(150) NULL"),
+    ("cafes", "brand_tagline", "VARCHAR(150) NULL"),
     # Per-café tax rate. 5.00 is what every bill was hard-coded to before
     # this was configurable, so existing cafés keep their current totals.
     ("cafes", "tax_percent", "DECIMAL(5,2) NOT NULL DEFAULT 5.00"),
@@ -1416,6 +1423,7 @@ def get_current_user():
                    c.auto_kot_enabled, c.auto_kot_delay, c.auto_bill_enabled,
                    c.theme,
                    c.cafe_name, c.branding_version,
+                   c.brand_name, c.brand_tagline,
                    (c.logo_blob IS NOT NULL) AS has_logo,
                    (c.login_photo_blob IS NOT NULL) AS has_login_photo
             FROM users u
@@ -1434,6 +1442,7 @@ def get_current_user():
     PRINTING_KEYS = ("auto_kot_enabled", "auto_kot_delay",
                      "auto_bill_enabled", "theme",
                      "cafe_name", "branding_version",
+                     "brand_name", "brand_tagline",
                      "has_logo", "has_login_photo")
 
     user = None
@@ -1462,6 +1471,10 @@ def get_current_user():
             g.cafe_branding_id = cafe_id
             g.cafe_branding = {
                 "cafe_name": row["cafe_name"] or app.config["CAFE_NAME"],
+                "brand_name": ((row["brand_name"] or "").strip()
+                               or DEFAULT_BRAND_NAME),
+                "brand_tagline": ((row["brand_tagline"] or "").strip()
+                                  or DEFAULT_BRAND_TAGLINE),
                 "logo": (
                     url_for("cafe_media", cafe_id=cafe_id, kind="logo",
                             v=version)
@@ -5827,6 +5840,12 @@ def delete_user(user_id):
 # Branding now lives on the cafes row for that tenant, images included.
 
 
+# What the sidebar reads when a café has not chosen its own. These are
+# exactly what every café saw before the wording was customisable.
+DEFAULT_BRAND_NAME = "Cafe Manager"
+DEFAULT_BRAND_TAGLINE = "Food & Service Admin"
+
+
 def get_cafe_branding(cafe_id):
     """Branding for one café, or the platform defaults when unknown."""
     # get_current_user() already read this off the café row it joins, so in
@@ -5837,6 +5856,8 @@ def get_cafe_branding(cafe_id):
 
     defaults = {
         "cafe_name": app.config["CAFE_NAME"],
+        "brand_name": DEFAULT_BRAND_NAME,
+        "brand_tagline": DEFAULT_BRAND_TAGLINE,
         "logo": "",
         "login_photo": "",
     }
@@ -5851,6 +5872,8 @@ def get_cafe_branding(cafe_id):
         cursor = connection.cursor(dictionary=True)
         cursor.execute("""
             SELECT cafe_name,
+                   brand_name,
+                   brand_tagline,
                    branding_version,
                    (logo_blob IS NOT NULL) AS has_logo,
                    (login_photo_blob IS NOT NULL) AS has_login_photo
@@ -5874,6 +5897,9 @@ def get_cafe_branding(cafe_id):
     version = row["branding_version"] or 1
     return {
         "cafe_name": row["cafe_name"] or defaults["cafe_name"],
+        "brand_name": (row["brand_name"] or "").strip() or DEFAULT_BRAND_NAME,
+        "brand_tagline": ((row["brand_tagline"] or "").strip()
+                          or DEFAULT_BRAND_TAGLINE),
         "logo": (
             url_for("cafe_media", cafe_id=cafe_id, kind="logo", v=version)
             if row["has_logo"] else ""
@@ -5883,6 +5909,93 @@ def get_cafe_branding(cafe_id):
             if row["has_login_photo"] else ""
         ),
     }
+
+
+@app.route("/settings/branding", methods=["GET", "POST"])
+def branding():
+    """
+    What the sidebar says, and the symbol beside it.
+
+    Admin only. This is the name every member of the café sees on every
+    page, so it is a decision about the business rather than a personal
+    preference.
+
+    Left alone it reads "Cafe Manager / Food & Service Admin", which is
+    what it has always said. Clearing a field puts that default back
+    rather than leaving a blank corner.
+    """
+    denied = require_role("admin")
+    if denied:
+        return denied
+
+    cafe_id = require_cafe_session()
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        if request.method == "POST":
+            if request.form.get("action") == "remove_logo":
+                cursor.execute("""
+                    UPDATE cafes
+                    SET logo_blob = NULL,
+                        logo_mime = NULL,
+                        branding_version = branding_version + 1
+                    WHERE cafe_id = %s
+                """, (cafe_id,))
+                connection.commit()
+                g.pop("cafe_branding", None)
+                flash("Symbol removed. The name now stands on its own.")
+                return redirect(url_for("branding"))
+
+            # Empty means "use the default", not "show nothing".
+            name = (request.form.get("brand_name") or "").strip()[:150]
+            tagline = (request.form.get("brand_tagline") or "").strip()[:150]
+
+            try:
+                data, mime = read_image_upload(request.files.get("logo"))
+            except ValueError as error:
+                flash(str(error))
+                return redirect(url_for("branding"))
+
+            if data is not None:
+                cursor.execute("""
+                    UPDATE cafes
+                    SET brand_name = %s,
+                        brand_tagline = %s,
+                        logo_blob = %s,
+                        logo_mime = %s,
+                        branding_version = branding_version + 1
+                    WHERE cafe_id = %s
+                """, (name or None, tagline or None, data, mime, cafe_id))
+            else:
+                cursor.execute("""
+                    UPDATE cafes
+                    SET brand_name = %s,
+                        brand_tagline = %s
+                    WHERE cafe_id = %s
+                """, (name or None, tagline or None, cafe_id))
+
+            connection.commit()
+            g.pop("cafe_branding", None)
+
+            flash("Saved. Every page now reads %s."
+                  % (name or DEFAULT_BRAND_NAME))
+            return redirect(url_for("branding"))
+
+        return render_template(
+            "branding.html",
+            branding=get_cafe_branding(cafe_id),
+            default_name=DEFAULT_BRAND_NAME,
+            default_tagline=DEFAULT_BRAND_TAGLINE,
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 
 @app.route("/settings/tax", methods=["GET", "POST"])

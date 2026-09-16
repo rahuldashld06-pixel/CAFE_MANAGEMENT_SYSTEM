@@ -53,7 +53,7 @@ sign_up(client, "Instant Cafe", "instant_admin")
 
 PAGES = ["/dashboard", "/categories", "/foods", "/inventory",
          "/orders/add", "/orders", "/billing", "/reports", "/users",
-         "/account/password"]
+         "/account/password", "/settings/branding"]
 
 missing_view, missing_js = [], []
 for path in PAGES:

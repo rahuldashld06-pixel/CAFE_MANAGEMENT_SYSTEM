@@ -72,18 +72,6 @@
             max-width: 500px;
         }
 
-        .brand-mark {
-            width: 58px;
-            height: 58px;
-            border: 1px solid var(--gold-light);
-            border-radius: 50%;
-            display: grid;
-            place-items: center;
-            font-size: 27px;
-            margin-bottom: 20px;
-            background: rgba(36,21,15,.55);
-        }
-
         .brand-copy h1 {
             margin: 0 0 12px;
             font-size: clamp(38px, 5vw, 62px);
@@ -295,8 +283,6 @@
                     src="{{ cafe_branding.logo }}"
                     alt="{{ cafe_branding.cafe_name }} logo"
                     class="login-logo">
-            {% else %}
-                <div class="brand-mark">☕</div>
             {% endif %}
 
             <h1>{{ cafe_branding.cafe_name }}</h1>
@@ -370,7 +356,7 @@
                 type="submit"
                 class="login-button">
 
-                ☕ Sign In
+                Sign In
 
             </button>
 

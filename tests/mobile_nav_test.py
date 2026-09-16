@@ -362,8 +362,8 @@ try:
                      "document.querySelector('.topbar-brand')).display")
           == "flex",
           "it is hidden on a phone, where the sidebar is shut")
-    check("it names the cafe",
-          "Mobile Cafe" in (b.evaluate(
+    check("it carries the product name",
+          "Cafe Manager" in (b.evaluate(
               "document.querySelector('.topbar-brand__name').textContent")
               or ""),
           "it reads %r" % b.evaluate(
@@ -449,6 +449,83 @@ try:
           "%(width)spx wide on a %(viewport)spx screen" % box)
     check("nothing is covering it", hit_test("#orderSummaryTrigger"),
           "a tap at its centre lands on something else")
+
+    print("\n=== On a big screen the name stays put and the pages scroll ===")
+    # The sidebar is one tall scrolling column. On a short window the brand
+    # used to scroll away with the links, leaving nothing at the top saying
+    # whose till this is.
+    b.call("Emulation.setDeviceMetricsOverride", width=1440, height=560,
+           deviceScaleFactor=1, mobile=False)
+    b.call("Emulation.setTouchEmulationEnabled", enabled=False)
+    b.evaluate("location.href = '/orders/add'")
+    wait("document.readyState === 'complete' && "
+         "!!document.querySelector('.sidebar-brand')", "New Order on desktop")
+    time.sleep(0.5)
+
+    check("no stand-in cup is drawn beside the name",
+          not b.evaluate("!!document.querySelector('.bi-cup-hot-fill')"),
+          "the cup placeholder is still there")
+    check("the sidebar has more links than fit, so there is something to "
+          "scroll",
+          b.evaluate("(function () {"
+                     "  var s = document.querySelector('.sidebar');"
+                     "  return s.scrollHeight > s.clientHeight;"
+                     "}())"),
+          "nothing overflows at this height - the check below would prove "
+          "nothing")
+
+    top_before = int(b.evaluate(
+        "Math.round(document.querySelector('.sidebar-brand')"
+        ".getBoundingClientRect().top)"))
+
+    b.evaluate("document.querySelector('.sidebar').scrollTop = 400")
+    time.sleep(0.4)
+
+    moved = int(b.evaluate("document.querySelector('.sidebar').scrollTop"))
+    top_after = int(b.evaluate(
+        "Math.round(document.querySelector('.sidebar-brand')"
+        ".getBoundingClientRect().top)"))
+
+    check("the sidebar actually scrolled", moved > 0,
+          "scrollTop stayed at %d" % moved)
+    check("the name stays pinned to the top of it",
+          -2 <= top_after <= 2,
+          "it moved from %dpx to %dpx" % (top_before, top_after))
+    check("and the page links scroll underneath it",
+          b.evaluate("(function () {"
+                     "  var link = document.querySelector('.sidebar-nav "
+                     ".nav-link');"
+                     "  var brand = document.querySelector('.sidebar-brand');"
+                     "  return link.getBoundingClientRect().top <"
+                     "         brand.getBoundingClientRect().bottom;"
+                     "}())"),
+          "the first link never passes behind the name")
+    check("the pinned name is opaque, so nothing shows through it",
+          b.evaluate("getComputedStyle(document.querySelector"
+                     "('.sidebar-brand')).backgroundColor")
+          not in ("rgba(0, 0, 0, 0)", "transparent"),
+          "links would be visible through the pinned bar")
+
+    print("\n=== A touch tablet keeps its drawer, untouched ===")
+    # The pinning query is the exact complement of the drawer's. A tablet
+    # between 1025px and 1400px with a finger is still a drawer device and
+    # must not be caught by it.
+    b.call("Emulation.setDeviceMetricsOverride", width=1180, height=820,
+           deviceScaleFactor=2, mobile=True)
+    b.call("Emulation.setTouchEmulationEnabled", enabled=True,
+           maxTouchPoints=5)
+    b.evaluate("location.href = '/orders/add'")
+    wait("document.readyState === 'complete'", "New Order on a tablet")
+    time.sleep(0.5)
+
+    check("the hamburger is still there on a touch tablet",
+          b.evaluate("getComputedStyle(document.getElementById('navToggle'))"
+                     ".display") != "none",
+          "the drawer was taken away from a tablet")
+    check("and its brand is not pinned",
+          b.evaluate("getComputedStyle(document.querySelector"
+                     "('.sidebar-brand')).position") != "sticky",
+          "the desktop pinning leaked into the drawer")
 
     print("\n=== Back on a desktop width ===")
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=900,
