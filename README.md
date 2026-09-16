@@ -124,7 +124,7 @@ python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 66   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
-python tests/print_test.py        # expect PASSED: 39   FAILED: 0
+python tests/print_test.py        # expect PASSED: 41   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 35   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 25   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 23   FAILED: 0

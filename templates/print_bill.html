@@ -50,10 +50,11 @@
         </header>
 
         <dl class="receipt__meta">
+            {# No bill number here. The order number is what a customer
+               and the counter both have in hand; the bill number is the
+               system's own bookkeeping and means nothing across a
+               counter. #}
             <div><dt>Order</dt><dd>#{{ order.order_id }}</dd></div>
-            {% if bill %}
-            <div><dt>Bill</dt><dd>#{{ bill.bill_id }}</dd></div>
-            {% endif %}
             <div class="receipt__meta--wide"><dt>Date</dt><dd>{{ order.order_date|receipt_time }}</dd></div>
             <div><dt>Status</dt><dd>{{ order.order_status }}</dd></div>
         </dl>

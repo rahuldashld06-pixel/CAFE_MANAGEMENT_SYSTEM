@@ -249,6 +249,13 @@ check("and it is one of the cafe's own",
       "printed %r, which is not in the list"
       % (quote.group(1).strip() if quote else None))
 
+check("the customer's copy carries no bill number",
+      re.search(r'<dt>Bill</dt>', bill_html) is None,
+      "the receipt still prints the system's bill number")
+check("but it does carry the order number",
+      re.search(r'<dt>Order</dt>\s*<dd>#\d+</dd>', bill_html) is not None,
+      "the order number is missing, and that is the one both sides hold")
+
 check("the bill says who served it",
       "Served by" in bill_html and "Bean Scene" in bill_html,
       "the cafe is not named as the server")
