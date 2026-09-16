@@ -450,66 +450,100 @@ try:
     check("nothing is covering it", hit_test("#orderSummaryTrigger"),
           "a tap at its centre lands on something else")
 
-    print("\n=== On a big screen the name stays put and the pages scroll ===")
-    # The sidebar is one tall scrolling column. On a short window the brand
-    # used to scroll away with the links, leaving nothing at the top saying
-    # whose till this is.
-    b.call("Emulation.setDeviceMetricsOverride", width=1440, height=560,
-           deviceScaleFactor=1, mobile=False)
+    print("\n=== The sidebar only scrolls when the links do not fit ===")
+    # The whole sidebar used to scroll as one block, so the name scrolled
+    # away with the links and the scrollbar ran the full height even when
+    # only the links overflowed. The name is a fixed head now and the list
+    # of pages below it is the part that scrolls.
     b.call("Emulation.setTouchEmulationEnabled", enabled=False)
+
+    def overflows(selector):
+        return b.evaluate("""
+            (function () {
+                var el = document.querySelector('%s');
+                return el.scrollHeight > el.clientHeight + 1;
+            }())
+        """ % selector)
+
+    def scrolls(selector):
+        """Whether the browser will actually let this element scroll."""
+        return b.evaluate("""
+            (function () {
+                var el = document.querySelector('%s');
+                var style = getComputedStyle(el).overflowY;
+                return (style === 'auto' || style === 'scroll')
+                       && el.scrollHeight > el.clientHeight + 1;
+            }())
+        """ % selector)
+
+    # Tall enough for every section at once.
+    b.call("Emulation.setDeviceMetricsOverride", width=1440, height=1000,
+           deviceScaleFactor=1, mobile=False)
     b.evaluate("location.href = '/orders/add'")
     wait("document.readyState === 'complete' && "
-         "!!document.querySelector('.sidebar-brand')", "New Order on desktop")
+         "!!document.querySelector('.sidebar-nav')", "New Order on a tall screen")
     time.sleep(0.5)
 
-    check("no stand-in cup is drawn beside the name",
-          not b.evaluate("!!document.querySelector('.bi-cup-hot-fill')"),
-          "the cup placeholder is still there")
-    check("the sidebar has more links than fit, so there is something to "
-          "scroll",
-          b.evaluate("(function () {"
-                     "  var s = document.querySelector('.sidebar');"
-                     "  return s.scrollHeight > s.clientHeight;"
-                     "}())"),
-          "nothing overflows at this height - the check below would prove "
-          "nothing")
+    check("with room for every section, nothing scrolls at all",
+          not scrolls(".sidebar-nav") and not scrolls(".sidebar"),
+          "a scrollbar is offered on a screen where everything fits")
+    check("and every page link is on screen",
+          b.evaluate("""
+              (function () {
+                  var links = document.querySelectorAll('.sidebar-nav .nav-link');
+                  var nav = document.querySelector('.sidebar-nav')
+                      .getBoundingClientRect();
+                  for (var i = 0; i < links.length; i++) {
+                      var r = links[i].getBoundingClientRect();
+                      if (r.bottom > nav.bottom + 1) return false;
+                  }
+                  return links.length > 0;
+              }())
+          """),
+          "a link is cut off on a screen with room for all of them")
+
+    # Now short enough that they cannot all fit.
+    b.call("Emulation.setDeviceMetricsOverride", width=1440, height=520,
+           deviceScaleFactor=1, mobile=False)
+    b.evaluate("location.href = '/orders/add'")
+    wait("document.readyState === 'complete' && "
+         "!!document.querySelector('.sidebar-nav')", "New Order on a short screen")
+    time.sleep(0.5)
+
+    check("when they do not fit, the list of pages scrolls",
+          scrolls(".sidebar-nav"),
+          "the links overflow but cannot be scrolled to")
+    check("and the scroll belongs to the list, not the whole sidebar",
+          not scrolls(".sidebar"),
+          "the sidebar scrolls as one block, taking the name with it")
 
     top_before = int(b.evaluate(
         "Math.round(document.querySelector('.sidebar-brand')"
         ".getBoundingClientRect().top)"))
-
-    b.evaluate("document.querySelector('.sidebar').scrollTop = 400")
+    b.evaluate("document.querySelector('.sidebar-nav').scrollTop = 300")
     time.sleep(0.4)
-
-    moved = int(b.evaluate("document.querySelector('.sidebar').scrollTop"))
+    moved = int(b.evaluate("document.querySelector('.sidebar-nav').scrollTop"))
     top_after = int(b.evaluate(
         "Math.round(document.querySelector('.sidebar-brand')"
         ".getBoundingClientRect().top)"))
 
-    check("the sidebar actually scrolled", moved > 0,
+    check("the list actually moved", moved > 0,
           "scrollTop stayed at %d" % moved)
-    check("the name stays pinned to the top of it",
-          -2 <= top_after <= 2,
-          "it moved from %dpx to %dpx" % (top_before, top_after))
-    check("and the page links scroll underneath it",
-          b.evaluate("(function () {"
-                     "  var link = document.querySelector('.sidebar-nav "
-                     ".nav-link');"
-                     "  var brand = document.querySelector('.sidebar-brand');"
-                     "  return link.getBoundingClientRect().top <"
-                     "         brand.getBoundingClientRect().bottom;"
-                     "}())"),
-          "the first link never passes behind the name")
-    check("the pinned name is opaque, so nothing shows through it",
-          b.evaluate("getComputedStyle(document.querySelector"
-                     "('.sidebar-brand')).backgroundColor")
-          not in ("rgba(0, 0, 0, 0)", "transparent"),
-          "links would be visible through the pinned bar")
+    check("the name does not move with it", top_before == top_after,
+          "it went from %dpx to %dpx" % (top_before, top_after))
+    check("and the links disappear under it rather than over it",
+          b.evaluate("""
+              (function () {
+                  var nav = document.querySelector('.sidebar-nav')
+                      .getBoundingClientRect();
+                  var brand = document.querySelector('.sidebar-brand')
+                      .getBoundingClientRect();
+                  return nav.top >= brand.bottom - 1;
+              }())
+          """),
+          "the scrolling list starts above the bottom of the name")
 
-    print("\n=== A touch tablet keeps its drawer, untouched ===")
-    # The pinning query is the exact complement of the drawer's. A tablet
-    # between 1025px and 1400px with a finger is still a drawer device and
-    # must not be caught by it.
+    print("\n=== A touch tablet keeps its drawer, and scrolls the same way ===")
     b.call("Emulation.setDeviceMetricsOverride", width=1180, height=820,
            deviceScaleFactor=2, mobile=True)
     b.call("Emulation.setTouchEmulationEnabled", enabled=True,
@@ -522,10 +556,10 @@ try:
           b.evaluate("getComputedStyle(document.getElementById('navToggle'))"
                      ".display") != "none",
           "the drawer was taken away from a tablet")
-    check("and its brand is not pinned",
-          b.evaluate("getComputedStyle(document.querySelector"
-                     "('.sidebar-brand')).position") != "sticky",
-          "the desktop pinning leaked into the drawer")
+    check("and its drawer gives the scroll to the links too",
+          b.evaluate("getComputedStyle(document.querySelector('.sidebar-nav'))"
+                     ".overflowY") in ("auto", "scroll"),
+          "the drawer scrolls as one block")
 
     print("\n=== Back on a desktop width ===")
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=900,

@@ -25,10 +25,14 @@ branding, fully isolated from the others.
   6-digit code after their password.
 - **Name and symbol in the top corner.** An admin sets the name, the
   tagline and the symbol the sidebar shows, under Profile -> Name & Symbol.
-  Left alone it reads "Cafe Manager / Food & Service Admin", and clearing a
-  field puts that default back rather than leaving a blank corner. The same
-  name is in the bar that stays at the top on a phone. On a big screen it
-  is pinned to the top of the sidebar and the page links scroll beneath it.
+  Left alone it reads "Cafe Manager / Food & Service Admin" beside a coffee
+  cup, and clearing a field puts that default back rather than leaving a
+  blank corner. The same name is in the bar that stays at the top on a
+  phone.
+- **The sidebar scrolls only when it has to.** The name is a fixed head and
+  the page links below it are what scrolls, starting at Dashboard. A screen
+  tall enough for every section has no scrollbar at all; a shorter one
+  scrolls the links under the name, which does not move.
 - **Theme colour.** An admin picks the accent the whole cafe's screens are
   painted in. Copper by default.
 - **Installs as an app.** A web manifest asking for fullscreen display, so
@@ -102,7 +106,7 @@ python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
-python tests/settings_test.py     # expect PASSED: 63   FAILED: 0
+python tests/settings_test.py     # expect PASSED: 66   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 19   FAILED: 0
 python tests/print_test.py        # expect PASSED: 29   FAILED: 0
@@ -113,7 +117,7 @@ python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 48   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 49   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0

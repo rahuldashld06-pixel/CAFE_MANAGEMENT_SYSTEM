@@ -67,11 +67,13 @@
                "Cafe Manager / Food & Service Admin", as it always did.
                The symbol is drawn only when there is a real one. #}
             <div class="sidebar-brand">
-                {% if cafe_branding.logo %}
                 <span class="brand-mark">
+                    {% if cafe_branding.logo %}
                     <img src="{{ cafe_branding.logo }}" alt="">
+                    {% else %}
+                    <span class="brand-mark__emoji">☕</span>
+                    {% endif %}
                 </span>
-                {% endif %}
                 <span class="brand-text">{{ cafe_branding.brand_name }}<small>{{ cafe_branding.brand_tagline }}</small></span>
             </div>
 
@@ -153,11 +155,13 @@
                    page. This puts them in the bar that stays at the top.
                    Hidden on desktop, where the sidebar already shows them. #}
                 <a href="{{ home_url }}" class="topbar-brand">
-                    {% if cafe_branding.logo %}
                     <span class="topbar-brand__mark">
+                        {% if cafe_branding.logo %}
                         <img src="{{ cafe_branding.logo }}" alt="">
+                        {% else %}
+                        <span class="brand-mark__emoji">☕</span>
+                        {% endif %}
                     </span>
-                    {% endif %}
                     <span class="topbar-brand__name">{{ cafe_branding.brand_name }}</span>
                 </a>
 

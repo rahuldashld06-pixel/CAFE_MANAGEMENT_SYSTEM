@@ -131,8 +131,13 @@ textarea:focus-visible {
     background: linear-gradient(190deg, var(--espresso-850) 0%, var(--espresso-950) 75%);
     border-right: 1px solid var(--espresso-800);
     padding: 28px 18px;
-    overflow-y: auto;
-    overflow-x: hidden;
+    /* A column with a fixed head and one scrolling part. The whole
+       sidebar used to scroll as one block, which meant the name scrolled
+       away with the links and the scrollbar ran the full height even
+       when only the links overflowed. */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .sidebar::before,
@@ -379,6 +384,20 @@ textarea:focus-visible {
     display: flex;
     flex-direction: column;
     gap: 4px;
+
+    /* The scroll belongs here, starting at the first link. It appears
+       only when the links do not fit, so a tall screen that shows every
+       section at once has no scrollbar at all. min-height is what lets a
+       flex child shrink below its content and actually scroll. */
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 8px;
+}
+
+.sidebar-brand {
+    flex: 0 0 auto;
 }
 
 .nav-link {
@@ -1677,8 +1696,12 @@ button.order-status-badge:disabled {
         padding: 22px 16px;
         border-right: 1px solid var(--espresso-800);
         border-bottom: 0;
-        overflow-y: auto;
-        overflow-x: hidden;
+        /* Same as the desktop column: the name is a fixed head and the
+           links below it are what scrolls, so the scrollbar starts at
+           Dashboard and the links pass under the name. */
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
         /* Closed drawers must not be tabbable, so visibility - not just a
            transform - carries the hidden state. */
         transform: translateX(-100%);
@@ -2578,44 +2601,6 @@ body.nav-locked {
     .topbar { padding-top: max(0px, env(safe-area-inset-top)); }
 }
 
-/* ---------- Big screens: the name stays, the page list scrolls ----------
-   The sidebar is one tall scrolling column, so on a short window the
-   brand scrolled away with the links and nothing at the top said whose
-   till this was. The name is pinned to the top of that column now and
-   the pages scroll underneath it.
-
-   The query is the exact complement of the drawer block's: a mouse
-   device above 1024px, or anything at all above 1400px. A touch tablet
-   in between still gets the drawer, and must not be caught here. */
-@media (min-width: 1401px),
-       (min-width: 1025px) and (pointer: fine) {
-
-    .sidebar {
-        /* The brand carries this itself now, so it can sit flush with the
-           top edge once it sticks. */
-        padding-top: 0;
-    }
-
-    .sidebar-brand {
-        position: sticky;
-        top: 0;
-        z-index: 3;
-        /* Opaque, or the links scroll through it. The sidebar's gradient
-           begins on this colour, so a flat fill is invisible against it. */
-        background: var(--espresso-850);
-        /* Full width of the sidebar including its side padding, or links
-           would show through the gutters either side while scrolling. */
-        margin-left: -18px;
-        margin-right: -18px;
-        padding: 28px 28px 22px;
-        margin-bottom: 14px;
-    }
-
-    .sidebar-nav {
-        padding-bottom: 14px;
-    }
-}
-
 /* ---------- The symbol beside the name ---------- */
 /* Drawn only when a café has uploaded one, in the sidebar and in the bar
    that stays at the top on a phone. */
@@ -2688,3 +2673,14 @@ body.nav-locked {
     color: var(--cream-faint);
     letter-spacing: 0.3px;
 }
+
+/* The emoji stand-in for a symbol nobody has uploaded yet. Sized in the
+   mark rather than inherited, so it matches an uploaded image's weight
+   in each of the three places it can appear. */
+.brand-mark__emoji {
+    line-height: 1;
+    font-size: 21px;
+}
+
+.topbar-brand__mark .brand-mark__emoji { font-size: 17px; }
+.brand-preview .brand-mark__emoji { font-size: 23px; }

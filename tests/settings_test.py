@@ -283,8 +283,11 @@ check("a cafe that has chosen nothing reads Cafe Manager",
       name == "Cafe Manager", "it reads %r" % name)
 check("with the line that has always gone under it",
       tagline == "Food &amp; Service Admin", "it reads %r" % tagline)
-check("and no symbol beside it", logo is None,
+check("and no uploaded symbol beside it", logo is None,
       "a symbol is drawn where none was set")
+check("the coffee cup stands in until one is uploaded",
+      "brand-mark__emoji" in a.get("/orders/add").get_data(as_text=True),
+      "nothing is drawn in the symbol's place")
 
 missing = [path for path in SHELL_PAGES
            if "Food &amp; Service Admin" not in a.get(path).get_data(as_text=True)]
@@ -320,14 +323,22 @@ a.post("/settings/branding", data={
 check("a symbol appears once one is uploaded",
       corner(a)[2] and "/media/cafe/" in corner(a)[2],
       "no symbol is drawn: %r" % (corner(a)[2],))
+shell = a.get("/orders/add").get_data(as_text=True)
 check("and it is on the small-screen bar too",
-      "topbar-brand__mark" in a.get("/orders/add").get_data(as_text=True),
-      "the phone bar has no symbol")
+      re.search(r'topbar-brand__mark">\s*<img src="/media/cafe/', shell)
+      is not None,
+      "the phone bar still shows the stand-in rather than the symbol")
+check("the stand-in steps aside once a symbol is set",
+      "brand-mark__emoji" not in shell,
+      "the cup is drawn alongside the uploaded symbol")
 
 a.post("/settings/branding", data={
     "action": "remove_logo", "_csrf_token": csrf(a)}, follow_redirects=True)
 check("removing the symbol takes it away", corner(a)[2] is None,
       "the symbol is still drawn")
+check("and the cup comes back in its place",
+      "brand-mark__emoji" in a.get("/orders/add").get_data(as_text=True),
+      "the symbol's place is empty now")
 check("but leaves the name alone", corner(a)[0] == "Spice Garden",
       "the name became %r" % corner(a)[0])
 

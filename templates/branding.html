@@ -20,11 +20,13 @@
     {# The same two pieces the sidebar draws, in the same order, so what
        is on this page is what will be up there. #}
     <div class="brand-preview">
-        {% if branding.logo %}
         <span class="brand-preview__mark">
+            {% if branding.logo %}
             <img src="{{ branding.logo }}" alt="Your current symbol">
+            {% else %}
+            <span class="brand-mark__emoji">☕</span>
+            {% endif %}
         </span>
-        {% endif %}
         <span class="brand-preview__text">
             {{ branding.brand_name }}
             <small>{{ branding.brand_tagline }}</small>

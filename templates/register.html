@@ -66,6 +66,18 @@
             background: linear-gradient(0deg, rgba(36,21,15,.85), transparent 60%);
         }
 
+        .brand-mark {
+            width: 58px;
+            height: 58px;
+            border: 1px solid var(--gold-light);
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            font-size: 27px;
+            margin-bottom: 20px;
+            background: rgba(36,21,15,.55);
+        }
+
         .brand-copy {
             position: relative;
             z-index: 1;
@@ -254,6 +266,8 @@
                     src="{{ cafe_branding.logo }}"
                     alt="{{ cafe_branding.cafe_name }} logo"
                     style="width:64px;height:64px;object-fit:contain;border-radius:50%;margin-bottom:20px;background:rgba(255,250,243,.12);border:1px solid rgba(217,171,120,.45);padding:6px;">
+            {% else %}
+                <div class="brand-mark">☕</div>
             {% endif %}
 
             <h1>{{ cafe_branding.cafe_name }}</h1>
@@ -359,7 +373,7 @@
                 type="submit"
                 class="register-button">
 
-                Create Café & Admin Account
+                ☕ Create Café & Admin Account
 
             </button>
 
