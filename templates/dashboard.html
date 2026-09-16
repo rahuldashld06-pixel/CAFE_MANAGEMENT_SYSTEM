@@ -172,8 +172,13 @@
 <div class="stats-grid">
 
     <div class="stat-card">
+        {# Bootstrap's calendar-day icon has the word "Fri" drawn into the
+           font, so it read Friday on a Tuesday. The real day goes here
+           instead, and the refresh below keeps it right if a screen is
+           left open past midnight. #}
         <div class="stat-card__icon stat-card__icon--today">
-            <i class="bi bi-calendar-day"></i>
+            <span class="day-chip" id="today-weekday"
+                  title="{{ weekday.full }}">{{ weekday.short }}</span>
         </div>
         <div>
             <div class="stat-card__label">Today's Orders</div>
@@ -372,6 +377,13 @@
 
             document.getElementById("today-orders").textContent =
                 data.today_orders;
+
+            // Rolls the day over on a screen nobody has reloaded.
+            const dayEl = document.getElementById("today-weekday");
+            if (dayEl && data.weekday && data.weekday.short) {
+                dayEl.textContent = data.weekday.short;
+                dayEl.title = data.weekday.full || "";
+            }
 
             /* Revenue is admin-only: the element only exists in the DOM
                for admins, and the API only sends a numeric value to them. */

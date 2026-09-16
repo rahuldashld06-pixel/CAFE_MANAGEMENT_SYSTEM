@@ -164,7 +164,8 @@ textarea:focus-visible {
 }
 
 .main {
-    padding: 34px 40px 60px;
+    --main-pad-x: 40px;
+    padding: 34px var(--main-pad-x) 60px;
     animation: rise-in 0.5s ease both;
 }
 
@@ -364,10 +365,16 @@ textarea:focus-visible {
 
 .brand-text {
     font-family: var(--font-display);
-    font-size: 17px;
-    font-weight: 600;
+    /* Grows with the sidebar rather than sitting at one size: this is the
+       cafe's own name and the first thing on every page. */
+    font-size: clamp(19px, 1.5vw, 23px);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.2px;
+
+    /* Plain cream. The size and the weight carry it; a gradient made the
+       name harder to read against the sidebar for no gain. */
     color: var(--cream);
-    line-height: 1.25;
 }
 
 .brand-text small {
@@ -1085,7 +1092,8 @@ textarea:focus-visible {
         background: var(--espresso-800);
     }
     .main {
-        padding: 22px 18px 40px;
+        --main-pad-x: 18px;
+        padding: 22px var(--main-pad-x) 40px;
     }
     .page-header {
         align-items: flex-start;
@@ -1137,7 +1145,7 @@ button, input, select, textarea {
     }
 
     .brand-text {
-        font-size: 15px;
+        font-size: 17px;
     }
 
     .nav-link {
@@ -1147,7 +1155,8 @@ button, input, select, textarea {
 
     .main {
         min-width: 0;
-        padding: 28px 24px 48px;
+        --main-pad-x: 24px;
+        padding: 28px var(--main-pad-x) 48px;
     }
 
     .page-header h1 {
@@ -1193,7 +1202,8 @@ button, input, select, textarea {
 
     .main {
         width: 100%;
-        padding: 22px 16px 40px;
+        --main-pad-x: 16px;
+        padding: 22px var(--main-pad-x) 40px;
     }
 
     .topbar {
@@ -1220,7 +1230,8 @@ button, input, select, textarea {
 
 @media (max-width: 560px) {
     .main {
-        padding: 16px 10px 30px;
+        --main-pad-x: 10px;
+        padding: 16px var(--main-pad-x) 30px;
     }
 
     .page-header {
@@ -2236,24 +2247,11 @@ body.nav-locked {
 @media (max-width: 1024px),
        (max-width: 1400px) and (pointer: coarse) {
 
+    /* Sticky at every width; what differs here is the gap under it and
+       a line to separate it from a page that is scrolling past. */
     .topbar {
-        position: sticky;
-        top: 0;
-        z-index: 1150;   /* over the page, under the drawer at 1450 */
-        margin: 0 -16px 16px;
-        padding: 8px 16px;
-        /* Opaque enough to read against whatever scrolls beneath it, with
-           a blur behind for the parts that are not. */
-        background: rgba(32, 21, 16, .92);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        margin-bottom: 12px;
         border-bottom: 1px solid var(--espresso-800);
-    }
-
-    /* The drawer sits above the bar, so the bar must not paint over the
-       backdrop when it is open. */
-    .app-shell.nav-open .topbar {
-        z-index: 1;
     }
 
     .main {
@@ -2674,13 +2672,216 @@ body.nav-locked {
     letter-spacing: 0.3px;
 }
 
-/* The emoji stand-in for a symbol nobody has uploaded yet. Sized in the
-   mark rather than inherited, so it matches an uploaded image's weight
-   in each of the three places it can appear. */
-.brand-mark__emoji {
-    line-height: 1;
-    font-size: 21px;
+/* The drawn stand-in for a symbol nobody has uploaded yet. It takes its
+   colour from the cafe's accent rather than from a font, so it matches
+   whatever theme is set. Sized as a share of its mark, so it keeps the
+   same weight in each place one can appear. */
+.brand-glyph {
+    display: block;
+    width: 64%;
+    height: 64%;
+    color: var(--copper-light);
 }
 
-.topbar-brand__mark .brand-mark__emoji { font-size: 17px; }
-.brand-preview .brand-mark__emoji { font-size: 23px; }
+.topbar-brand__mark .brand-glyph { width: 66%; height: 66%; }
+.brand-preview .brand-glyph { width: 62%; height: 62%; }
+
+/* ============================================================
+   The page's own title stays while the page scrolls
+
+   Opening Billing and scrolling a long history used to leave nothing
+   on screen saying which page you were on. The heading and its
+   actions stay at the top now and the content passes underneath.
+
+   Two bars stack: the top bar with the profile, then the page title
+   under it. --topbar-h is the measured height of the first, set on
+   :root by the shell so this does not have to guess it. The value
+   here is only the fallback for the moment before that runs.
+   ============================================================ */
+:root {
+    --topbar-h: 64px;
+}
+
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1150;
+    /* Bleeds across the content gutter, or what scrolls past shows in
+       the margins either side. */
+    margin-left: calc(var(--main-pad-x) * -1);
+    margin-right: calc(var(--main-pad-x) * -1);
+    padding: 10px var(--main-pad-x);
+    background: var(--espresso-950);
+}
+
+.page-header {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 1100;
+    margin-left: calc(var(--main-pad-x) * -1);
+    margin-right: calc(var(--main-pad-x) * -1);
+    padding: 4px var(--main-pad-x) 14px;
+    background: var(--espresso-950);
+    border-bottom: 1px solid var(--espresso-850);
+}
+
+/* The drawer sits above both bars, so neither may paint over its
+   backdrop while it is open. */
+.app-shell.nav-open .topbar,
+.app-shell.nav-open .page-header {
+    z-index: 1;
+}
+
+/* ============================================================
+   No scrollbars anywhere
+
+   Everything still scrolls - wheel, trackpad, touch, keyboard and
+   the scroll methods. The bar itself is simply not drawn, on the
+   page, the sidebar and every panel that scrolls inside itself.
+
+   The trade-off is that a sideways-scrolling table no longer
+   advertises itself, so anything that scrolls horizontally needs to
+   look like it does.
+   ============================================================ */
+* {
+    scrollbar-width: none;          /* Firefox */
+    -ms-overflow-style: none;       /* old Edge */
+}
+
+*::-webkit-scrollbar {              /* Chrome, Safari, new Edge */
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+/* On a narrow screen the page header stacks, and its actions go full
+   width. Sticky, that cost half the screen on every page. The bar that
+   stays is compacted to one row instead: the name, and its actions at
+   their natural width. The subtitle is the part that gives way - it is
+   a description of a page you are already looking at. */
+@media (max-width: 560px) {
+    .page-header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: nowrap;
+        gap: 8px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+
+    .page-header > div:first-child {
+        min-width: 0;
+    }
+
+    .page-header .eyebrow,
+    .page-header > div > p,
+    .page-header .page-subtitle {
+        display: none;
+    }
+
+    .page-header h1 {
+        font-size: 19px;
+        gap: 7px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .page-header h1 i { font-size: 17px; }
+
+    /* Back to their own size, and they may shrink before the name does.
+       Actions are sometimes a bare button and sometimes a wrapper holding
+       two, so both shapes are covered. */
+    .page-header > .btn,
+    .page-header > a.btn,
+    .page-header__actions,
+    .page-header__actions .btn {
+        width: auto;
+        flex-shrink: 1;
+        min-width: 0;
+    }
+
+    .page-header__actions {
+        flex-wrap: nowrap;
+        gap: 6px;
+    }
+
+    .page-header > .btn,
+    .page-header > a.btn,
+    .page-header__actions .btn {
+        padding-left: 10px;
+        padding-right: 10px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+}
+
+/* The same on the bar that stays at the top on a phone, a size down so it
+   sits beside the hamburger and the profile without crowding either. */
+.topbar-brand__name {
+    font-size: 16.5px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+    color: var(--cream);
+}
+
+/* ============================================================
+   The top bar on a small screen
+
+   Two rows rather than one cramped line:
+
+     [cup  Cafe Manager] ............ [full screen] [profile]
+     [menu]
+
+   The name leads, the two controls sit in the right corner, and the
+   menu button drops to the left of a second row. Both rows stay at
+   the top when the page scrolls - the menu is the only way off a page
+   on a phone, so it cannot be the part that scrolls away.
+
+   Order is set rather than markup rearranged: the same bar has to read
+   left-to-right as menu-then-name on a desktop, where there are no rows
+   to speak of.
+   ============================================================ */
+@media (max-width: 1024px),
+       (max-width: 1400px) and (pointer: coarse) {
+
+    .topbar {
+        flex-wrap: wrap;
+        align-items: center;
+        row-gap: 8px;
+    }
+
+    .topbar-brand {
+        order: 1;
+        margin-right: auto;
+    }
+
+    .fullscreen-btn { order: 2; margin-left: 0; }
+    .profile-menu { order: 3; }
+
+    /* A zero-height full-width item forces everything after it onto a
+       new line. Flexbox has no other way to say "break here". */
+    .topbar::after {
+        content: "";
+        order: 4;
+        flex-basis: 100%;
+        height: 0;
+    }
+
+    .nav-toggle {
+        order: 5;
+        margin-right: auto;
+    }
+}
+
+/* The day name in the Today card, in place of an icon. Small caps-ish
+   and tight, so three letters sit in the same round slot an icon had. */
+.day-chip {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    line-height: 1;
+}

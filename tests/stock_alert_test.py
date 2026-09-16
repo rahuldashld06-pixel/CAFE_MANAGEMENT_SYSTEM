@@ -184,6 +184,39 @@ check("Gamma is not told about Alpha's empty shelves",
 check("Alpha still sees its own", "Latte" in chips(a))
 
 
+print("\n=== 8. The Today card names the real day ===")
+# It used to carry Bootstrap's calendar-day icon, which has the word
+# "Fri" drawn into the font. It read Friday on a Tuesday, for everyone,
+# for ever.
+import datetime  # noqa: E402
+
+html = a.get("/dashboard").get_data(as_text=True)
+shown = re.search(
+    r'id="today-weekday"[^>]*title="([^"]+)">([^<]+)<', html)
+
+check("the card carries a day at all", shown is not None,
+      "no day is rendered on the Today card")
+
+if shown:
+    full, short = shown.group(1), shown.group(2).strip()
+    today = datetime.datetime.now()
+    check("and it is today's", short == today.strftime("%a"),
+          "it reads %r on a %s" % (short, today.strftime("%a")))
+    check("with the whole name to hover", full == today.strftime("%A"),
+          "the tooltip reads %r" % full)
+
+check("the icon with Fri baked into it is gone",
+      "bi-calendar-day" not in html,
+      "the fixed-Friday icon is still on the dashboard")
+
+# A till left running overnight refreshes its figures without anyone
+# reloading, so the day has to come with them.
+feed = a.get("/api/dashboard-stats")
+check("the refresh carries the day too", feed.status_code == 200
+      and json.loads(feed.get_data(as_text=True)).get("weekday", {})
+      .get("short") == datetime.datetime.now().strftime("%a"),
+      "a screen left open past midnight would keep yesterday's name")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

@@ -29,6 +29,17 @@ branding, fully isolated from the others.
   cup, and clearing a field puts that default back rather than leaving a
   blank corner. The same name is in the bar that stays at the top on a
   phone.
+- **Nothing reloads the whole page.** Following a link swaps only the page
+  region, and saving a form now does the same: the post is sent in the
+  background and the page that comes back is swapped in, so the sidebar,
+  the top bar, the stylesheets and the scripts are never fetched twice.
+  The address bar follows the server's redirect, so Back works and a
+  refresh does not re-post.
+- **No scrollbars.** Everything still scrolls by wheel, trackpad, touch and
+  keyboard; the bar is simply not drawn.
+- **The page title stays put.** The heading and its actions stay at the top
+  while the content scrolls underneath, offset by the measured height of
+  the bar above rather than a guess.
 - **The sidebar scrolls only when it has to.** The name is a fixed head and
   the page links below it are what scrolls, starting at Dashboard. A screen
   tall enough for every section has no scrollbar at all; a shorter one
@@ -103,6 +114,7 @@ tests/cdp.py         Minimal DevTools-protocol client used by that suite
 python tests/smoke_test.py        # expect PASSED: 38   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
 python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
+python tests/instant_post_test.py # expect PASSED: 16   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
@@ -117,7 +129,7 @@ python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 49   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 62   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0

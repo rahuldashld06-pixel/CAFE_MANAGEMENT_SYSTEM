@@ -1,3 +1,4 @@
+{% from "_brand_mark.html" import coffee_mark %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ cafe_theme }}">
 
@@ -66,16 +67,16 @@
             {# Set under Profile -> Name & Symbol. Left alone it reads
                "Cafe Manager / Food & Service Admin", as it always did.
                The symbol is drawn only when there is a real one. #}
-            <div class="sidebar-brand">
+            <div class="sidebar-brand"><!--brand:start-->
                 <span class="brand-mark">
                     {% if cafe_branding.logo %}
                     <img src="{{ cafe_branding.logo }}" alt="">
                     {% else %}
-                    <span class="brand-mark__emoji">☕</span>
+                    {{ coffee_mark() }}
                     {% endif %}
                 </span>
                 <span class="brand-text">{{ cafe_branding.brand_name }}<small>{{ cafe_branding.brand_tagline }}</small></span>
-            </div>
+            <!--brand:end--></div>
 
             <nav class="sidebar-nav"><!--nav:start-->
 
@@ -154,16 +155,16 @@
                    the cafe's name and logo would be out of sight on every
                    page. This puts them in the bar that stays at the top.
                    Hidden on desktop, where the sidebar already shows them. #}
-                <a href="{{ home_url }}" class="topbar-brand">
+                <a href="{{ home_url }}" class="topbar-brand"><!--tbrand:start-->
                     <span class="topbar-brand__mark">
                         {% if cafe_branding.logo %}
                         <img src="{{ cafe_branding.logo }}" alt="">
                         {% else %}
-                        <span class="brand-mark__emoji">☕</span>
+                        {{ coffee_mark() }}
                         {% endif %}
                     </span>
                     <span class="topbar-brand__name">{{ cafe_branding.brand_name }}</span>
-                </a>
+                <!--tbrand:end--></a>
 
                 {# Hidden by script where the browser has no Fullscreen
                    API - an iPhone in Safari has none, and there the
@@ -421,6 +422,40 @@ window.CafeShell = {
                 profileMenu.classList.remove("open");
             }
         });
+    }
+
+    // ---- Where the page title sticks ----
+    // Two bars stack at the top: this one with the profile, then the
+    // page's own title under it. The title has to know how tall this one
+    // is, and that changes with the screen size, the safe-area inset on a
+    // phone and the browser's own font size - so it is measured rather
+    // than guessed. The CSS carries a fallback for the moment before this
+    // first runs.
+    const topbar = document.querySelector(".topbar");
+
+    if (topbar) {
+        let lastHeight = -1;
+
+        const measure = function () {
+            const height = Math.round(topbar.getBoundingClientRect().height);
+            if (height === lastHeight || height <= 0) return;
+            lastHeight = height;
+            document.documentElement.style.setProperty(
+                "--topbar-h", height + "px");
+        };
+
+        measure();
+        window.addEventListener("resize", measure);
+        window.addEventListener("orientationchange", measure);
+
+        // The icon font arrives after first paint and changes the height
+        // of the buttons in the bar.
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(measure).catch(function () { });
+        }
+
+        // A swapped-in page can carry a taller or shorter bar with it.
+        document.addEventListener("instant:load", measure);
     }
 
     // ---- Back links ----

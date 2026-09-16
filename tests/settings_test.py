@@ -285,8 +285,8 @@ check("with the line that has always gone under it",
       tagline == "Food &amp; Service Admin", "it reads %r" % tagline)
 check("and no uploaded symbol beside it", logo is None,
       "a symbol is drawn where none was set")
-check("the coffee cup stands in until one is uploaded",
-      "brand-mark__emoji" in a.get("/orders/add").get_data(as_text=True),
+check("the drawn coffee cup stands in until one is uploaded",
+      "brand-glyph" in a.get("/orders/add").get_data(as_text=True),
       "nothing is drawn in the symbol's place")
 
 missing = [path for path in SHELL_PAGES
@@ -329,7 +329,7 @@ check("and it is on the small-screen bar too",
       is not None,
       "the phone bar still shows the stand-in rather than the symbol")
 check("the stand-in steps aside once a symbol is set",
-      "brand-mark__emoji" not in shell,
+      "brand-glyph" not in shell,
       "the cup is drawn alongside the uploaded symbol")
 
 a.post("/settings/branding", data={
@@ -337,7 +337,7 @@ a.post("/settings/branding", data={
 check("removing the symbol takes it away", corner(a)[2] is None,
       "the symbol is still drawn")
 check("and the cup comes back in its place",
-      "brand-mark__emoji" in a.get("/orders/add").get_data(as_text=True),
+      "brand-glyph" in a.get("/orders/add").get_data(as_text=True),
       "the symbol's place is empty now")
 check("but leaves the name alone", corner(a)[0] == "Spice Garden",
       "the name became %r" % corner(a)[0])

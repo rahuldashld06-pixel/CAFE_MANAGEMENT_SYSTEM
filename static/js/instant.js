@@ -30,6 +30,10 @@
     var VIEW_ID = "page-view";
     var VIEW_START = "<!--pv:start-->";
     var VIEW_END = "<!--pv:end-->";
+    var BRAND_START = "<!--brand:start-->";
+    var BRAND_END = "<!--brand:end-->";
+    var TOPBRAND_START = "<!--tbrand:start-->";
+    var TOPBRAND_END = "<!--tbrand:end-->";
     var NAV_START = "<!--nav:start-->";
     var NAV_END = "<!--nav:end-->";
     // A cached page is always painted immediately. These say how long that
@@ -56,14 +60,19 @@
         "|(/(delete|cancel|complete|toggle|pay|mark-paid|resend-otp|verify|webhook)(/|$))"
     );
 
-    // Screens the counter opens most, warmed in this order. Only these are
-    // fetched speculatively: warming all nine sidebar destinations meant
-    // nine extra page renders - each with its own database round-trips -
-    // for every visit, most of them never looked at. Everything else is
-    // covered by the hover/touch prefetch below, which fires on actual
-    // intent a moment before the tap lands.
-    var WARM_ORDER = ["/orders/add", "/orders", "/billing"];
-    var WARM_LIMIT = WARM_ORDER.length;
+    // Every screen in the sidebar is warmed after sign-in, in this order -
+    // the ones the counter opens most first, then the rest, then anything
+    // not named here. They go one at a time and only while the browser is
+    // idle, so the managed database's handful of connections are never all
+    // busy at once and warming never competes with the page in front of
+    // the user. Whoever is signed in only warms what their own sidebar
+    // offers, so a cashier never touches the admin screens.
+    var WARM_ORDER = [
+        "/orders/add", "/orders", "/billing", "/foods", "/inventory",
+        "/categories", "", "/reports", "/users"
+    ];
+    // One past the end, so a page not named above is still warmed, last.
+    var WARM_LIMIT = WARM_ORDER.length + 1;
 
     var rawSetTimeout = window.setTimeout;
     var rawSetInterval = window.setInterval;
@@ -284,6 +293,17 @@
         return match ? match[1] : null;
     }
 
+    // Copies one marked region of a fetched page over the live one. Used
+    // for the parts of the shell that can change without the page region
+    // changing - the cafe's name and its symbol.
+    function replaceRegion(html, startMarker, endMarker, selector) {
+        var fresh = between(html, startMarker, endMarker);
+        var live = document.querySelector(selector);
+        if (fresh === null || !live) return;
+        if (live.innerHTML === fresh) return;    // nothing moved
+        live.innerHTML = fresh;
+    }
+
     function swap(html, url) {
         var viewHtml = between(html, VIEW_START, VIEW_END);
         var live = currentView();
@@ -291,6 +311,12 @@
 
         beginPage();
         readyQueue = [];
+
+        // The name and symbol live outside the page region, so renaming
+        // the cafe used to leave the old name in the corner until a full
+        // reload. They come across with every swap now.
+        replaceRegion(html, BRAND_START, BRAND_END, ".sidebar-brand");
+        replaceRegion(html, TOPBRAND_START, TOPBRAND_END, ".topbar-brand");
 
         // The sidebar marks the active section server-side, so take its
         // rendered state rather than re-deriving the rules here.
@@ -522,6 +548,142 @@
         event.preventDefault();
         visit(action.href, {});
     });
+
+    // ------------------------------------------------------------------
+    // Saving something
+    //
+    // A form post used to reload everything: the sidebar, the top bar,
+    // every stylesheet and every script, to change one panel. Posts go
+    // through the same swap as a link now, so the browser keeps the shell
+    // it already has and only the page region is replaced.
+    //
+    // The server answers a post with a redirect to the page to show.
+    // fetch follows it, and response.url is where it landed - that is what
+    // both the swap and the address bar use, so Back still works and a
+    // refresh does not re-post.
+    // ------------------------------------------------------------------
+    function onPost(event) {
+        if (event.defaultPrevented) return;      // a confirm() said no,
+                                                 // or a page handled it
+
+        var form = event.target;
+        if (!form || form.hasAttribute("data-no-instant")) return;
+        if ((form.getAttribute("method") || "get").toLowerCase() !== "post") {
+            return;                              // GET forms are handled above
+        }
+
+        // The sign-in, registration and reset screens are not app pages and
+        // have no region to swap into.
+        if (!currentView()) return;
+
+        var action;
+        try {
+            action = new URL(form.getAttribute("action") || location.href,
+                             location.href);
+        } catch (error) {
+            return;
+        }
+        if (action.origin !== location.origin) return;
+
+        var body;
+        try {
+            body = new FormData(form);
+        } catch (error) {
+            return;
+        }
+
+        // A form with two buttons - Save and Remove - tells them apart by
+        // the button's own name and value, which FormData does not include.
+        var submitter = event.submitter || null;
+        if (submitter && submitter.name) {
+            body.append(submitter.name, submitter.value || "");
+        }
+
+        event.preventDefault();
+        saveScroll();
+
+        var token = ++navToken;
+        if (submitter) submitter.disabled = true;   // no double posts
+
+        var progressTimer = rawSetTimeout.call(window, function () {
+            if (token === navToken) showProgress();
+        }, PROGRESS_DELAY_MS);
+
+        function release() {
+            rawClearTimeout.call(window, progressTimer);
+            if (submitter) submitter.disabled = false;
+        }
+
+        function giveUpToTheBrowser() {
+            release();
+            hideProgress();
+            // Post it the ordinary way rather than losing what was typed.
+            form.setAttribute("data-no-instant", "");
+            if (form.requestSubmit) {
+                form.requestSubmit(submitter);
+            } else {
+                form.submit();
+            }
+        }
+
+        rawFetch.call(window, action.href, {
+            method: "POST",
+            body: body,
+            credentials: "same-origin",
+            redirect: "follow"
+        }).then(function (response) {
+            return response.text().then(function (html) {
+                return {
+                    html: html,
+                    url: response.url || action.href,
+                    ok: response.ok
+                };
+            });
+        }).then(function (result) {
+            // A write makes every cached read stale.
+            cache.clear();
+            release();
+            if (token !== navToken) return;
+
+            var landed;
+            try {
+                landed = new URL(result.url);
+            } catch (error) {
+                giveUpToTheBrowser();
+                return;
+            }
+
+            if (!result.ok || !safePath(landed.pathname)) {
+                hideProgress();
+                hardNavigate(result.url);
+                return;
+            }
+
+            apply(result.html, result.url, {});
+        }).catch(function () {
+            giveUpToTheBrowser();
+        });
+    }
+
+    // Registered last, and moved back to last after every swap.
+    //
+    // Some pages post a form themselves - Billing updates one row in place
+    // rather than replacing the page - and they do that by handling the
+    // submit and calling preventDefault. Listeners fire in the order they
+    // were added, so this one, added when instant.js loads, would have run
+    // before theirs and posted the form a second time. Re-adding it after
+    // each page's own scripts have run puts it behind them, where a page
+    // that wants to handle its own form always wins.
+    function takeLastTurnOnPosts() {
+        rawRemove.call(document, "submit", onPost);
+        rawAdd.call(document, "submit", onPost);
+    }
+
+    takeLastTurnOnPosts();
+    if (document.readyState === "loading") {
+        rawAdd.call(document, "DOMContentLoaded", takeLastTurnOnPosts);
+    }
+    rawAdd.call(document, "instant:load", takeLastTurnOnPosts);
 
     rawAdd.call(document, "mouseover", function (event) {
         var link = linkFrom(event);

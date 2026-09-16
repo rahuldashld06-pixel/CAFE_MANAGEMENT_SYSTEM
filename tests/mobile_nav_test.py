@@ -249,8 +249,11 @@ try:
     chrome = b.evaluate("""
         Math.round(document.querySelector('.topbar').getBoundingClientRect().bottom)
     """)
-    check("the nav costs the page barely any height now",
-          0 < chrome < 90, "chrome above content is %spx tall" % chrome)
+    # Two rows, by request: the name and the two controls on the first,
+    # the menu button on the second. Both stay at the top when the page
+    # scrolls, which is the trade that was chosen deliberately.
+    check("the bar stays to two modest rows",
+          0 < chrome < 150, "chrome above content is %spx tall" % chrome)
     check("the sidebar takes no room in the layout while closed",
           b.evaluate("Math.round(document.querySelector('.main').getBoundingClientRect().top)") < 5,
           "the page still starts below a nav block")
@@ -376,6 +379,7 @@ try:
             function box(sel) {
                 var r = document.querySelector(sel).getBoundingClientRect();
                 return {left: Math.round(r.left), right: Math.round(r.right),
+                        top: Math.round(r.top), bottom: Math.round(r.bottom),
                         width: Math.round(r.width)};
             }
             return JSON.stringify({
@@ -397,10 +401,13 @@ try:
           and layout["profile"]["width"] > 30,
           "the profile is at %s on a %spx screen"
           % (layout["profile"], layout["screen"]))
-    check("the brand sits between them",
-          layout["toggle"]["right"] <= layout["brand"]["left"] + 1
+    check("the name leads and the controls hold the right corner",
+          layout["brand"]["left"] < layout["profile"]["left"]
           and layout["brand"]["right"] <= layout["profile"]["left"] + 1,
-          "the three do not line up: %s" % layout)
+          "they do not line up: %s" % layout)
+    check("and the menu button sits under the name, not beside it",
+          layout["toggle"]["top"] >= layout["brand"]["bottom"] - 1,
+          "the menu is still on the name's row: %s" % layout)
     check("and nothing pushes the page sideways",
           layout["scrollWidth"] <= layout["screen"] + 1,
           "the page scrolls sideways by %dpx"
@@ -560,6 +567,117 @@ try:
           b.evaluate("getComputedStyle(document.querySelector('.sidebar-nav'))"
                      ".overflowY") in ("auto", "scroll"),
           "the drawer scrolls as one block")
+
+    print("\n=== The page's own title stays while the page scrolls ===")
+    # Scrolling a long list used to leave nothing on screen saying which
+    # page you were on. Two bars stack now: the profile bar, then the
+    # page title under it, with the content passing underneath.
+    b.call("Emulation.setDeviceMetricsOverride", width=1440, height=680,
+           deviceScaleFactor=1, mobile=False)
+    b.call("Emulation.setTouchEmulationEnabled", enabled=False)
+    b.evaluate("location.href = '/foods'")
+    wait("document.readyState === 'complete' && "
+         "!!document.querySelector('.page-header')", "Food Management")
+    time.sleep(0.7)
+
+    def box(selector, prop):
+        return int(b.evaluate(
+            "Math.round(document.querySelector('%s')"
+            ".getBoundingClientRect().%s)" % (selector, prop)))
+
+    title = b.evaluate(
+        "document.querySelector('.page-header h1').textContent.trim()")
+
+    b.evaluate("window.scrollTo(0, 900)")
+    time.sleep(0.5)
+    scrolled = int(b.evaluate("Math.round(window.scrollY)"))
+
+    check("the page actually scrolled", scrolled > 100,
+          "only reached %dpx - the checks below would prove nothing"
+          % scrolled)
+    check("the top bar is still at the top", -2 <= box(".topbar", "top") <= 2,
+          "it moved to %dpx" % box(".topbar", "top"))
+    check("the page title is still on screen",
+          box(".page-header", "top") >= -2
+          and box(".page-header", "bottom") < 680,
+          "the title is at %dpx" % box(".page-header", "top"))
+    check("and it still says which page this is",
+          "Food Management" in title, "it reads %r" % title)
+
+    # The title's offset is measured from the real bar rather than
+    # guessed, so the two must meet exactly - no overlap, no gap.
+    gap = box(".page-header", "top") - box(".topbar", "bottom")
+    check("the two bars meet exactly, with no overlap and no gap",
+          -1 <= gap <= 1,
+          "there is a %dpx gap between them" % gap)
+
+    check("the measured bar height is what the title uses",
+          b.evaluate("""
+              (function () {
+                  var declared = parseInt(getComputedStyle(
+                      document.documentElement)
+                      .getPropertyValue('--topbar-h'), 10);
+                  var real = Math.round(document.querySelector('.topbar')
+                      .getBoundingClientRect().height);
+                  return Math.abs(declared - real) <= 1;
+              }())
+          """),
+          "the title is offset by a guess rather than the bar's real height")
+
+    print("\n=== Nothing draws a scrollbar, and everything still scrolls ===")
+    for label, selector in (("the page", "document.documentElement"),
+                            ("the sidebar links",
+                             "document.querySelector('.sidebar-nav')")):
+        check("%s draws no scrollbar" % label,
+              b.evaluate("getComputedStyle(%s).scrollbarWidth" % selector)
+              == "none",
+              "a scrollbar is still drawn on %s" % label)
+
+    b.evaluate("window.scrollTo(0, 0)")
+    time.sleep(0.3)
+    b.evaluate("window.scrollTo(0, 500)")
+    time.sleep(0.3)
+    check("the page still scrolls without one",
+          int(b.evaluate("Math.round(window.scrollY)")) > 100,
+          "hiding the scrollbar stopped the page scrolling")
+
+    print("\n=== On a phone the title bar costs one row, not half the screen ===")
+    # The header stacks on a narrow screen and its actions go full width.
+    # Sticky, that was most of the viewport on every page.
+    b.call("Emulation.setDeviceMetricsOverride", **PHONE)
+    b.call("Emulation.setTouchEmulationEnabled", enabled=True,
+           maxTouchPoints=5)
+    b.evaluate("location.href = '/foods'")
+    wait("document.readyState === 'complete' && "
+         "!!document.querySelector('.page-header')", "Food Management on a phone")
+    time.sleep(0.7)
+
+    header_height = box(".page-header", "height")
+    check("the sticky title is a single row",
+          header_height <= 90,
+          "it is %dpx tall, which is most of the screen" % header_height)
+    # Two rows of bar plus the page title is about a quarter of a phone
+    # screen - the cost of keeping the menu and the profile one tap away
+    # at all times.
+    check("the content starts below both bars, inside a quarter of the screen",
+          box(".page-header", "bottom") <= 215,
+          "content does not begin until %dpx down"
+          % box(".page-header", "bottom"))
+
+    b.evaluate("window.scrollTo(0, 700)")
+    time.sleep(0.5)
+    gap = box(".page-header", "top") - box(".topbar", "bottom")
+    check("the two bars meet on a phone too", -1 <= gap <= 1,
+          "there is a %dpx gap between them" % gap)
+    check("and the name is still readable up there",
+          b.evaluate("""
+              (function () {
+                  var h = document.querySelector('.page-header h1');
+                  return h.getBoundingClientRect().width > 60
+                         && h.textContent.trim().length > 0;
+              }())
+          """),
+          "the title was squeezed to nothing")
 
     print("\n=== Back on a desktop width ===")
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=900,

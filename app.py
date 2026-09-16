@@ -1792,6 +1792,7 @@ def home():
             total_inventory=total_inventory,
             today_orders=today_orders,
             today_revenue=today_revenue,
+            weekday=today_weekday(),
             low_stock=alerts["low_stock"],
             unavailable=alerts["unavailable"],
             low_stock_items=alerts["low_stock_items"],
@@ -4912,6 +4913,7 @@ def dashboard_stats():
             "total_categories": total_categories,
             "total_orders": total_orders,
             "total_inventory": total_inventory,
+            "weekday": today_weekday(),
             "today_orders": today_orders,
             "today_revenue": (float(today_revenue) if today_revenue is not None else None),
             "low_stock": alerts["low_stock"],
@@ -5844,6 +5846,20 @@ def delete_user(user_id):
 # exactly what every café saw before the wording was customisable.
 DEFAULT_BRAND_NAME = "Cafe Manager"
 DEFAULT_BRAND_TAGLINE = "Food & Service Admin"
+
+
+def today_weekday():
+    """
+    Today's name, for the label on the dashboard's Today card.
+
+    The card used to carry Bootstrap's calendar-day icon, which has the
+    word "Fri" drawn into the font: it read Friday on a Tuesday, for
+    everyone, for ever.
+    """
+    return {
+        "short": datetime.now().strftime("%a"),
+        "full": datetime.now().strftime("%A"),
+    }
 
 
 def get_cafe_branding(cafe_id):
