@@ -163,7 +163,7 @@
                         {{ coffee_mark() }}
                         {% endif %}
                     </span>
-                    <span class="topbar-brand__name">{{ cafe_branding.brand_name }}</span>
+                    <span class="topbar-brand__name">{{ cafe_branding.brand_name }}<small>{{ cafe_branding.brand_tagline }}</small></span>
                 <!--tbrand:end--></a>
 
                 {# Hidden by script where the browser has no Fullscreen
@@ -424,6 +424,46 @@ window.CafeShell = {
         });
     }
 
+    // ---- Table cells carry their own column name ----
+    // On a small screen every table becomes a stack of cards, one per
+    // row, and each cell needs to say which column it came from. Copying
+    // the header text onto the cells here means no template has to repeat
+    // its column names, and a table added later is covered without anyone
+    // remembering to do this.
+    function labelTableCells(root) {
+        const tables = (root || document).querySelectorAll(".data-table");
+
+        tables.forEach(function (table) {
+            const headings = table.querySelectorAll("thead th");
+            if (!headings.length) return;
+
+            table.querySelectorAll("tbody tr").forEach(function (row) {
+                const cells = row.children;
+
+                for (let i = 0; i < cells.length; i++) {
+                    const cell = cells[i];
+                    if (cell.hasAttribute("data-label")) continue;
+
+                    // A cell spanning the table - "no orders yet" - belongs
+                    // to no single column.
+                    if (cell.hasAttribute("colspan")) {
+                        cell.setAttribute("data-label", "");
+                        continue;
+                    }
+
+                    const heading = headings[i];
+                    const name = heading ? heading.textContent.trim() : "";
+                    cell.setAttribute("data-label", name);
+                }
+            });
+        });
+    }
+
+    labelTableCells(document);
+    document.addEventListener("instant:load", function () {
+        labelTableCells(document);
+    });
+
     // ---- Where the page title sticks ----
     // Two bars stack at the top: this one with the profile, then the
     // page's own title under it. The title has to know how tall this one
@@ -442,6 +482,13 @@ window.CafeShell = {
             lastHeight = height;
             document.documentElement.style.setProperty(
                 "--topbar-h", height + "px");
+
+            // The page title sits at the bottom edge of this bar, unless
+            // the bar has slid away - then it takes the top itself.
+            if (!document.documentElement.classList.contains("bar-away")) {
+                document.documentElement.style.setProperty(
+                    "--title-top", height + "px");
+            }
         };
 
         measure();
@@ -543,6 +590,96 @@ window.CafeShell = {
         if (drawerLayout.addEventListener) drawerLayout.addEventListener("change", syncToLayout);
         else if (drawerLayout.addListener) drawerLayout.addListener(syncToLayout);
     }
+
+    // ---- The top bar gets out of the way ----
+    // Two rows of bar plus the page title held about a quarter of a phone
+    // screen at all times. It slides away on the way down and comes back
+    // the moment the page is scrolled up, so it is one short swipe from
+    // reach without being in the way while reading. The page title moves
+    // up into the space rather than leaving a gap.
+    //
+    // Small screens only: on a desktop the bar is one row and there is
+    // room to spare, so nothing moves there.
+    (function () {
+        const root = document.documentElement;
+        const bar = document.querySelector(".topbar");
+        if (!bar) return;
+
+        const AWAY = "bar-away";
+        const SETTLE = 6;      // ignore the jitter of a finger resting
+        const FREE_ZONE = 90;  // near the top the bar always shows
+
+        let lastY = window.scrollY || 0;
+        let ticking = false;
+
+        function barHeight() {
+            const declared = getComputedStyle(root)
+                .getPropertyValue("--topbar-h");
+            const measured = parseInt(declared, 10);
+            return isNaN(measured) ? 0 : measured;
+        }
+
+        function show() {
+            if (!root.classList.contains(AWAY)) return;
+            root.classList.remove(AWAY);
+            root.style.setProperty("--title-top", barHeight() + "px");
+        }
+
+        function hide() {
+            if (root.classList.contains(AWAY)) return;
+            root.classList.add(AWAY);
+            root.style.setProperty("--title-top", "0px");
+        }
+
+        function onScroll() {
+            const y = Math.max(0, window.scrollY || 0);
+            const moved = y - lastY;
+
+            if (Math.abs(moved) < SETTLE) return;
+            lastY = y;
+
+            // The drawer sits over everything; the bar must not move
+            // about underneath it.
+            if (document.querySelector(".app-shell.nav-open")) {
+                show();
+                return;
+            }
+
+            if (y <= FREE_ZONE || moved < 0) {
+                show();
+            } else {
+                hide();
+            }
+        }
+
+        function schedule() {
+            if (ticking) return;
+            ticking = true;
+            window.requestAnimationFrame(function () {
+                ticking = false;
+                if (!drawerLayout.matches) {
+                    show();          // desktop keeps its bar
+                    return;
+                }
+                onScroll();
+            });
+        }
+
+        window.addEventListener("scroll", schedule, { passive: true });
+
+        // A new page starts at the top, so the bar starts visible.
+        document.addEventListener("instant:load", function () {
+            lastY = 0;
+            show();
+        });
+
+        drawerLayout.addEventListener("change", function () {
+            lastY = window.scrollY || 0;
+            show();
+        });
+
+        show();
+    }());
 
     // ---- Order Status popup (staff pages) ----
     const fab = document.getElementById("orderStatusFab");

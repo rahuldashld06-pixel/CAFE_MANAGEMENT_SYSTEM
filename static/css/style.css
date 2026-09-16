@@ -2716,7 +2716,10 @@ body.nav-locked {
 
 .page-header {
     position: sticky;
-    top: var(--topbar-h);
+    /* Where the bar above ends. --title-top is the measured height while
+       the bar is showing and zero while it has slid away, so the title
+       moves up into the space rather than leaving a gap. */
+    top: var(--title-top, var(--topbar-h));
     z-index: 1100;
     margin-left: calc(var(--main-pad-x) * -1);
     margin-right: calc(var(--main-pad-x) * -1);
@@ -2884,4 +2887,150 @@ body.nav-locked {
     letter-spacing: 0.4px;
     text-transform: uppercase;
     line-height: 1;
+}
+
+/* ============================================================
+   Tables become cards on a small screen
+
+   A table 640px wide inside a 390px screen scrolled sideways
+   inside its own box, and with scrollbars hidden it did not even
+   say so. A cashier taking a payment had to drag the row about to
+   see the amount and the button at the same time.
+
+   Each row becomes one card with every field on its own line,
+   labelled from the table's own header. Nothing is hidden and
+   nothing scrolls sideways: the whole bill, or food, or stock row
+   is on screen at once.
+   ============================================================ */
+@media (max-width: 760px) {
+
+    .table-wrap {
+        overflow-x: visible;
+    }
+
+    .data-table {
+        display: block;
+        min-width: 0;
+        font-size: 13.5px;
+    }
+
+    /* The header is gone, so each cell carries its own label. */
+    .data-table thead {
+        display: none;
+    }
+
+    .data-table tbody {
+        display: block;
+    }
+
+    .data-table tbody tr {
+        display: block;
+        margin-bottom: 12px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-850);
+        overflow: hidden;
+    }
+
+    .data-table tbody tr:hover {
+        background: var(--espresso-850);
+    }
+
+    .data-table tbody td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 9px 13px;
+        border-bottom: 1px solid var(--espresso-800);
+        text-align: right;
+    }
+
+    .data-table tbody tr td:last-child {
+        border-bottom: 0;
+    }
+
+    .data-table tbody td::before {
+        content: attr(data-label);
+        flex: 0 0 auto;
+        max-width: 45%;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        color: var(--cream-faint);
+        text-align: left;
+    }
+
+    /* A cell the header had no name for - the actions column - takes the
+       whole width rather than sitting against an empty label. */
+    .data-table tbody td[data-label=""] {
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .data-table tbody td[data-label=""]::before {
+        display: none;
+    }
+
+    /* An empty-state row spans every column and has no label of its own. */
+    .data-table tbody td[colspan] {
+        justify-content: center;
+        text-align: center;
+    }
+
+    .data-table tbody td[colspan]::before {
+        display: none;
+    }
+
+    /* Buttons in a row of their own should be reachable, not tiny. */
+    .data-table tbody td .btn {
+        flex: 1 1 auto;
+        min-width: 0;
+        justify-content: center;
+    }
+}
+
+/* The tagline belongs under the name everywhere, not only in the sidebar. */
+.topbar-brand__name small {
+    display: block;
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: 10.5px;
+    letter-spacing: .3px;
+    color: var(--cream-faint);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ============================================================
+   The top bar gets out of the way
+
+   Two rows of bar plus the page title is a lot of a phone screen to
+   hold permanently. It slides away when the page is scrolled down
+   and comes back the moment it is scrolled up, so it is always one
+   short swipe from reach and never in the way while reading.
+
+   The page title takes its place at the top rather than leaving a
+   gap: --title-top is the measured height of the bar while it is
+   showing, and zero while it is away.
+   ============================================================ */
+@media (max-width: 1024px),
+       (max-width: 1400px) and (pointer: coarse) {
+
+    .topbar {
+        transition: transform .22s ease;
+        will-change: transform;
+    }
+
+    :root.bar-away .topbar {
+        transform: translateY(-105%);
+    }
+
+    .page-header {
+        transition: top .22s ease;
+    }
 }

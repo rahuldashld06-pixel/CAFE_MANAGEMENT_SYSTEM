@@ -341,13 +341,27 @@ try:
     check("the page actually scrolled", after["scrolled"] > 50,
           "only moved %(scrolled)spx - the check below would prove nothing"
           % after)
-    check("the top bar is still at the top of the screen",
-          -2 <= after["top"] <= 2,
-          "it moved to %spx after scrolling (was %spx)"
-          % (after["top"], before["top"]))
-    check("the hamburger is still tappable after scrolling",
+    # The bar slides away on the way down and comes back on the way up -
+    # a quarter of a phone screen is too much to hold permanently. What
+    # matters is that it is always one short swipe from reach.
+    check("the bar gets out of the way on the way down",
+          after["top"] < -10,
+          "it stayed at %spx while scrolling down" % after["top"])
+
+    b.evaluate("window.scrollTo(0, Math.max(0, window.scrollY - 300))")
+    time.sleep(0.6)
+    back = json.loads(b.evaluate("""
+        (function () {
+            var r = document.querySelector('.topbar').getBoundingClientRect();
+            return JSON.stringify({top: Math.round(r.top)});
+        })()
+    """))
+    check("and comes straight back on the way up",
+          -2 <= back["top"] <= 2,
+          "it is at %spx after scrolling back up" % back["top"])
+    check("the hamburger is tappable again once it is back",
           hit_test("#navToggle"),
-          "something scrolled over the top bar")
+          "something is covering the top bar")
     check("and the profile menu with it",
           hit_test("#profileTrigger"))
 
@@ -418,13 +432,21 @@ try:
 
     b.evaluate("window.scrollTo(0, document.body.scrollHeight)")
     time.sleep(0.6)
-    check("it stays put when the page scrolls",
-          -2 <= int(b.evaluate(
+    check("it goes away with the bar on the way down",
+          int(b.evaluate(
               "Math.round(document.querySelector('.topbar-brand')"
-              ".getBoundingClientRect().top)")) <= 60,
-          "it scrolled away with the page")
+              ".getBoundingClientRect().bottom)")) < 10,
+          "it stayed on screen while scrolling down")
+
+    b.evaluate("window.scrollTo(0, Math.max(0, window.scrollY - 300))")
+    time.sleep(0.6)
+    check("and returns with it on the way up",
+          int(b.evaluate(
+              "Math.round(document.querySelector('.topbar-brand')"
+              ".getBoundingClientRect().top)")) >= -2,
+          "the name did not come back")
     b.evaluate("window.scrollTo(0, 0)")
-    time.sleep(0.3)
+    time.sleep(0.5)
 
     print("\n=== The floating order summary stays in the corner ===")
     tap("#navToggle")
@@ -664,10 +686,19 @@ try:
           "content does not begin until %dpx down"
           % box(".page-header", "bottom"))
 
+    # Scrolled down the bar is away, so the title takes the top itself.
     b.evaluate("window.scrollTo(0, 700)")
-    time.sleep(0.5)
+    time.sleep(0.7)
+    check("with the bar away, the title takes the top",
+          -2 <= box(".page-header", "top") <= 2,
+          "the title sits at %dpx, leaving a gap where the bar was"
+          % box(".page-header", "top"))
+
+    # Scrolled back up, the two meet again.
+    b.evaluate("window.scrollTo(0, Math.max(0, window.scrollY - 300))")
+    time.sleep(0.7)
     gap = box(".page-header", "top") - box(".topbar", "bottom")
-    check("the two bars meet on a phone too", -1 <= gap <= 1,
+    check("and once the bar is back the two meet again", -2 <= gap <= 2,
           "there is a %dpx gap between them" % gap)
     check("and the name is still readable up there",
           b.evaluate("""
@@ -678,6 +709,86 @@ try:
               }())
           """),
           "the title was squeezed to nothing")
+
+    print("\n=== Tables become readable cards on a phone ===")
+    # A table 640px wide inside a 390px screen scrolled sideways inside
+    # its own box, and with scrollbars hidden it did not even say so. A
+    # cashier taking a payment could not see the amount and the button at
+    # the same time.
+    b.call("Emulation.setDeviceMetricsOverride", **PHONE)
+    b.call("Emulation.setTouchEmulationEnabled", enabled=True,
+           maxTouchPoints=5)
+
+    for label, url in (("Food Management", "/foods"),
+                       ("Inventory", "/inventory"),
+                       ("Categories", "/categories"),
+                       ("Billing", "/billing")):
+        b.evaluate("location.href = '%s'" % url)
+        wait("document.readyState === 'complete'", label)
+        time.sleep(0.6)
+
+        report = json.loads(b.evaluate("""
+            (function () {
+                var table = document.querySelector('.data-table');
+                if (!table) return JSON.stringify({none: true});
+
+                var row = table.querySelector('tbody tr');
+                if (!row) return JSON.stringify({empty: true});
+
+                var cells = row.children;
+                var labelled = 0;
+                var widest = 0;
+                for (var i = 0; i < cells.length; i++) {
+                    if (cells[i].getAttribute('data-label') !== null) labelled++;
+                    widest = Math.max(widest,
+                        Math.round(cells[i].getBoundingClientRect().right));
+                }
+
+                var wrap = table.closest('.table-wrap') || table.parentNode;
+                return JSON.stringify({
+                    cells: cells.length,
+                    labelled: labelled,
+                    widest: widest,
+                    screen: window.innerWidth,
+                    stacked: getComputedStyle(row).display === 'block',
+                    sideways: wrap.scrollWidth > wrap.clientWidth + 1,
+                    rowHeight: Math.round(row.getBoundingClientRect().height)
+                });
+            }())
+        """))
+
+        if report.get("none") or report.get("empty"):
+            continue
+
+        check("%s: every cell knows its column" % label,
+              report["labelled"] == report["cells"],
+              "%d of %d cells are labelled"
+              % (report["labelled"], report["cells"]))
+        check("%s: the row is a stacked card" % label, report["stacked"],
+              "the row is still laid out as a table row")
+        check("%s: nothing scrolls sideways" % label, not report["sideways"],
+              "the table still scrolls sideways inside its box")
+        check("%s: the whole row fits the screen" % label,
+              report["widest"] <= report["screen"] + 1,
+              "a cell reaches %dpx on a %dpx screen"
+              % (report["widest"], report["screen"]))
+
+    print("\n=== And stay ordinary tables on a desktop ===")
+    b.call("Emulation.setDeviceMetricsOverride", width=1440, height=900,
+           deviceScaleFactor=1, mobile=False)
+    b.call("Emulation.setTouchEmulationEnabled", enabled=False)
+    b.evaluate("location.href = '/foods'")
+    wait("document.readyState === 'complete'", "Food Management on a desktop")
+    time.sleep(0.6)
+
+    check("the header row is back",
+          b.evaluate("getComputedStyle(document.querySelector"
+                     "('.data-table thead')).display") != "none",
+          "the column headers are hidden on a desktop")
+    check("and rows are rows again",
+          b.evaluate("getComputedStyle(document.querySelector"
+                     "('.data-table tbody tr')).display") != "block",
+          "rows are still stacked on a desktop")
 
     print("\n=== Back on a desktop width ===")
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=900,
