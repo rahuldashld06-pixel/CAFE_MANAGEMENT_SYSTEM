@@ -875,6 +875,7 @@ _CORE_TABLES = [
             brand_name VARCHAR(150) NULL,
             brand_tagline VARCHAR(150) NULL,
             public_token VARCHAR(40) NULL,
+            kitchen_seen_at DATETIME NULL,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 5.00,
             theme VARCHAR(20) NOT NULL DEFAULT 'copper',
             auto_kot_enabled TINYINT(1) NOT NULL DEFAULT 0,
@@ -1071,6 +1072,9 @@ _COLUMN_MIGRATIONS = [
     # What a cafe's QR code points at. Random and per-cafe, so the
     # address cannot be guessed and does not leak the cafe's row id.
     ("cafes", "public_token", "VARCHAR(40) NULL"),
+    # When a kitchen screen last said it was watching. Stale means
+    # nobody is there, and the other screens take the job back.
+    ("cafes", "kitchen_seen_at", "DATETIME NULL"),
     # Per-café tax rate. 5.00 is what every bill was hard-coded to before
     # this was configurable, so existing cafés keep their current totals.
     ("cafes", "tax_percent", "DECIMAL(5,2) NOT NULL DEFAULT 5.00"),
@@ -1798,6 +1802,8 @@ STAFF_ALLOWED_ENDPOINTS = {
     # A QR order arrives with nobody at the counter, so whichever
     # staff screen is open has to be able to pull its ticket.
     "kitchen_pending", "kitchen_claim",
+    # The screen that lives in the kitchen, and its own feed.
+    "kitchen_display", "kitchen_board", "kitchen_heartbeat",
 }
 
 
@@ -1867,6 +1873,12 @@ def get_cafe_theme():
 @app.context_processor
 def inject_theme():
     return {"cafe_theme": get_cafe_theme(), "themes": THEMES}
+
+
+# A kitchen screen checks in every 20 seconds; three missed and the
+# counter screens assume the tablet is off and take the printing
+# back, rather than leaving a customer's ticket unprinted.
+KITCHEN_STALE_SECONDS = 70
 
 
 DEFAULT_PRINT_SETTINGS = {"auto_kot": False, "kot_delay": 5, "auto_bill": False}
@@ -6389,6 +6401,136 @@ def qr_settings():
     )
 
 
+@app.route("/kitchen")
+def kitchen_display():
+    """
+    The screen left on in the kitchen.
+
+    Its whole job is to be open. It shows what is waiting, prints the
+    ticket for anything a customer sent from their phone, and says it is
+    there so the counter screens stop trying to print those tickets
+    themselves - otherwise a customer's order comes out of whichever
+    printer somebody happened to leave a tab in front of.
+    """
+    return render_template(
+        "kitchen.html",
+        stale_after=KITCHEN_STALE_SECONDS,
+    )
+
+
+@app.route("/api/kitchen/heartbeat", methods=["POST"])
+def kitchen_heartbeat():
+    """A kitchen screen saying it is still there."""
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "UPDATE cafes SET kitchen_seen_at = %s WHERE cafe_id = %s",
+            (datetime.now(), require_cafe_session()))
+        connection.commit()
+        return jsonify({"ok": True})
+    except mysql.connector.Error as error:
+        if connection:
+            connection.rollback()
+        return jsonify({"ok": False, "error": str(error)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+def kitchen_is_watching(cursor, cafe_id):
+    """
+    Whether a kitchen screen has checked in recently enough to trust.
+
+    Stale means the tablet was switched off or the browser closed, and
+    the counter screens should take the printing back rather than leave
+    tickets unprinted.
+    """
+    if not cafe_id:
+        return False
+
+    cursor.execute(
+        "SELECT kitchen_seen_at FROM cafes WHERE cafe_id = %s", (cafe_id,))
+    row = cursor.fetchone()
+    seen = row["kitchen_seen_at"] if row else None
+
+    if not seen:
+        return False
+    if isinstance(seen, str):
+        try:
+            seen = datetime.strptime(seen[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return False
+
+    return (datetime.now() - seen).total_seconds() <= KITCHEN_STALE_SECONDS
+
+
+@app.route("/api/kitchen/board")
+def kitchen_board():
+    """
+    Everything the kitchen screen draws: what is waiting, and its lines.
+
+    One request rather than one per order - a screen refreshing every few
+    seconds must not cost a query per ticket on it.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        owner = scope_user_id()
+
+        cursor.execute("""
+            SELECT order_id, order_date, total_amount, source, kot_printed
+            FROM orders
+            WHERE user_id = %s AND order_status = 'Pending'
+            ORDER BY order_id
+            LIMIT 40
+        """, (owner,))
+        orders = cursor.fetchall()
+
+        lines = {}
+        if orders:
+            ids = [row["order_id"] for row in orders]
+            marks = ", ".join(["%s"] * len(ids))
+            cursor.execute("""
+                SELECT order_id, item_name, quantity
+                FROM order_items
+                WHERE order_id IN (%s)
+                ORDER BY order_item_id
+            """ % marks, tuple(ids))
+            for row in cursor.fetchall():
+                lines.setdefault(row["order_id"], []).append({
+                    "name": row["item_name"],
+                    "quantity": row["quantity"],
+                })
+
+        return jsonify({
+            "orders": [
+                {
+                    "order_id": row["order_id"],
+                    "placed": format_order_time(row["order_date"]),
+                    "total": "%.2f" % float(row["total_amount"] or 0),
+                    "source": row["source"] or "counter",
+                    "printed": bool(row["kot_printed"]),
+                    "items": lines.get(row["order_id"], []),
+                }
+                for row in orders
+            ],
+        })
+    except mysql.connector.Error as error:
+        return jsonify({"orders": [], "error": str(error)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
 @app.route("/api/kitchen/pending")
 def kitchen_pending():
     """
@@ -6413,8 +6555,13 @@ def kitchen_pending():
             ORDER BY order_id
             LIMIT 10
         """, (scope_user_id(),))
-        return jsonify({"orders": [row["order_id"]
-                                   for row in cursor.fetchall()]})
+        return jsonify({
+            "orders": [row["order_id"] for row in cursor.fetchall()],
+            # A counter screen reads this and leaves the printing to the
+            # kitchen while one is watching.
+            "kitchen_watching": kitchen_is_watching(
+                cursor, session.get("cafe_id")),
+        })
     except mysql.connector.Error as error:
         return jsonify({"orders": [], "error": str(error)}), 500
     finally:

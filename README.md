@@ -142,7 +142,8 @@ python tests/mobile_nav_test.py   # expect PASSED: 84   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
-python tests/qr_order_test.py     # expect PASSED: 38   FAILED: 0
+python tests/qr_order_test.py     # expect PASSED: 48   FAILED: 0
+python tests/kitchen_screen_test.py # expect PASSED: 11  FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
 ```

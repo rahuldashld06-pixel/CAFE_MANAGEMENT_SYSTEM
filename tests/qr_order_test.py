@@ -306,6 +306,64 @@ check("and the new one works", guest.get("/m/%s" % fresh).status_code == 200,
       "the replacement does not open the menu")
 
 
+print("\n=== 11. The screen that lives in the kitchen ===")
+board = admin.get("/api/kitchen/board")
+check("the kitchen screen opens", admin.get("/kitchen").status_code == 200,
+      "got HTTP %s" % admin.get("/kitchen").status_code)
+check("a cashier can open it too",
+      cashier.get("/kitchen").status_code == 200,
+      "the kitchen screen is admin-only, which is not what a kitchen is")
+
+check("its board answers", board.status_code == 200,
+      "got HTTP %s" % board.status_code)
+
+# Something to look at: a fresh order from a phone.
+fresh_menu = guest.get("/m/%s" % fresh).get_data(as_text=True)
+fresh_ids = re.findall(r'name="quantity_(\d+)"', fresh_menu)
+guest.post("/m/%s/order" % fresh, data={"quantity_%s" % fresh_ids[0]: "1"},
+           follow_redirects=True)
+
+shown = json.loads(admin.get("/api/kitchen/board").get_data(as_text=True))
+waiting = shown.get("orders", [])
+check("a customer's order appears on the board", len(waiting) >= 1,
+      "the board is empty: %s" % shown)
+check("with its items, so the kitchen can cook from it",
+      waiting and waiting[-1].get("items"),
+      "the board shows no items")
+check("and says it came from a table",
+      any(order.get("source") == "qr" for order in waiting),
+      "nothing on the board says where an order came from")
+
+
+print("\n=== 12. While the kitchen watches, the counter stands down ===")
+# Otherwise a customer's ticket comes out of whichever printer somebody
+# happened to leave a tab in front of.
+quiet = json.loads(admin.get("/api/kitchen/pending").get_data(as_text=True))
+check("with no kitchen screen open, the counter takes the job",
+      quiet.get("kitchen_watching") is False,
+      "the counter was told to stand down with no kitchen screen open")
+
+admin.post("/api/kitchen/heartbeat", data={"_csrf_token": csrf(admin)})
+watched = json.loads(admin.get("/api/kitchen/pending").get_data(as_text=True))
+check("once one checks in, the counter is told to leave it",
+      watched.get("kitchen_watching") is True,
+      "the counter would print a ticket meant for the kitchen")
+
+# And a screen that went away must not hold the job for ever.
+mysql_shim._DB.execute(
+    "UPDATE cafes SET kitchen_seen_at = '2020-01-01 00:00:00' "
+    "WHERE cafe_id = ?", (cafe_id,))
+mysql_shim._DB.commit()
+stale = json.loads(admin.get("/api/kitchen/pending").get_data(as_text=True))
+check("a kitchen screen that stopped checking in loses the job",
+      stale.get("kitchen_watching") is False,
+      "a tablet switched off would leave tickets unprinted for ever")
+
+check("one cafe's kitchen screen does not silence another's counter",
+      json.loads(other_admin.get("/api/kitchen/pending")
+                 .get_data(as_text=True)).get("kitchen_watching") is False,
+      "one cafe's kitchen screen stopped another cafe printing")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

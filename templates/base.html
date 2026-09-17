@@ -106,6 +106,13 @@
                     <i class="bi bi-cart-plus"></i><span>New Order</span>
                 </a>
 
+                {# The screen left on in the kitchen. Staff work, so it
+                   is offered to everyone who takes orders. #}
+                <a href="{{ url_for('kitchen_display') }}"
+                   class="nav-link {{ 'active' if request.endpoint == 'kitchen_display' else '' }}">
+                    <i class="bi bi-fire"></i><span>Kitchen</span>
+                </a>
+
                 <a href="{{ url_for('orders') }}"
                    class="nav-link {{ 'active' if request.endpoint in ['orders', 'order_details'] else '' }}">
                     <i class="bi bi-receipt-cutoff"></i><span>Order Management</span>
@@ -699,6 +706,8 @@ window.CafeShell = {
         var printing = window.CafeShell && window.CafeShell.printing;
         if (!printing || !printing.auto_kot) return;
         if (!window.CafeShell.autoPrint) return;
+        // The kitchen screen does its own watching, on its own terms.
+        if (location.pathname === "/kitchen") return;
 
         var EVERY = 12000;   // a kitchen is not a stock ticker
         var busy = false;
@@ -707,7 +716,12 @@ window.CafeShell = {
             return fetch("/api/kitchen/claim/" + orderId, {
                 method: "POST",
                 credentials: "same-origin",
-                headers: { "X-Requested-With": "XMLHttpRequest" }
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    // Every write is CSRF checked, this one included. Sent
+                    // as a header because there is no form behind it.
+                    "X-CSRFToken": window.CafeShell.csrfToken
+                }
             }).then(function (response) {
                 return response.json();
             }).then(function (data) {
@@ -728,6 +742,12 @@ window.CafeShell = {
             }).then(function (response) {
                 return response.json();
             }).then(function (data) {
+                // A kitchen screen is on and watching, so its printer is
+                // the right one for a customer's ticket. Leave it alone;
+                // if that screen goes away the server stops saying this
+                // and these screens take the job back.
+                if (data && data.kitchen_watching) return;
+
                 var waiting = (data && data.orders) || [];
                 // One at a time, in order, so a burst of orders does not
                 // fire a burst of print dialogs at once.

@@ -3073,3 +3073,128 @@ body.nav-locked {
 @media (max-width: 420px) {
     .qr-card__code svg { width: 170px; height: 170px; }
 }
+
+/* ---------- The screen that lives in the kitchen ---------- */
+/* Read from a step or two away, across a pass, by someone holding a pan.
+   Everything here is bigger than the rest of the app on purpose. */
+.kitchen-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.kitchen-empty {
+    grid-column: 1 / -1;
+    padding: 46px 20px;
+    text-align: center;
+    color: var(--cream-faint);
+    background: var(--espresso-900);
+    border: 1px dashed var(--espresso-700);
+    border-radius: var(--radius-md);
+}
+
+.kitchen-ticket {
+    display: flex;
+    flex-direction: column;
+    background: var(--espresso-900);
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+/* An order a customer sent is the one nobody spoke to, so it is the one
+   worth spotting from across the kitchen. */
+.kitchen-ticket--phone {
+    border-color: var(--copper);
+    box-shadow: 0 0 0 1px rgba(var(--copper-rgb), .35);
+}
+
+.kitchen-ticket__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--espresso-850);
+    border-bottom: 1px solid var(--espresso-800);
+}
+
+.kitchen-ticket__id {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--cream);
+}
+
+.kitchen-ticket__from {
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--cream-faint);
+}
+
+.kitchen-ticket--phone .kitchen-ticket__from { color: var(--copper-light); }
+
+.kitchen-ticket__items {
+    flex: 1 1 auto;
+    margin: 0;
+    padding: 12px 14px;
+    list-style: none;
+}
+
+.kitchen-ticket__items li {
+    display: flex;
+    gap: 10px;
+    padding: 5px 0;
+    font-size: 16px;
+    line-height: 1.35;
+    color: var(--cream);
+}
+
+.kitchen-qty {
+    flex: 0 0 auto;
+    min-width: 30px;
+    font-weight: 800;
+    color: var(--copper-light);
+    font-variant-numeric: tabular-nums;
+}
+
+.kitchen-ticket__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--espresso-800);
+    font-size: 12px;
+    color: var(--cream-faint);
+}
+
+/* Whether this screen is actually reaching the server. A kitchen needs to
+   know its display has gone deaf, not find out at the pass. */
+.kitchen-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px;
+    border-radius: var(--radius-pill);
+    background: var(--espresso-850);
+    border: 1px solid var(--espresso-700);
+    font-size: 12px;
+    color: var(--cream-dim);
+}
+
+.kitchen-state__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--sage);
+}
+
+.kitchen-state--lost { border-color: var(--berry-dark); color: var(--berry); }
+.kitchen-state--lost .kitchen-state__dot { background: var(--berry); }
+
+@media (max-width: 560px) {
+    .kitchen-board { grid-template-columns: 1fr; }
+}

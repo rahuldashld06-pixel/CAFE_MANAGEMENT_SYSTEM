@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}Kitchen · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Kitchen</div>
+        <h1><i class="bi bi-fire"></i> Kitchen Screen</h1>
+        <p>Leave this open. Tickets print here.</p>
+    </div>
+
+    <div class="page-header__actions">
+        <span class="kitchen-state" id="kitchenState">
+            <span class="kitchen-state__dot"></span>
+            <span id="kitchenStateText">Watching</span>
+        </span>
+        <button type="button" class="btn btn--ghost btn--sm" id="printToggle"
+                aria-pressed="true">
+            <i class="bi bi-printer"></i>
+            <span id="printToggleText">Printing on</span>
+        </button>
+    </div>
+</div>
+
+<div class="note-card">
+    <i class="bi bi-info-circle"></i>
+    <div>
+        While this screen is open it prints the ticket for every order a
+        customer sends from their phone, and the other screens leave that
+        to it. Close it and they take the job back, so a ticket is never
+        simply lost.
+    </div>
+</div>
+
+<div id="kitchenBoard" class="kitchen-board">
+    <p class="kitchen-empty">Looking for orders&hellip;</p>
+</div>
+
+<script>
+// The shell is defined at the end of <body>, after this page's own
+// markup, so nothing here can touch window.CafeShell while the document
+// is still parsing. Waiting until the page is built is the difference
+// between this screen working and silently doing nothing at all: the
+// first call threw, the rest never started, and the bar went on saying
+// "Watching" because that is what the markup says before any check.
+function startKitchenScreen() {
+    "use strict";
+
+    var board = document.getElementById("kitchenBoard");
+    if (!board) return;
+
+    function csrfToken() {
+        return (window.CafeShell && window.CafeShell.csrfToken) || "";
+    }
+
+    var BEAT_EVERY = 20000;                 // three missed and we are stale
+    var LOOK_EVERY = 6000;
+    var STALE_AFTER = {{ stale_after }};
+
+    var stateText = document.getElementById("kitchenStateText");
+    var state = document.getElementById("kitchenState");
+    var toggle = document.getElementById("printToggle");
+    var toggleText = document.getElementById("printToggleText");
+
+    var printing = true;
+    try {
+        printing = window.localStorage.getItem("cafe.kitchenPrint") !== "0";
+    } catch (error) { /* private window */ }
+
+    function paintToggle() {
+        toggle.setAttribute("aria-pressed", printing ? "true" : "false");
+        toggleText.textContent = printing ? "Printing on" : "Printing off";
+    }
+
+    toggle.addEventListener("click", function () {
+        printing = !printing;
+        try {
+            window.localStorage.setItem("cafe.kitchenPrint",
+                                        printing ? "1" : "0");
+        } catch (error) { /* nothing to do */ }
+        paintToggle();
+    });
+
+    paintToggle();
+
+    function say(text, ok) {
+        stateText.textContent = text;
+        state.classList.toggle("kitchen-state--lost", !ok);
+    }
+
+    // ---- Saying we are here ----
+    // The counter screens read this and leave the printing alone. If this
+    // stops - tablet asleep, browser closed - they take it back.
+    function beat() {
+        fetch("/api/kitchen/heartbeat", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRFToken": csrfToken()
+            }
+        }).then(function (response) {
+            say(response.ok ? "Watching" : "Not reaching the server",
+                response.ok);
+        }).catch(function () {
+            say("Not reaching the server", false);
+        });
+    }
+
+    // ---- Printing ----
+    function claimAndPrint(orderId) {
+        return fetch("/api/kitchen/claim/" + orderId, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRFToken": csrfToken()
+            }
+        }).then(function (response) {
+            return response.json();
+        }).then(function (data) {
+            if (!data || !data.claimed) return;   // somebody else had it
+            if (window.CafeShell && window.CafeShell.autoPrint) {
+                window.CafeShell.autoPrint("/print/kot/" + orderId);
+            }
+        }).catch(function () { });
+    }
+
+    // ---- Drawing ----
+    function escapeHtml(value) {
+        var holder = document.createElement("div");
+        holder.textContent = value == null ? "" : String(value);
+        return holder.innerHTML;
+    }
+
+    function card(order) {
+        var lines = order.items.map(function (item) {
+            return '<li><span class="kitchen-qty">' + escapeHtml(item.quantity)
+                + '</span> ' + escapeHtml(item.name) + '</li>';
+        }).join("");
+
+        return '<article class="kitchen-ticket'
+            + (order.source === "qr" ? " kitchen-ticket--phone" : "") + '">'
+            + '<header class="kitchen-ticket__head">'
+            + '<span class="kitchen-ticket__id">#' + escapeHtml(order.order_id)
+            + '</span>'
+            + '<span class="kitchen-ticket__from">'
+            + (order.source === "qr" ? "From a table" : "At the counter")
+            + '</span>'
+            + '</header>'
+            + '<ul class="kitchen-ticket__items">'
+            + (lines || '<li>No items</li>') + '</ul>'
+            + '<footer class="kitchen-ticket__foot">'
+            + '<span>' + escapeHtml(order.placed) + '</span>'
+            + '<button type="button" class="btn btn--primary btn--sm"'
+            + ' data-done="' + escapeHtml(order.order_id) + '">Done</button>'
+            + '</footer>'
+            + '</article>';
+    }
+
+    var lastDrawn = "";
+
+    function draw(orders) {
+        // Redrawing every few seconds would fight anyone mid-tap, so the
+        // board is only rebuilt when it has actually changed.
+        var signature = JSON.stringify(orders);
+        if (signature === lastDrawn) return;
+        lastDrawn = signature;
+
+        if (!orders.length) {
+            board.innerHTML =
+                '<p class="kitchen-empty">Nothing waiting. '
+                + 'New orders appear here on their own.</p>';
+            return;
+        }
+        board.innerHTML = orders.map(card).join("");
+    }
+
+    function look() {
+        fetch("/api/kitchen/board", {
+            credentials: "same-origin",
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        }).then(function (response) {
+            return response.json();
+        }).then(function (data) {
+            var orders = (data && data.orders) || [];
+            draw(orders);
+
+            if (!printing) return;
+
+            // Only what a customer sent: an order rung up at the counter
+            // already printed its own ticket there.
+            return orders.filter(function (order) {
+                return order.source === "qr" && !order.printed;
+            }).reduce(function (chain, order) {
+                return chain.then(function () {
+                    return claimAndPrint(order.order_id);
+                });
+            }, Promise.resolve());
+        }).catch(function () { });
+    }
+
+    board.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-done]");
+        if (!button) return;
+
+        button.disabled = true;
+        var form = new FormData();
+        form.append("_csrf_token", csrfToken());
+
+        fetch("/orders/complete/" + button.dataset.done, {
+            method: "POST",
+            body: form,
+            credentials: "same-origin",
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        }).catch(function () { }).then(function () {
+            lastDrawn = "";     // force a redraw
+            look();
+        });
+    });
+
+    beat();
+    look();
+    window.setInterval(beat, BEAT_EVERY);
+    window.setInterval(look, LOOK_EVERY);
+
+    // A tablet that went to sleep wakes up behind; catch up at once.
+    document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) { beat(); look(); }
+    });
+
+    // Ask the device not to dim. Widely ignored, and harmless when it is.
+    if (navigator.wakeLock && navigator.wakeLock.request) {
+        var hold = function () {
+            navigator.wakeLock.request("screen").catch(function () { });
+        };
+        hold();
+        document.addEventListener("visibilitychange", function () {
+            if (!document.hidden) hold();
+        });
+    }
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startKitchenScreen);
+} else {
+    startKitchenScreen();
+}
+</script>
+
+{% endblock %}
