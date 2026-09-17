@@ -580,6 +580,24 @@ check("what it calls needs no sign-in",
       and app.test_client().get("/healthz").status_code == 200,
       "the keep-awake would be redirected to the sign-in page")
 
+print("\n=== 20. The database is not asked needlessly whether it is awake ===")
+# From inside the deployed app that question costs a full round trip -
+# 543ms - and it used to be asked on every request, about a connection
+# used seconds earlier.
+check("a connection is only checked after a long idle spell",
+      application.POOL_PING_AFTER_SECONDS >= 900,
+      "at %ds a cafe with gaps between orders pays for the check all day"
+      % application.POOL_PING_AFTER_SECONDS)
+
+check("and the keep-awake timer runs more often than that threshold",
+      application.KEEP_AWAKE_SECONDS < application.POOL_PING_AFTER_SECONDS,
+      "the timer is slower than the threshold, so a visitor pays the "
+      "check between pings - which is what removing it was meant to fix")
+
+check("the threshold still sits well inside a database's own idle timeout",
+      application.POOL_PING_AFTER_SECONDS < 28800,
+      "a connection could be dropped at the far end before it is checked")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

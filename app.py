@@ -459,12 +459,19 @@ def _build_pool():
 
 
 # How long a pooled connection may sit unused before it is worth asking
-# the database whether it is still there. Measured from inside Render,
-# that question costs a full round trip - 543ms - and it was being asked
-# on every single request. A connection handed back a few seconds ago has
-# not gone anywhere; one that has been idle for minutes might have been
-# dropped at the other end.
-POOL_PING_AFTER_SECONDS = 120
+# the database whether it is still there. Measured from inside the
+# deployed app, that question costs a full round trip - 543ms - and it
+# used to be asked on every single request.
+#
+# Half an hour, not a couple of minutes. A cafe with a handful of orders
+# an hour has gaps of several minutes all day, and at two minutes almost
+# every real visitor was paying the check anyway - which is most of what
+# removing it was meant to fix. MySQL drops an idle connection after
+# hours, not minutes, so half an hour is still far inside the window; the
+# keep-awake timer touches the database every ten minutes on top of that,
+# so in practice this rarely fires at all.
+POOL_PING_AFTER_SECONDS = int(
+    os.environ.get("POOL_PING_AFTER_SECONDS", "1800"))
 
 
 def _underlying(connection):
