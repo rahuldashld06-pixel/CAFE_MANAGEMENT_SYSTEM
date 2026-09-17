@@ -292,6 +292,22 @@ provider — not an IP address.
 Lower `DB_POOL_SIZE`, or reduce gunicorn workers. Workers x pool size
 must stay under your plan's connection limit.
 
+**Every page feels slow, everywhere, by about the same amount.**
+`/healthz` returns two numbers that separate the app from the database.
+`connect_ms` is what it costs to get hold of a connection and should be
+close to zero once the site has been up a minute: a connection already
+open is taken off a list, which touches no network. `query_ms` is one
+`SELECT 1` and so is one round trip to wherever the database lives.
+
+If `query_ms` is large — 500ms is normal for an app in one region and a
+database in another — that is distance, and no amount of code will fix
+it. Moving the database to the same region as the app is worth more than
+anything else on this page.
+
+If `connect_ms` is large while `query_ms` is fine, something is making a
+round trip on the way to handing over a connection. That is a bug, not
+geography.
+
 **Sign-in works but every page bounces back to the sign-in screen.**
 `SECRET_KEY` is changing between restarts. Set a fixed value.
 

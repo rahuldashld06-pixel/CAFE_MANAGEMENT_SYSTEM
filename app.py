@@ -57,6 +57,13 @@ DB_CONFIG = {
     "user": os.environ.get("DB_USER", _FILE_DB_CONFIG.get("user", "root")),
     "password": os.environ.get("DB_PASSWORD", _FILE_DB_CONFIG.get("password", "")),
     "database": os.environ.get("DB_NAME", _FILE_DB_CONFIG.get("database", "cafe_management")),
+    # Asked for here rather than assigned afterwards. Setting
+    # connection.autocommit runs a SET on the server and reading it
+    # runs a SELECT, so a pool that touched the property on every
+    # checkout would pay a round trip to change nothing. Given here,
+    # the connector applies it once while the connection is being
+    # established, and again by itself after any reconnect.
+    "autocommit": False,
 }
 _db_port = os.environ.get("DB_PORT", _FILE_DB_CONFIG.get("port"))
 if _db_port:
@@ -502,19 +509,20 @@ class _ConnectionPool:
                 entry = self._free.pop() if self._free else None
 
             if entry is None:
-                connection = mysql.connector.connect(**DB_CONFIG)
-                connection.autocommit = False
-                return connection
+                # Comes back with autocommit already off: it is in the
+                # config above, so the connector applies it as part of
+                # establishing the connection.
+                return mysql.connector.connect(**DB_CONFIG)
 
             connection, last_used = entry
 
             if time.time() - last_used <= POOL_PING_AFTER_SECONDS:
-                connection.autocommit = False
                 return connection
 
             try:
+                # A reconnect makes a new session, but the connector
+                # reapplies the config to it, so autocommit survives.
                 connection.ping(reconnect=True, attempts=2, delay=1)
-                connection.autocommit = False
                 return connection
             except Exception:
                 # Gone. Round again for another free one, or a new one.

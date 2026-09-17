@@ -614,8 +614,20 @@ class FakeConnection:
         self.pings = 0
         self.rollbacks = 0
         self.closed = False
-        self.autocommit = True
         self.in_transaction = False
+        self.autocommit_touches = 0
+
+    # Both halves of this property go to the server on a real connection,
+    # so the pool must not touch it. Counting instead of storing is what
+    # makes that visible.
+    @property
+    def autocommit(self):
+        self.autocommit_touches += 1
+        return False
+
+    @autocommit.setter
+    def autocommit(self, value):
+        self.autocommit_touches += 1
 
     def ping(self, **kwargs):
         self.pings += 1
@@ -642,9 +654,16 @@ check("a connection handed back a moment ago is reused without a ping",
       "every page load pays a round trip to ask a live connection "
       "whether it is alive")
 
-check("and it comes back ready to control its own transactions",
-      taken.autocommit is False,
-      "a half-finished write would commit itself")
+check("and handing it over does not touch autocommit",
+      taken.autocommit_touches == 0,
+      "reading that property runs a SELECT and setting it runs a SET, so "
+      "every checkout pays a round trip to change nothing")
+
+check("autocommit is asked for when the connection is made instead",
+      application.DB_CONFIG.get("autocommit") is False,
+      "a half-finished write would commit itself - and the connector "
+      "reapplies the config after a reconnect, which an assignment made "
+      "at checkout would not survive")
 
 pool = Pool(3)
 stale = FakeConnection()
