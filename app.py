@@ -165,6 +165,57 @@ def inject_asset_version():
     return {"asset_version": ASSET_VERSION}
 
 
+def came_from(fallback=None):
+    """
+    The page someone was looking at before they opened a settings screen.
+
+    Carried as ?next= on the link, put there by the profile menu at the
+    moment it is clicked. It cannot be worked out on the server: that menu
+    lives in the shell, which instant navigation never re-renders, so the
+    server's idea of "the page you are on" there is whatever it was at the
+    last full page load.
+
+    Only a path on this site is accepted. Anything that could send someone
+    off it is ignored rather than followed - a redirect somebody else
+    chose is a fine thing to trick a person with.
+    """
+    wanted = (request.values.get("next") or "").strip()
+
+    looks_local = (
+        wanted.startswith("/")
+        and not wanted.startswith("//")
+        and "\\" not in wanted
+        and "\r" not in wanted
+        and "\n" not in wanted
+        and len(wanted) <= 300
+    )
+    if looks_local:
+        return wanted
+
+    if fallback:
+        return fallback
+    if session.get("role") == "admin":
+        return url_for("home")
+    return url_for("add_order")
+
+
+def stay_on(endpoint):
+    """
+    The same settings screen again, still remembering where it was opened
+    from - so a refused save does not also lose someone their way back.
+    """
+    wanted = (request.values.get("next") or "").strip()
+    if wanted:
+        return url_for(endpoint, next=wanted)
+    return url_for(endpoint)
+
+
+@app.context_processor
+def inject_back_url():
+    """Where Back and Cancel go on a settings screen."""
+    return {"back_url": came_from()}
+
+
 @app.context_processor
 def inject_home_url():
     """
@@ -406,29 +457,54 @@ def _build_pool():
     return _CONNECTION_POOL
 
 
+# How long a pooled connection may sit unused before it is worth asking
+# the database whether it is still there. Measured from inside Render,
+# that question costs a full round trip - 543ms - and it was being asked
+# on every single request. A connection handed back a few seconds ago has
+# not gone anywhere; one that has been idle for minutes might have been
+# dropped at the other end.
+POOL_PING_AFTER_SECONDS = 120
+
+
+def _underlying(connection):
+    """
+    The real connection inside a pool's wrapper.
+
+    The wrapper is thrown away and rebuilt on each checkout, so anything
+    remembered about a connection has to be kept on the object that
+    actually survives.
+    """
+    return getattr(connection, "_cnx", None) or connection
+
+
 def _new_raw_connection():
     """
     A pooled connection when possible, otherwise a direct one.
 
-    A connection coming out of the pool may have been sitting idle long
-    enough for the database to have dropped it, so it is checked once
-    here - this is the moment where staleness is actually possible, and
-    the only place worth paying a round trip for it.
+    A connection that has been idle a while may have been dropped by the
+    database, so it is checked - but only then. Checking every time was
+    costing more than most pages spend on their real work.
     """
     try:
         connection = _build_pool().get_connection()
-        try:
-            connection.ping(reconnect=True, attempts=2, delay=1)
-        except Exception:
+
+        raw = _underlying(connection)
+        idle_for = time.time() - getattr(raw, "_cafe_last_used", 0)
+
+        if idle_for > POOL_PING_AFTER_SECONDS:
             try:
-                connection.close()
+                connection.ping(reconnect=True, attempts=2, delay=1)
             except Exception:
-                pass
-            connection = _build_pool().get_connection()
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+                connection = _build_pool().get_connection()
     except Exception:
         # Pool exhausted or unavailable (e.g. during start-up migrations
         # outside a request) - fall back to a direct connection.
         connection = mysql.connector.connect(**DB_CONFIG)
+
     connection.autocommit = False
     return connection
 
@@ -464,6 +540,10 @@ def _close_db_connection(exception=None):
     try:
         if exception is not None:
             connection.rollback()
+    except Exception:
+        pass
+    try:
+        _underlying(connection)._cafe_last_used = time.time()
     except Exception:
         pass
     try:
@@ -5536,11 +5616,11 @@ def change_password():
 
         if len(new_password) < 8:
             flash("New password must be at least 8 characters.")
-            return redirect(url_for("change_password"))
+            return redirect(stay_on('change_password'))
 
         if new_password != confirm:
             flash("New passwords do not match.")
-            return redirect(url_for("change_password"))
+            return redirect(stay_on('change_password'))
 
         connection = None
         cursor = None
@@ -5555,7 +5635,7 @@ def change_password():
 
             if not row or not check_password_hash(row["password_hash"], current):
                 flash("Current password is incorrect.")
-                return redirect(url_for("change_password"))
+                return redirect(stay_on('change_password'))
 
             cursor.execute("""
                 UPDATE users
@@ -6088,7 +6168,7 @@ def branding():
                 connection.commit()
                 g.pop("cafe_branding", None)
                 flash("Symbol removed. The name now stands on its own.")
-                return redirect(url_for("branding"))
+                return redirect(came_from())
 
             # Empty means "use the default", not "show nothing".
             name = (request.form.get("brand_name") or "").strip()[:150]
@@ -6098,7 +6178,7 @@ def branding():
                 data, mime = read_image_upload(request.files.get("logo"))
             except ValueError as error:
                 flash(str(error))
-                return redirect(url_for("branding"))
+                return redirect(stay_on('branding'))
 
             if data is not None:
                 cursor.execute("""
@@ -6123,7 +6203,7 @@ def branding():
 
             flash("Saved. Every page now reads %s."
                   % (name or DEFAULT_BRAND_NAME))
-            return redirect(url_for("branding"))
+            return redirect(came_from())
 
         return render_template(
             "branding.html",
@@ -6417,11 +6497,11 @@ def tax_settings():
                 rate = Decimal(raw)
             except (InvalidOperation, ValueError):
                 flash("Enter the tax rate as a number, for example 5 or 12.5.")
-                return redirect(url_for("tax_settings"))
+                return redirect(stay_on('tax_settings'))
 
             if rate < 0 or rate > MAX_TAX_PERCENT:
                 flash("The tax rate must be between 0 and 100 percent.")
-                return redirect(url_for("tax_settings"))
+                return redirect(stay_on('tax_settings'))
 
             cursor.execute(
                 "UPDATE cafes SET tax_percent = %s WHERE cafe_id = %s",
@@ -6432,7 +6512,7 @@ def tax_settings():
 
             flash("Tax rate saved. New orders will use %s%%."
                   % format_percent(rate))
-            return redirect(url_for("tax_settings"))
+            return redirect(came_from())
 
         return render_template(
             "tax_settings.html",
@@ -6712,7 +6792,7 @@ def theme_settings():
             chosen = (request.form.get("theme") or "").strip().lower()
             if chosen not in THEME_IDS:
                 flash("Pick one of the colours shown.")
-                return redirect(url_for("theme_settings"))
+                return redirect(stay_on('theme_settings'))
 
             cursor.execute(
                 "UPDATE cafes SET theme = %s WHERE cafe_id = %s",
@@ -6723,7 +6803,7 @@ def theme_settings():
 
             label = dict((t[0], t[1]) for t in THEMES)[chosen]
             flash("Theme saved. Your cafe is now %s." % label)
-            return redirect(url_for("theme_settings"))
+            return redirect(came_from())
 
         return render_template("theme_settings.html")
     finally:
@@ -6764,12 +6844,12 @@ def print_settings():
                 delay = int(raw)
             except (TypeError, ValueError):
                 flash("Enter the delay as a whole number of seconds.")
-                return redirect(url_for("print_settings"))
+                return redirect(stay_on('print_settings'))
 
             if delay < 0 or delay > MAX_KOT_DELAY:
                 flash("The delay must be between 0 and %d seconds."
                       % MAX_KOT_DELAY)
-                return redirect(url_for("print_settings"))
+                return redirect(stay_on('print_settings'))
 
             cursor.execute("""
                 UPDATE cafes
@@ -6783,7 +6863,7 @@ def print_settings():
             g.pop("print_settings", None)
 
             flash("Printing settings saved.")
-            return redirect(url_for("print_settings"))
+            return redirect(came_from())
 
         return render_template(
             "print_settings.html",
@@ -6826,22 +6906,22 @@ def account_photo():
                 """, (user["user_id"],))
                 connection.commit()
                 flash("Profile photo removed.")
-                return redirect(url_for("account_photo"))
+                return redirect(came_from())
 
             upload = request.files.get("photo")
             if not upload or not upload.filename:
                 flash("Choose an image first.")
-                return redirect(url_for("account_photo"))
+                return redirect(stay_on('account_photo'))
 
             data = upload.read()
             if not data:
                 flash("That file was empty.")
-                return redirect(url_for("account_photo"))
+                return redirect(stay_on('account_photo'))
 
             mime = (upload.mimetype or "").lower()
             if not mime.startswith("image/"):
                 flash("Profile photos must be an image file.")
-                return redirect(url_for("account_photo"))
+                return redirect(stay_on('account_photo'))
 
             cursor.execute("""
                 UPDATE users
@@ -6851,7 +6931,7 @@ def account_photo():
             """, (data, mime, user["user_id"]))
             connection.commit()
             flash("Profile photo updated.")
-            return redirect(url_for("account_photo"))
+            return redirect(came_from())
 
         cursor.execute(
             "SELECT (photo_blob IS NOT NULL) AS has_photo, photo_version "

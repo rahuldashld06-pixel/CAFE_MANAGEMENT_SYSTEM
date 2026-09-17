@@ -518,6 +518,31 @@ window.CafeShell = {
         document.addEventListener("instant:load", measure);
     }
 
+    // ---- Remembering where the profile menu was opened from ----
+    // The menu lives in the shell, which instant navigation never
+    // re-renders, so the server cannot know which page is on screen when
+    // one of these is clicked. The page is stamped onto the link at the
+    // moment of the click instead, and the settings screen reads it for
+    // its Back button and for where to go after saving.
+    document.addEventListener("click", function (event) {
+        const item = event.target.closest
+            && event.target.closest(".profile-dropdown__item");
+        if (!item) return;
+
+        const href = item.getAttribute("href") || "";
+        // Logout ends the session; there is nowhere to come back to.
+        if (!href.startsWith("/") || href.indexOf("/logout") === 0) return;
+
+        const here = location.pathname + location.search;
+        if (here.indexOf("/settings/") === 0 || here.indexOf("/account/") === 0) {
+            return;                 // already in the menu; keep the original
+        }
+
+        const url = new URL(href, location.href);
+        url.searchParams.set("next", here);
+        item.setAttribute("href", url.pathname + url.search);
+    }, true);
+
     // ---- Back links ----
     // A [data-back] link steps back through history when there is somewhere
     // to go, and otherwise follows its own href - so it still works on a page

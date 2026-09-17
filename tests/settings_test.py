@@ -454,6 +454,62 @@ check("and it is the right cafe's name",
       branding["brand_name"] == "Spice Garden",
       "the cached branding says %r" % branding["brand_name"])
 
+print("\n=== 16. A settings screen returns you where you were ===")
+# The profile menu lives in the shell, which instant navigation never
+# re-renders, so the server cannot work out which page is on screen. The
+# page is stamped onto the link when it is clicked and read back here.
+BACK = re.compile(r'href="([^"]+)" class="btn btn--ghost" data-back')
+
+SETTINGS = ["/settings/tax", "/settings/theme", "/settings/branding",
+            "/settings/printing", "/account/password", "/account/photo"]
+
+wrong = []
+for path in SETTINGS:
+    html = a.get(path + "?next=/billing").get_data(as_text=True)
+    found = BACK.search(html)
+    if not found or found.group(1) != "/billing":
+        wrong.append((path, found.group(1) if found else None))
+
+check("every settings screen offers to go back where it was opened from",
+      not wrong, "these point elsewhere: %s" % wrong)
+
+check("and with nothing to go back to, an admin still gets the dashboard",
+      (BACK.search(a.get("/settings/tax").get_data(as_text=True))
+       or [None, ""])[1] == "/",
+      "the fallback is not the dashboard")
+
+
+print("\n=== 17. And saving takes you back too ===")
+saved = a.post("/settings/tax?next=/billing",
+               data={"tax_percent": "9", "_csrf_token": csrf(a)})
+check("a saved setting returns to the page behind it",
+      saved.headers.get("Location", "").endswith("/billing"),
+      "it went to %s" % saved.headers.get("Location"))
+
+refused = a.post("/settings/tax?next=/billing",
+                 data={"tax_percent": "not a number",
+                       "_csrf_token": csrf(a)})
+check("but a refused one stays put, so it can be corrected",
+      "/settings/tax" in refused.headers.get("Location", ""),
+      "it went to %s" % refused.headers.get("Location"))
+check("and still remembers the way back",
+      "next=/billing" in refused.headers.get("Location", ""),
+      "correcting it would lose the way back: %s"
+      % refused.headers.get("Location"))
+
+
+print("\n=== 18. It will not send anyone off the site ===")
+# Somewhere to come back to is worth remembering; somewhere to be sent is
+# worth refusing.
+for hostile in ("//evil.example.com/", "https://evil.example.com/",
+                "javascript:alert(1)", "/\evil.example.com"):
+    landed = a.post("/settings/tax?next=" + hostile,
+                    data={"tax_percent": "6", "_csrf_token": csrf(a)}
+                    ).headers.get("Location", "")
+    check("%r is ignored" % hostile[:26],
+          "evil.example.com" not in landed and "javascript" not in landed,
+          "it would have sent someone to %s" % landed)
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

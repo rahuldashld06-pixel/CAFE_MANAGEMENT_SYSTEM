@@ -64,6 +64,20 @@ branding, fully isolated from the others.
   with no address bar and no browser chrome. In an ordinary tab a button in
   the top bar fills the screen instead, and remembers the choice.
 
+## A note on speed
+
+Measured from inside the deployed app, a single database round trip costs
+about 543ms - both opening a pooled connection and running `SELECT 1` take
+exactly that. The app and the database are half a second apart, so a page
+doing four lookups spends over two seconds travelling and no amount of
+code tuning changes it. `/healthz` reports `connect_ms` and `query_ms` so
+this can be checked rather than guessed at.
+
+The largest single improvement available is to host the database in the
+same region as the app. After that, the free hosting tier stops the
+service when idle, so the first visitor pays start-up plus a fresh
+connection.
+
 ## How tenant isolation works
 
 Every business row (`categories`, `foods`, `orders`) is tagged with the
@@ -131,7 +145,7 @@ python tests/instant_post_test.py # expect PASSED: 16   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
-python tests/settings_test.py     # expect PASSED: 66   FAILED: 0
+python tests/settings_test.py     # expect PASSED: 75   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
 python tests/print_test.py        # expect PASSED: 41   FAILED: 0
