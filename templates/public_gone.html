@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Menu not found</title>
+    <meta name="theme-color" content="#170F0B">
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/public.css', v=asset_version) }}">
+</head>
+
+<body>
+
+<div class="p-wrap">
+    <div class="p-empty" style="margin-top:80px;">
+        <p><strong>This menu is not available.</strong></p>
+        <p>
+            The code may have been replaced, or the cafe may have closed
+            this way of ordering. Please ask a member of staff.
+        </p>
+    </div>
+</div>
+
+</body>
+</html>

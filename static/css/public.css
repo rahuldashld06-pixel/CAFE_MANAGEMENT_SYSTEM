@@ -1,0 +1,363 @@
+/* ==========================================================
+   The pages a customer sees after scanning the code on their
+   table.
+
+   Standalone. Nothing from the staff app reaches here: no
+   sidebar, no drawer, no profile menu, nothing that assumes
+   somebody is signed in. Built for a phone held in one hand
+   while the other holds a cup.
+
+   Colours come from theme.css, so a cafe that picked a theme
+   gets it here too.
+   ========================================================== */
+
+:root {
+    --p-bg: #170F0B;
+    --p-card: #201510;
+    --p-line: #33231A;
+    --p-text: #F3E9DA;
+    --p-dim: #C9B29A;
+    --p-faint: #8C7563;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--p-bg);
+}
+
+body {
+    font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 Roboto, sans-serif;
+    color: var(--p-text);
+    line-height: 1.5;
+    /* Room for the bar pinned to the bottom, plus the phone's own. */
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+    -webkit-font-smoothing: antialiased;
+}
+
+.p-wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 16px;
+}
+
+/* ---------- The cafe at the top ---------- */
+.p-head {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 20px 0 16px;
+    border-bottom: 1px solid var(--p-line);
+}
+
+.p-head__mark {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    background: var(--espresso-900, #201510);
+    overflow: hidden;
+    color: var(--copper-light, #F0A85F);
+}
+
+.p-head__mark img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.p-head__mark .brand-glyph { width: 62%; height: 62%; }
+
+.p-head__name {
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 21px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.p-head__sub {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--p-faint);
+}
+
+/* ---------- Menu ---------- */
+.p-intro {
+    margin: 16px 0 6px;
+    font-size: 13.5px;
+    color: var(--p-dim);
+}
+
+.p-group__name {
+    margin: 22px 0 10px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--copper-light, #F0A85F);
+}
+
+.p-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    margin-bottom: 10px;
+    background: var(--p-card);
+    border: 1px solid var(--p-line);
+    border-radius: 15px;
+}
+
+.p-item__body { flex: 1 1 auto; min-width: 0; }
+
+.p-item__name {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.p-item__note {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--p-faint);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.p-item__price {
+    margin-top: 4px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--copper-light, #F0A85F);
+}
+
+/* ---------- Stepper ---------- */
+.p-step {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    background: var(--p-bg);
+    border: 1px solid var(--p-line);
+    border-radius: 999px;
+    padding: 3px;
+}
+
+.p-step button {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--p-text);
+    font-size: 19px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.p-step button:disabled { opacity: .3; cursor: default; }
+
+.p-step button:not(:disabled):active {
+    background: var(--copper-dark, #B96A28);
+    color: #170F0B;
+}
+
+.p-step output {
+    min-width: 26px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- The bar that stays at the bottom ---------- */
+.p-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: rgba(23, 15, 11, .96);
+    border-top: 1px solid var(--p-line);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.p-bar__inner {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.p-bar__sum { flex: 1 1 auto; min-width: 0; }
+
+.p-bar__count {
+    font-size: 12px;
+    color: var(--p-faint);
+}
+
+.p-bar__total {
+    font-size: 19px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.p-send {
+    flex: 0 0 auto;
+    padding: 13px 22px;
+    border: 0;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--copper-light, #F0A85F) 0%,
+                var(--copper-dark, #B96A28) 100%);
+    color: #170F0B;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.p-send:disabled {
+    background: var(--p-line);
+    color: var(--p-faint);
+    cursor: default;
+}
+
+/* ---------- Messages, empty and gone ---------- */
+.p-alert {
+    margin: 16px 0 0;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(225, 97, 79, .14);
+    border: 1px solid rgba(225, 97, 79, .4);
+    color: #F3E9DA;
+    font-size: 13.5px;
+}
+
+.p-empty {
+    margin: 40px 0;
+    padding: 30px 18px;
+    text-align: center;
+    background: var(--p-card);
+    border: 1px solid var(--p-line);
+    border-radius: 16px;
+    color: var(--p-dim);
+}
+
+/* ---------- After it is sent ---------- */
+.p-done {
+    margin: 26px 0;
+    padding: 26px 20px;
+    text-align: center;
+    background: var(--p-card);
+    border: 1px solid var(--p-line);
+    border-radius: 18px;
+}
+
+.p-done__tick {
+    display: grid;
+    place-items: center;
+    width: 54px;
+    height: 54px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    background: rgba(143, 187, 153, .16);
+    color: #8FBB99;
+    font-size: 27px;
+    line-height: 1;
+}
+
+.p-done__label {
+    font-size: 12px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--p-faint);
+}
+
+.p-done__number {
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 46px;
+    font-weight: 700;
+    line-height: 1.1;
+    margin: 4px 0 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.p-done__hint {
+    font-size: 13.5px;
+    color: var(--p-dim);
+    margin: 0;
+}
+
+.p-lines {
+    margin: 18px 0 0;
+    border-top: 1px solid var(--p-line);
+}
+
+.p-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--p-line);
+    font-size: 14px;
+}
+
+.p-line__name { min-width: 0; }
+.p-line__qty { color: var(--p-faint); }
+
+.p-total {
+    display: flex;
+    justify-content: space-between;
+    padding: 13px 0 0;
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.p-again {
+    display: block;
+    margin: 22px auto 40px;
+    padding: 13px 22px;
+    max-width: 320px;
+    text-align: center;
+    border-radius: 999px;
+    border: 1px solid var(--p-line);
+    background: var(--p-card);
+    color: var(--p-text);
+    font-size: 14.5px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.p-foot {
+    margin: 26px 0 34px;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--p-faint);
+}
+
+@media (max-width: 380px) {
+    .p-item { padding: 11px; gap: 9px; }
+    .p-step button { width: 31px; height: 31px; }
+    .p-send { padding: 12px 17px; font-size: 14px; }
+}

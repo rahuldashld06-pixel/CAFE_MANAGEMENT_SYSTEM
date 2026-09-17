@@ -1,0 +1,75 @@
+{% from "_brand_mark.html" import coffee_mark %}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ cafe_theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Order #{{ order.order_id }} · {{ branding.cafe_name }}</title>
+    <meta name="theme-color" content="#170F0B">
+    <meta name="robots" content="noindex">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/public.css', v=asset_version) }}">
+</head>
+
+<body>
+
+<div class="p-wrap">
+
+    <header class="p-head">
+        <span class="p-head__mark">
+            {% if branding.logo %}
+            <img src="{{ branding.logo }}" alt="">
+            {% else %}
+            {{ coffee_mark() }}
+            {% endif %}
+        </span>
+        <div>
+            <h1 class="p-head__name">{{ branding.cafe_name }}</h1>
+            <p class="p-head__sub">Your order is with the kitchen</p>
+        </div>
+    </header>
+
+    <div class="p-done">
+        <div class="p-done__tick" aria-hidden="true">&check;</div>
+
+        <div class="p-done__label">Your order number</div>
+        <div class="p-done__number">#{{ order.order_id }}</div>
+
+        <p class="p-done__hint">
+            Quote this number at the counter. Please keep this screen, or
+            note the number down.
+        </p>
+    </div>
+
+    <div class="p-lines">
+        {% for item in items %}
+        <div class="p-line">
+            <span class="p-line__name">
+                {{ item.item_name }}
+                <span class="p-line__qty">&times; {{ item.quantity }}</span>
+            </span>
+            <span>&#8377;{{ "%.2f"|format(item.subtotal|float) }}</span>
+        </div>
+        {% endfor %}
+
+        <div class="p-total">
+            <span>Total</span>
+            <span>&#8377;{{ "%.2f"|format(order.total_amount|float) }}</span>
+        </div>
+    </div>
+
+    <a class="p-again" href="{{ url_for('public_menu', token=token) }}">
+        Order something else
+    </a>
+
+    <p class="p-foot">Served by {{ branding.cafe_name }}</p>
+
+</div>
+
+</body>
+</html>

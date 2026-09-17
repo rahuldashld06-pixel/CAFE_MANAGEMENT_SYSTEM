@@ -261,6 +261,12 @@
                         <a href="{{ url_for('theme_settings') }}" class="profile-dropdown__item">
                             <i class="bi bi-droplet-half"></i><span>Theme Colour</span>
                         </a>
+
+                        {# Admin only: replacing the code stops every one
+                           already printed and stuck to a table. #}
+                        <a href="{{ url_for('qr_settings') }}" class="profile-dropdown__item">
+                            <i class="bi bi-qr-code"></i><span>Table QR Code</span>
+                        </a>
                         {% endif %}
 
                         <div class="profile-dropdown__divider"></div>
@@ -679,6 +685,70 @@ window.CafeShell = {
         });
 
         show();
+    }());
+
+    // ---- Tickets for orders nobody was here to take ----
+    // A counter order prints its ticket from the screen that rang it up.
+    // A QR order arrives with nobody at the counter at all, so whichever
+    // staff screen is open watches for one and prints it.
+    //
+    // The claim is what stops two tills printing the same ticket: the
+    // server flips the row and tells only the first caller it won. A
+    // screen that loses simply moves on.
+    (function () {
+        var printing = window.CafeShell && window.CafeShell.printing;
+        if (!printing || !printing.auto_kot) return;
+        if (!window.CafeShell.autoPrint) return;
+
+        var EVERY = 12000;   // a kitchen is not a stock ticker
+        var busy = false;
+
+        function claimAndPrint(orderId) {
+            return fetch("/api/kitchen/claim/" + orderId, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            }).then(function (response) {
+                return response.json();
+            }).then(function (data) {
+                // Another screen got there first. Nothing to do, and
+                // nothing wrong.
+                if (!data || !data.claimed) return;
+                window.CafeShell.autoPrint("/print/kot/" + orderId);
+            }).catch(function () { });
+        }
+
+        function look() {
+            if (busy || document.hidden) return;
+            busy = true;
+
+            fetch("/api/kitchen/pending", {
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            }).then(function (response) {
+                return response.json();
+            }).then(function (data) {
+                var waiting = (data && data.orders) || [];
+                // One at a time, in order, so a burst of orders does not
+                // fire a burst of print dialogs at once.
+                return waiting.reduce(function (chain, orderId) {
+                    return chain.then(function () {
+                        return claimAndPrint(orderId);
+                    });
+                }, Promise.resolve());
+            }).catch(function () { }).then(function () {
+                busy = false;
+            });
+        }
+
+        window.setInterval(look, EVERY);
+        look();
+
+        // Coming back to a screen that was in the background is exactly
+        // when there is something waiting.
+        document.addEventListener("visibilitychange", function () {
+            if (!document.hidden) look();
+        });
     }());
 
     // ---- Order Status popup (staff pages) ----

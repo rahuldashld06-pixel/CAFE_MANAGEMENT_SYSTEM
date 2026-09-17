@@ -5,3 +5,5 @@ python-dotenv>=1.0,<2
 gunicorn>=23,<24
 razorpay>=1.4,<2
 requests>=2.31,<3
+# Pure Python, SVG output, no image library needed.
+qrcode>=7.4,<9

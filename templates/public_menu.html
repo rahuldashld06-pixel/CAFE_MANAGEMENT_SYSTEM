@@ -1,0 +1,189 @@
+{% from "_brand_mark.html" import coffee_mark %}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ cafe_theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Order · {{ branding.cafe_name }}</title>
+    <meta name="theme-color" content="#170F0B">
+    <meta name="robots" content="noindex">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/public.css', v=asset_version) }}">
+</head>
+
+<body>
+
+<div class="p-wrap">
+
+    <header class="p-head">
+        <span class="p-head__mark">
+            {% if branding.logo %}
+            <img src="{{ branding.logo }}" alt="">
+            {% else %}
+            {{ coffee_mark() }}
+            {% endif %}
+        </span>
+        <div>
+            <h1 class="p-head__name">{{ branding.cafe_name }}</h1>
+            <p class="p-head__sub">Order from your table</p>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+            <p class="p-alert">{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% if food_count == 0 %}
+
+    <div class="p-empty">
+        <p>Nothing is on the menu just now.</p>
+        <p>Please ask a member of staff.</p>
+    </div>
+
+    {% else %}
+
+    <p class="p-intro">
+        Tap to choose what you would like, then send it to the kitchen.
+        You will get an order number to quote at the counter.
+    </p>
+
+    <form method="POST" action="{{ url_for('public_place_order', token=token) }}"
+          id="orderForm">
+
+        {% for group in groups %}
+        <section>
+            <h2 class="p-group__name">{{ group.name }}</h2>
+
+            {% for food in group.foods %}
+            <div class="p-item">
+                <div class="p-item__body">
+                    <div class="p-item__name">{{ food.food_name }}</div>
+                    {% if food.description %}
+                    <p class="p-item__note">{{ food.description }}</p>
+                    {% endif %}
+                    <div class="p-item__price">&#8377;{{ "%.2f"|format(food.price|float) }}</div>
+                </div>
+
+                {# The number posted is a hidden field; the buttons and the
+                   figure beside them are what a thumb actually uses. #}
+                <div class="p-step"
+                     data-price="{{ food.price }}"
+                     data-stock="{{ food.stock }}">
+                    <button type="button" data-step="-1"
+                            aria-label="One fewer {{ food.food_name }}"
+                            disabled>&minus;</button>
+                    <output aria-live="polite">0</output>
+                    <button type="button" data-step="1"
+                            aria-label="One more {{ food.food_name }}">+</button>
+                    <input type="hidden" name="quantity_{{ food.food_id }}"
+                           value="0">
+                </div>
+            </div>
+            {% endfor %}
+        </section>
+        {% endfor %}
+
+        <div class="p-bar">
+            <div class="p-bar__inner">
+                <div class="p-bar__sum">
+                    <div class="p-bar__count" id="barCount">Nothing chosen yet</div>
+                    <div class="p-bar__total" id="barTotal">&#8377;0.00</div>
+                </div>
+                <button type="submit" class="p-send" id="sendBtn" disabled>
+                    Send to kitchen
+                </button>
+            </div>
+        </div>
+
+    </form>
+
+    {% endif %}
+
+    <p class="p-foot">Served by {{ branding.cafe_name }}</p>
+
+</div>
+
+<script>
+(function () {
+    "use strict";
+
+    var TAX_RATE = {{ tax_rate }};
+    var form = document.getElementById("orderForm");
+    if (!form) return;
+
+    var steps = form.querySelectorAll(".p-step");
+    var count = document.getElementById("barCount");
+    var totalEl = document.getElementById("barTotal");
+    var send = document.getElementById("sendBtn");
+
+    function money(value) {
+        return "₹" + value.toFixed(2);
+    }
+
+    function retally() {
+        var items = 0;
+        var subtotal = 0;
+
+        for (var i = 0; i < steps.length; i++) {
+            var quantity = parseInt(
+                steps[i].querySelector("input").value, 10) || 0;
+            items += quantity;
+            subtotal += quantity * parseFloat(steps[i].dataset.price || "0");
+        }
+
+        // Shown with tax, because that is what will be asked for at the
+        // counter. The server works the same total out again from its own
+        // prices - nothing here is trusted.
+        var total = subtotal * (1 + TAX_RATE);
+
+        count.textContent = items === 0
+            ? "Nothing chosen yet"
+            : items + (items === 1 ? " item" : " items");
+        totalEl.textContent = money(total);
+        send.disabled = items === 0;
+    }
+
+    form.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-step]");
+        if (!button) return;
+
+        var step = button.closest(".p-step");
+        var field = step.querySelector("input");
+        var shown = step.querySelector("output");
+        var stock = parseInt(step.dataset.stock, 10) || 0;
+
+        var next = (parseInt(field.value, 10) || 0)
+            + parseInt(button.dataset.step, 10);
+        if (next < 0) next = 0;
+        if (next > stock) next = stock;
+
+        field.value = next;
+        shown.textContent = next;
+
+        step.querySelector("[data-step='-1']").disabled = next === 0;
+        step.querySelector("[data-step='1']").disabled = next >= stock;
+
+        retally();
+    });
+
+    // A second tap while the kitchen is being told would send it twice.
+    form.addEventListener("submit", function () {
+        send.disabled = true;
+        send.textContent = "Sending...";
+    });
+
+    retally();
+}());
+</script>
+
+</body>
+</html>

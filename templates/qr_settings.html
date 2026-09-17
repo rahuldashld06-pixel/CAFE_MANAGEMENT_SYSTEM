@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Table QR Code · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Customize</div>
+        <h1><i class="bi bi-qr-code"></i> Table QR Code</h1>
+        <p>Print this and put it on your tables.</p>
+    </div>
+    <a href="{{ home_url }}" class="btn btn--ghost" data-back>
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="panel form-panel" style="max-width:680px;">
+
+    {# White behind the code on purpose: a phone camera reads dark on
+       light, and the rest of this app is dark on dark. #}
+    <div class="qr-card" id="qrCard">
+        <div class="qr-card__code">{{ qr|safe }}</div>
+        <div class="qr-card__name">{{ branding.cafe_name }}</div>
+        <div class="qr-card__hint">Scan to see the menu and order</div>
+    </div>
+
+    <div class="form-group">
+        <label for="menuLink">The address it opens</label>
+        <div class="input-suffix">
+            <input type="text" id="menuLink" value="{{ menu_url }}" readonly
+                   onclick="this.select();">
+        </div>
+        <small>
+            This is your cafe's own address and nobody else's. A customer
+            needs no account and sees only your menu.
+        </small>
+    </div>
+
+    <div class="form-actions">
+        <button type="button" class="btn btn--primary" id="printQr">
+            <i class="bi bi-printer"></i> Print the code
+        </button>
+        <a href="{{ menu_url }}" target="_blank" rel="noopener"
+           class="btn btn--ghost">
+            <i class="bi bi-box-arrow-up-right"></i> See what a customer sees
+        </a>
+    </div>
+
+    <div class="note-card">
+        <i class="bi bi-info-circle"></i>
+        <div>
+            An order placed this way lands in Order Management like any
+            other, and its kitchen ticket prints by itself on whichever
+            till is open &mdash; provided Automatic Printing is switched on
+            in this menu. The customer is shown an order number to quote at
+            the counter.
+        </div>
+    </div>
+
+</div>
+
+<div class="panel form-panel" style="max-width:680px;">
+    <h2 style="margin:0 0 8px; font-size:17px;">Replace this code</h2>
+    <p style="margin:0 0 14px; font-size:13px; color:var(--cream-faint);">
+        Making a new code stops every code you have already printed from
+        working. Only do this if the old one has got somewhere it should
+        not have.
+    </p>
+
+    <form method="POST"
+          onsubmit="return confirm('Make a new code? Every code already printed and stuck to a table will stop working.');">
+        <button type="submit" class="btn btn--small btn--delete">
+            <i class="bi bi-arrow-repeat"></i> Make a new code
+        </button>
+    </form>
+</div>
+
+<script>
+    (function () {
+        var button = document.getElementById("printQr");
+        var card = document.getElementById("qrCard");
+        if (!button || !card) return;
+
+        button.addEventListener("click", function () {
+            // Printed from a window of its own, so the app's sidebar and
+            // dark background do not come out with it.
+            var sheet = window.open("", "_blank", "width=420,height=560");
+            if (!sheet) return;
+
+            sheet.document.write(
+                '<!DOCTYPE html><html><head><meta charset="utf-8">'
+                + '<title>Table code</title><style>'
+                + 'body{margin:0;display:grid;place-items:center;'
+                + 'min-height:100vh;font-family:Georgia,serif;color:#16100c;'
+                + 'background:#fff;}'
+                + '.c{text-align:center;padding:24px;}'
+                + '.c svg{width:260px;height:260px;}'
+                + '.n{font-size:20px;font-weight:700;margin-top:10px;}'
+                + '.h{font-size:13px;color:#5c5048;margin-top:4px;}'
+                + '@page{margin:12mm;}'
+                + '</style></head><body><div class="c">'
+                + card.innerHTML
+                + '</div></body></html>');
+            sheet.document.close();
+            sheet.focus();
+            sheet.addEventListener("load", function () { sheet.print(); });
+            // Some browsers fire load before the listener is attached.
+            window.setTimeout(function () { sheet.print(); }, 300);
+        });
+    }());
+</script>
+
+{% endblock %}

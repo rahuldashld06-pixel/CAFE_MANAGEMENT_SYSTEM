@@ -599,6 +599,259 @@ def save_food_image(cursor, file, food_id):
 
 
 # ==========================================
+# THE CAFE'S OWN QR CODE
+# ==========================================
+#
+# A customer points a phone at the code on the table and lands on that
+# cafe's menu. The address carries a random token rather than the cafe's
+# row id: ids are guessable, and walking /m/1, /m/2, /m/3 should not be a
+# way to browse every cafe on the system.
+
+
+def new_public_token():
+    return secrets.token_urlsafe(18)
+
+
+def get_public_token(cafe_id, create=True):
+    """
+    The token in this cafe's QR address, minting one the first time.
+
+    Returns None for a cafe that has none and is not to be given one, so
+    a read-only caller cannot accidentally write.
+    """
+    if not cafe_id:
+        return None
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT public_token FROM cafes WHERE cafe_id = %s", (cafe_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        token = (row["public_token"] or "").strip()
+        if token or not create:
+            return token or None
+
+        token = new_public_token()
+        cursor.execute(
+            "UPDATE cafes SET public_token = %s WHERE cafe_id = %s",
+            (token, cafe_id))
+        connection.commit()
+        return token
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+def cafe_for_token(cursor, token):
+    """
+    The cafe a QR address belongs to, or None.
+
+    Also hands back the owner id every other query needs to scope by, so
+    the public pages never have to guess at it.
+    """
+    token = (token or "").strip()
+    if not token or len(token) > 40:
+        return None
+
+    cursor.execute("""
+        SELECT cafe_id, cafe_name, owner_user_id, is_active
+        FROM cafes
+        WHERE public_token = %s
+    """, (token,))
+    row = cursor.fetchone()
+
+    if not row or not row["is_active"] or not row["owner_user_id"]:
+        return None
+    return row
+
+
+def qr_svg(url, box=10, border=2):
+    """
+    The QR code as an SVG path, drawn here rather than by a web service.
+
+    SVG rather than a bitmap: it stays sharp printed at any size, which
+    matters for something taped to a table, and it needs no image library
+    on the server.
+    """
+    import qrcode
+    import qrcode.image.svg
+
+    code = qrcode.QRCode(
+        box_size=box,
+        border=border,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+    )
+    code.add_data(url)
+    code.make(fit=True)
+
+    buffer = io.BytesIO()
+    code.make_image(image_factory=qrcode.image.svg.SvgPathImage).save(buffer)
+    return buffer.getvalue().decode("utf-8")
+
+
+
+# ==========================================
+# PLACING AN ORDER
+# ==========================================
+#
+# One implementation, used by the counter and by a customer's phone. The
+# two screens look nothing alike, but what happens to stock, to prices and
+# to the order rows behind them has to be identical - a QR order that
+# checked stock differently would oversell the kitchen.
+
+
+class OrderError(ValueError):
+    """Something a person did wrong, phrased for that person."""
+
+
+def available_foods_for(cursor, owner_id):
+    """Every food a cafe is currently willing to sell, with its stock."""
+    cursor.execute("""
+        SELECT f.food_id, f.food_name, f.price, f.availability,
+               COALESCE(i.quantity, 0) AS stock
+        FROM foods f
+        LEFT JOIN inventory i ON f.food_id = i.food_id
+        WHERE f.availability = 1 AND f.user_id = %s
+    """, (owner_id,))
+    return cursor.fetchall()
+
+
+def collect_order_items(foods, wanted):
+    """
+    Turn "how many of each" into priced lines.
+
+    `wanted` maps food_id to a quantity, however it arrived - a counter
+    form or a phone. Prices come from the food rows, never from the
+    request: a customer's browser does not get to say what a coffee costs.
+    """
+    lines = []
+
+    for food in foods:
+        raw = wanted.get(food["food_id"], wanted.get(str(food["food_id"]), 0))
+        text = str(raw).strip() or "0"
+
+        try:
+            quantity = int(text)
+        except ValueError:
+            raise OrderError("Invalid quantity for %s." % food["food_name"])
+
+        if quantity == 0:
+            continue
+        if quantity < 0:
+            raise OrderError(
+                "Quantity cannot be negative for %s." % food["food_name"])
+        if quantity > food["stock"]:
+            raise OrderError(
+                "Not enough stock for %s. Available stock: %s."
+                % (food["food_name"], food["stock"]))
+
+        lines.append({
+            "food_id": food["food_id"],
+            "food_name": food["food_name"],
+            "quantity": quantity,
+            "price": food["price"],
+            "subtotal": food["price"] * quantity,
+        })
+
+    if not lines:
+        raise OrderError("Please select at least one food item.")
+
+    return lines
+
+
+def write_order(cursor, owner_id, cafe_id, lines, tax_mult, source="counter"):
+    """
+    Write one order, its lines, and take the stock off the shelf.
+
+    Stock is read again with FOR UPDATE immediately before it is reduced.
+    The check in collect_order_items() is for telling someone early; this
+    one is what actually stops two tills selling the last croissant.
+
+    The caller owns the transaction: nothing here commits, so a failure
+    half way leaves no order behind.
+    """
+    subtotal = sum((line["subtotal"] for line in lines), Decimal("0.00"))
+    tax = (subtotal * tax_mult).quantize(Decimal("0.01"))
+    total = subtotal + tax
+
+    cursor.execute(
+        "INSERT INTO orders (total_amount, order_status, user_id, cafe_id, "
+        "source) VALUES (%s, %s, %s, %s, %s)",
+        (total, "Pending", owner_id, cafe_id, source)
+    )
+    order_id = cursor.lastrowid
+
+    for line in lines:
+        cursor.execute("""
+            SELECT i.quantity
+            FROM inventory i
+            INNER JOIN foods f ON i.food_id = f.food_id
+            WHERE i.food_id = %s AND f.user_id = %s
+            FOR UPDATE
+        """, (line["food_id"], owner_id))
+        held = cursor.fetchone()
+
+        if held is None:
+            raise OrderError(
+                "Inventory record not found for %s." % line["food_name"])
+        if held["quantity"] < line["quantity"]:
+            raise OrderError(
+                "Not enough stock for %s. Available: %s."
+                % (line["food_name"], held["quantity"]))
+
+        cursor.execute("""
+            INSERT INTO order_items
+            (order_id, food_id, item_name, quantity, price, subtotal)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (order_id, line["food_id"], line["food_name"],
+              line["quantity"], line["price"], line["subtotal"]))
+
+        # The WHERE carries the check as well as the change, so two tills
+        # racing for the last croissant cannot both win: whichever runs
+        # second matches no row.
+        cursor.execute("""
+            UPDATE inventory
+            SET quantity = quantity - %s,
+                last_updated = CURRENT_TIMESTAMP
+            WHERE food_id = %s
+              AND quantity >= %s
+              AND EXISTS (
+                  SELECT 1 FROM foods f
+                  WHERE f.food_id = inventory.food_id AND f.user_id = %s
+              )
+        """, (line["quantity"], line["food_id"], line["quantity"], owner_id))
+
+        if cursor.rowcount != 1:
+            raise OrderError(
+                "Could not update inventory for %s." % line["food_name"])
+
+        # Stock at zero takes the food off the menu by itself.
+        cursor.execute("""
+            UPDATE foods f
+            INNER JOIN inventory i ON f.food_id = i.food_id
+            SET f.availability = CASE WHEN i.quantity > 0 THEN 1 ELSE 0 END
+            WHERE f.food_id = %s AND f.user_id = %s
+        """, (line["food_id"], owner_id))
+
+    return {
+        "order_id": order_id,
+        "subtotal": subtotal,
+        "tax": tax,
+        "total": total,
+    }
+
+
+
+# ==========================================
 # MULTI-USER AUTHENTICATION / DATA ISOLATION
 # ==========================================
 
@@ -621,6 +874,7 @@ _CORE_TABLES = [
             branding_version INT NOT NULL DEFAULT 1,
             brand_name VARCHAR(150) NULL,
             brand_tagline VARCHAR(150) NULL,
+            public_token VARCHAR(40) NULL,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 5.00,
             theme VARCHAR(20) NOT NULL DEFAULT 'copper',
             auto_kot_enabled TINYINT(1) NOT NULL DEFAULT 0,
@@ -707,6 +961,8 @@ _CORE_TABLES = [
             order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             order_status VARCHAR(30) NOT NULL DEFAULT 'Pending',
+            source VARCHAR(20) NOT NULL DEFAULT 'counter',
+            kot_printed TINYINT(1) NOT NULL DEFAULT 0,
             user_id INT NULL,
             cafe_id INT NULL,
             INDEX idx_orders_user_id (user_id),
@@ -792,6 +1048,13 @@ _COLUMN_MIGRATIONS = [
     ("foods", "food_no", "INT NULL"),
     ("orders", "user_id", "INT NULL"),
     ("orders", "cafe_id", "INT NULL"),
+    # 'counter' for one a member of staff rang up, 'qr' for one a
+    # customer placed from their own phone. The kitchen needs to know
+    # which, because nobody is standing there to carry the second one.
+    ("orders", "source", "VARCHAR(20) NOT NULL DEFAULT 'counter'"),
+    # Claimed by whichever till prints the ticket, so two screens
+    # watching the same kitchen do not print it twice.
+    ("orders", "kot_printed", "TINYINT(1) NOT NULL DEFAULT 0"),
     # The item's name as sold, so a deleted food does not blank out the
     # lines of every bill it ever appeared on.
     ("order_items", "item_name", "VARCHAR(150) NULL"),
@@ -805,6 +1068,9 @@ _COLUMN_MIGRATIONS = [
     # choice - so nothing changes appearance on upgrade.
     ("cafes", "brand_name", "VARCHAR(150) NULL"),
     ("cafes", "brand_tagline", "VARCHAR(150) NULL"),
+    # What a cafe's QR code points at. Random and per-cafe, so the
+    # address cannot be guessed and does not leak the cafe's row id.
+    ("cafes", "public_token", "VARCHAR(40) NULL"),
     # Per-café tax rate. 5.00 is what every bill was hard-coded to before
     # this was configurable, so existing cafés keep their current totals.
     ("cafes", "tax_percent", "DECIMAL(5,2) NOT NULL DEFAULT 5.00"),
@@ -1529,6 +1795,9 @@ STAFF_ALLOWED_ENDPOINTS = {
     "account_photo", "user_media",
     # Whoever is on the till is the one who notices the tickets are wrong.
     "print_settings",
+    # A QR order arrives with nobody at the counter, so whichever
+    # staff screen is open has to be able to pull its ticket.
+    "kitchen_pending", "kitchen_claim",
 }
 
 
@@ -5386,6 +5655,10 @@ def require_login():
         # It falls back to the platform name with no session, so it
         # is safe to answer before sign-in.
         "web_manifest",
+        # A customer scanning the code on their table is not a user
+        # of this system and never signs in. These three pages are
+        # the whole of what they can reach.
+        "public_menu", "public_place_order", "public_order_placed",
         # The browser asks for the icon on the sign-in screen too. Without
         # this it is redirected to /login, and the browser then renders the
         # whole login page again - a wasted database round-trip on every
@@ -6070,6 +6343,121 @@ def branding():
             connection.close()
 
 
+@app.route("/settings/qr", methods=["GET", "POST"])
+def qr_settings():
+    """
+    The cafe's own code, to print and put on the tables.
+
+    Admin only, because replacing it invalidates every code already
+    printed and stuck to a table.
+    """
+    denied = require_role("admin")
+    if denied:
+        return denied
+
+    cafe_id = require_cafe_session()
+
+    if request.method == "POST":
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(dictionary=True)
+            cursor.execute(
+                "UPDATE cafes SET public_token = %s WHERE cafe_id = %s",
+                (new_public_token(), cafe_id))
+            connection.commit()
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+        flash("A new code was made. Every code already printed has stopped "
+              "working - print and put out the new one.")
+        return redirect(url_for("qr_settings"))
+
+    token = get_public_token(cafe_id)
+    menu_url = url_for("public_menu", token=token, _external=True)
+
+    return render_template(
+        "qr_settings.html",
+        token=token,
+        menu_url=menu_url,
+        qr=qr_svg(menu_url),
+        branding=get_cafe_branding(cafe_id),
+    )
+
+
+@app.route("/api/kitchen/pending")
+def kitchen_pending():
+    """
+    Orders a customer sent from their phone that no till has printed yet.
+
+    Polled by whichever staff screens are open. Nobody is standing at the
+    counter when a QR order arrives, so the ticket has to be pulled rather
+    than pushed.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT order_id
+            FROM orders
+            WHERE user_id = %s
+              AND source = 'qr'
+              AND kot_printed = 0
+              AND order_status = 'Pending'
+            ORDER BY order_id
+            LIMIT 10
+        """, (scope_user_id(),))
+        return jsonify({"orders": [row["order_id"]
+                                   for row in cursor.fetchall()]})
+    except mysql.connector.Error as error:
+        return jsonify({"orders": [], "error": str(error)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/api/kitchen/claim/<int:order_id>", methods=["POST"])
+def kitchen_claim(order_id):
+    """
+    Claim one order's kitchen ticket, so only one screen prints it.
+
+    The claim is the UPDATE itself: whichever request matches the row
+    first flips kot_printed and every other one matches nothing. Two
+    tills watching the same kitchen therefore print one ticket between
+    them, not two.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("""
+            UPDATE orders
+            SET kot_printed = 1
+            WHERE order_id = %s AND user_id = %s AND kot_printed = 0
+        """, (order_id, scope_user_id()))
+        won = cursor.rowcount == 1
+        connection.commit()
+        return jsonify({"claimed": won})
+    except mysql.connector.Error as error:
+        if connection:
+            connection.rollback()
+        return jsonify({"claimed": False, "error": str(error)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
 @app.route("/settings/tax", methods=["GET", "POST"])
 def tax_settings():
     """
@@ -6117,6 +6505,167 @@ def tax_settings():
         return render_template(
             "tax_settings.html",
             tax_percent=get_tax_percent(cafe_id),
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/m/<token>")
+def public_menu(token):
+    """
+    The menu a customer sees after scanning the code on their table.
+
+    No sign-in: whoever is holding the phone is a customer, not a user of
+    this system. What they can reach is one cafe's menu and nothing else -
+    the token names the cafe, and every query below is scoped by it.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cafe = cafe_for_token(cursor, token)
+        if cafe is None:
+            return render_template("public_gone.html"), 404
+
+        cursor.execute("""
+            SELECT f.food_id, f.food_name, f.price, f.description,
+                   f.image_version, (f.image_blob IS NOT NULL) AS has_image,
+                   COALESCE(c.category_name, 'Other') AS category_name,
+                   COALESCE(i.quantity, 0) AS stock
+            FROM foods f
+            LEFT JOIN categories c ON c.category_id = f.category_id
+            LEFT JOIN inventory i ON i.food_id = f.food_id
+            WHERE f.user_id = %s
+              AND f.availability = 1
+              AND COALESCE(i.quantity, 0) > 0
+            ORDER BY c.category_name, f.food_name
+        """, (cafe["owner_user_id"],))
+        foods = cursor.fetchall()
+
+        return render_template(
+            "public_menu.html",
+            token=token,
+            cafe=cafe,
+            branding=get_cafe_branding(cafe["cafe_id"]),
+            groups=group_foods_by_category(foods),
+            food_count=len(foods),
+            tax_percent=get_tax_percent(cafe["cafe_id"]),
+            tax_rate=float(tax_multiplier(cafe["cafe_id"])),
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/m/<token>/order", methods=["POST"])
+def public_place_order(token):
+    """
+    A customer's order, from their own phone.
+
+    Goes through exactly the same code the counter does, so stock, prices
+    and tax cannot drift apart between the two ways of ordering. Marked
+    'qr' so the kitchen knows nobody is standing there waiting to carry
+    the ticket over.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cafe = cafe_for_token(cursor, token)
+        if cafe is None:
+            return render_template("public_gone.html"), 404
+
+        wanted = {}
+        for field, value in request.form.items():
+            if field.startswith("quantity_"):
+                wanted[field[len("quantity_"):]] = value
+
+        try:
+            foods = available_foods_for(cursor, cafe["owner_user_id"])
+            lines = collect_order_items(foods, wanted)
+            result = write_order(
+                cursor,
+                cafe["owner_user_id"],
+                cafe["cafe_id"],
+                lines,
+                tax_multiplier(cafe["cafe_id"]),
+                source="qr",
+            )
+            connection.commit()
+        except OrderError as error:
+            connection.rollback()
+            flash(str(error))
+            return redirect(url_for("public_menu", token=token))
+
+        return redirect(url_for("public_order_placed", token=token,
+                                order_id=result["order_id"]))
+    except mysql.connector.Error as error:
+        if connection:
+            connection.rollback()
+        app.logger.exception("public order failed")
+        flash("Sorry, that could not be sent to the kitchen. Please try "
+              "again, or ask a member of staff.")
+        return redirect(url_for("public_menu", token=token))
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/m/<token>/placed/<int:order_id>")
+def public_order_placed(token, order_id):
+    """
+    The number to quote at the counter, and what was ordered.
+
+    The order is looked up by cafe as well as by id, so one cafe's code
+    cannot be used to read another's orders by changing the number in the
+    address.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cafe = cafe_for_token(cursor, token)
+        if cafe is None:
+            return render_template("public_gone.html"), 404
+
+        cursor.execute("""
+            SELECT order_id, order_date, total_amount, order_status
+            FROM orders
+            WHERE order_id = %s AND user_id = %s AND source = 'qr'
+        """, (order_id, cafe["owner_user_id"]))
+        order = cursor.fetchone()
+
+        if order is None:
+            return render_template("public_gone.html"), 404
+
+        cursor.execute("""
+            SELECT item_name, quantity, price, subtotal
+            FROM order_items
+            WHERE order_id = %s
+            ORDER BY order_item_id
+        """, (order_id,))
+        items = cursor.fetchall()
+
+        return render_template(
+            "public_placed.html",
+            token=token,
+            cafe=cafe,
+            branding=get_cafe_branding(cafe["cafe_id"]),
+            order=order,
+            items=items,
         )
     finally:
         if cursor:
