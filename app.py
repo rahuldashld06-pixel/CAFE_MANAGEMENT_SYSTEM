@@ -4,6 +4,7 @@ import logging
 import secrets
 import hashlib
 import hmac
+import threading
 import time
 from datetime import date, datetime, timedelta
 from flask import (
@@ -7076,6 +7077,95 @@ def inject_cafe_branding():
     whichever tenant happened to save last.
     """
     return {"cafe_branding": _LazyBranding(session.get("cafe_id"))}
+
+
+# ==========================================
+# KEEPING THE SITE AWAKE
+# ==========================================
+#
+# The hosting plan stops the service when nothing has asked it for
+# anything in a while. The next visitor then waits for Python to start
+# and for a fresh connection to a database half a second away - which is
+# the pause someone notices when they come back after a quiet afternoon.
+#
+# So the site asks itself for its health check on a timer. The request
+# has to go out and come back through the public address, because it is
+# inbound traffic that the host counts, not work happening inside.
+#
+# This also absorbs the cost rather than moving it: the reconnect after a
+# long idle spell is paid by this timer, on nobody's behalf, instead of
+# by whoever happens to arrive first.
+#
+# Two things worth knowing. It only helps while the process is alive - it
+# cannot restart a service that has already stopped, so a deploy or a
+# crash still leaves the first visitor waiting. And on a free plan it
+# uses most of the month's allowance of running hours, because the point
+# of it is to never be idle. An external pinger avoids both; there is one
+# in .github/workflows/keep-awake.yml.
+
+KEEP_AWAKE_SECONDS = int(os.environ.get("KEEP_AWAKE_SECONDS", "600"))
+
+
+def keep_awake_target():
+    """
+    The address to call, or None if the site should not do this.
+
+    Render publishes the service's own address as RENDER_EXTERNAL_URL.
+    Anywhere else it has to be given, because a site that guessed at its
+    own public name would be pinging somebody else's.
+    """
+    if not IS_PRODUCTION:
+        return None
+    if os.environ.get("KEEP_AWAKE", "1").strip().lower() in ("0", "off",
+                                                             "false", "no"):
+        return None
+
+    base = (os.environ.get("KEEP_AWAKE_URL")
+            or os.environ.get("RENDER_EXTERNAL_URL")
+            or "").strip().rstrip("/")
+
+    if not base.startswith("https://") and not base.startswith("http://"):
+        return None
+    return base + "/healthz"
+
+
+def _keep_awake_loop(target, every):
+    import urllib.request
+
+    while True:
+        time.sleep(every)
+        try:
+            request = urllib.request.Request(
+                target, headers={"User-Agent": "cafe-manager-keep-awake"})
+            with urllib.request.urlopen(request, timeout=30) as response:
+                response.read()
+        except Exception as error:                  # noqa: BLE001
+            # Never worth taking the site down over. The next tick tries
+            # again, and a missed one only costs the wait it was there to
+            # avoid.
+            app.logger.info("keep-awake ping failed: %s", error)
+
+
+def start_keep_awake():
+    """Start the timer, once, if this deployment should have one."""
+    target = keep_awake_target()
+    if not target:
+        return False
+
+    thread = threading.Thread(
+        target=_keep_awake_loop,
+        args=(target, max(60, KEEP_AWAKE_SECONDS)),
+        name="keep-awake",
+        daemon=True,
+    )
+    thread.start()
+    app.logger.info("keep-awake: calling %s every %ds",
+                    target, max(60, KEEP_AWAKE_SECONDS))
+    return True
+
+
+start_keep_awake()
+
 
 
 # ==========================================

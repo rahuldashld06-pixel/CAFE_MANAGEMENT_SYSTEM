@@ -1,0 +1,56 @@
+# Keeps the site awake from outside it.
+#
+# The app pings itself on a timer too, but that only works while it is
+# already running: it cannot wake a service that has stopped after a
+# deploy, a crash, or a long enough quiet spell. This runs on GitHub's
+# schedule instead, so there is always something knocking.
+#
+# Set the repository variable SITE_URL to the site's address, for example
+# https://your-cafe.onrender.com - Settings, Secrets and variables,
+# Actions, Variables. With it unset this job does nothing and says so.
+
+name: Keep the site awake
+
+on:
+  schedule:
+    # Every ten minutes. The hosting plan sleeps after about fifteen.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-awake
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call the health check
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          if [ -z "${SITE_URL}" ]; then
+            echo "SITE_URL is not set, so there is nothing to keep awake."
+            echo "Set it under Settings > Secrets and variables > Actions."
+            exit 0
+          fi
+
+          # A sleeping service takes a while to answer the first call, so
+          # this waits rather than failing - waiting is the whole point.
+          code=$(curl --silent --show-error --location \
+                      --max-time 120 --retry 2 --retry-delay 15 \
+                      --output /tmp/health.json \
+                      --write-out '%{http_code}' \
+                      "${SITE_URL%/}/healthz") || true
+
+          echo "HTTP ${code}"
+          cat /tmp/health.json 2>/dev/null || true
+          echo
+
+          if [ "${code}" != "200" ]; then
+            echo "::warning::The site answered ${code} rather than 200."
+          fi

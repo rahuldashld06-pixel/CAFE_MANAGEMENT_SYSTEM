@@ -510,6 +510,76 @@ for hostile in ("//evil.example.com/", "https://evil.example.com/",
           "evil.example.com" not in landed and "javascript" not in landed,
           "it would have sent someone to %s" % landed)
 
+print("\n=== 19. Keeping the site awake ===")
+# The hosting plan stops the service when nothing asks it for anything,
+# and the next visitor then waits for start-up plus a fresh connection to
+# a database half a second away. The site calls its own health check on a
+# timer so that wait is paid by nobody.
+import os as _os  # noqa: E402
+
+
+def target_when(**environment):
+    """What the app would decide to call, given this environment."""
+    kept = {}
+    for name in ("APP_ENV", "KEEP_AWAKE", "KEEP_AWAKE_URL",
+                 "RENDER_EXTERNAL_URL"):
+        kept[name] = _os.environ.pop(name, None)
+    _os.environ.update({k: v for k, v in environment.items() if v})
+
+    was = application.IS_PRODUCTION
+    application.IS_PRODUCTION = (
+        environment.get("APP_ENV", "production") != "development")
+    try:
+        return application.keep_awake_target()
+    finally:
+        application.IS_PRODUCTION = was
+        for name, value in kept.items():
+            _os.environ.pop(name, None)
+            if value is not None:
+                _os.environ[name] = value
+
+
+check("a live site with an address of its own calls itself",
+      target_when(APP_ENV="production",
+                  RENDER_EXTERNAL_URL="https://mysite.onrender.com")
+      == "https://mysite.onrender.com/healthz",
+      "it would call %r" % target_when(
+          APP_ENV="production",
+          RENDER_EXTERNAL_URL="https://mysite.onrender.com"))
+
+check("a trailing slash does not become a double one",
+      target_when(APP_ENV="production",
+                  KEEP_AWAKE_URL="https://mysite.example/")
+      == "https://mysite.example/healthz",
+      "it would call %r" % target_when(
+          APP_ENV="production", KEEP_AWAKE_URL="https://mysite.example/"))
+
+check("a machine in development does not ping anything",
+      target_when(APP_ENV="development",
+                  KEEP_AWAKE_URL="https://mysite.example") is None,
+      "a developer's laptop would be calling the live site")
+
+check("with no address it stays quiet rather than guessing one",
+      target_when(APP_ENV="production") is None,
+      "it would call something it invented")
+
+check("something that is not an address is refused",
+      target_when(APP_ENV="production",
+                  KEEP_AWAKE_URL="not-a-url") is None,
+      "it would try to call nonsense")
+
+check("and it can be switched off",
+      target_when(APP_ENV="production", KEEP_AWAKE="0",
+                  RENDER_EXTERNAL_URL="https://mysite.onrender.com") is None,
+      "there is no way to stop it")
+
+# The health check is the right thing to call: it is cheap, it needs no
+# session, and it touches the database, so the connection stays warm too.
+check("what it calls needs no sign-in",
+      "healthz" in application.app.view_functions
+      and app.test_client().get("/healthz").status_code == 200,
+      "the keep-awake would be redirected to the sign-in page")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

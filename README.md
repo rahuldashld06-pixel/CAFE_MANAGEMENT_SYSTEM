@@ -74,9 +74,20 @@ code tuning changes it. `/healthz` reports `connect_ms` and `query_ms` so
 this can be checked rather than guessed at.
 
 The largest single improvement available is to host the database in the
-same region as the app. After that, the free hosting tier stops the
-service when idle, so the first visitor pays start-up plus a fresh
-connection.
+same region as the app.
+
+The free hosting tier also stops the service when idle, so the first
+visitor pays start-up plus a fresh connection. Two things guard against
+that, and it is worth having both:
+
+- The app calls its own `/healthz` every ten minutes. On Render the
+  address comes from `RENDER_EXTERNAL_URL` and needs no setting up. This
+  only works while the process is alive - it cannot wake a service that
+  has already stopped - and on a free plan it uses most of the month's
+  running hours, because never being idle is the point.
+- `.github/workflows/keep-awake.yml` does the same from outside, on
+  GitHub's schedule, which does wake a stopped service. Set the
+  repository variable `SITE_URL` to switch it on.
 
 ## How tenant isolation works
 
@@ -145,7 +156,7 @@ python tests/instant_post_test.py # expect PASSED: 16   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
-python tests/settings_test.py     # expect PASSED: 75   FAILED: 0
+python tests/settings_test.py     # expect PASSED: 82   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
 python tests/print_test.py        # expect PASSED: 41   FAILED: 0
