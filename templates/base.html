@@ -753,7 +753,7 @@ window.CafeShell = {
                 // Another screen got there first. Nothing to do, and
                 // nothing wrong.
                 if (!data || !data.claimed) return;
-                window.CafeShell.autoPrint("/print/kot/" + orderId);
+                window.CafeShell.autoPrint("/orders/" + orderId + "/kot");
             }).catch(function () { });
         }
 

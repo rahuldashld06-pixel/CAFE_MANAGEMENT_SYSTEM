@@ -82,6 +82,15 @@ def _translate(sql):
     s = re.sub(r"\bVARCHAR\(\d+\)", "TEXT", s, flags=re.I)
     s = re.sub(r"\bDATETIME\b", "TEXT", s, flags=re.I)
     s = re.sub(r"\s+ON\s+UPDATE\s+CURRENT_TIMESTAMP\b", "", s, flags=re.I)
+    # SQLite's CURRENT_TIMESTAMP is UTC, but this shim answers NOW()
+    # and CURDATE() from the local clock. On a machine that is not on
+    # UTC the two disagree for part of every day - between midnight and
+    # 05:30 in India a row stamped "yesterday" by the column default is
+    # not found by a query asking for today, and whole suites fail for
+    # the length of that window. A real deployment has one clock behind
+    # both of these, so the double should have one too.
+    s = re.sub(r"\bDEFAULT CURRENT_TIMESTAMP\b", "DEFAULT (NOW())",
+               s, flags=re.I)
     # Inline INDEX definitions inside CREATE TABLE are not valid in SQLite.
     s = re.sub(r",\s*INDEX \w+ \([^)]*\)", "", s, flags=re.I)
     s = re.sub(r",\s*UNIQUE KEY \w+ \(([^)]*)\)", r", UNIQUE(\1)", s, flags=re.I)

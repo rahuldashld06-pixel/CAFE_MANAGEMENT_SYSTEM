@@ -230,7 +230,7 @@ check("they open in their own tab",
       "printing would navigate away from the order")
 
 
-print("\n=== 6. The customer's bill is dressed for a customer ===")
+print("\n=== 11. The customer's bill is dressed for a customer ===")
 bill_html = a.get("/orders/%s/bill" % order_id).get_data(as_text=True)
 
 check("the cafe's symbol sits behind the bill",
@@ -288,6 +288,75 @@ print_css = open(os.path.join(os.path.dirname(os.path.dirname(
 check("the symbol behind it survives an actual printer",
       "print-color-adjust: exact" in print_css,
       "the watermark would be dropped when printed")
+
+print("\n=== 12. Every address a screen asks to print actually exists ===")
+# This section exists because it did not. The kitchen screen and the
+# counter screens both asked to print "/print/kot/<id>", which was never
+# a route in this app - the ticket that was meant to come out by itself
+# came out as the dashboard, silently, in a hidden frame nobody looks at.
+#
+# The test that was supposed to cover it only checked that the page asked
+# to print the string the page itself contained, so it agreed with the
+# bug. Nothing checked the address against the app. This does.
+import werkzeug.routing                                      # noqa: E402
+
+TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "templates")
+
+
+def printed_paths():
+    """Every URL handed to autoPrint, with the ids filled in."""
+    found = []
+    for name in sorted(os.listdir(TEMPLATES)):
+        if not name.endswith(".html"):
+            continue
+        body = io.open(os.path.join(TEMPLATES, name),
+                       encoding="utf-8").read()
+        for call in re.findall(r"autoPrint\(\s*(.+?)\)\s*;", body, re.S):
+            if "function" in call:          # the helper's own definition
+                continue
+            # "/orders/" + id + "/kot"  ->  /orders/1/kot
+            path = ""
+            for piece in re.split(r"\s*\+\s*", call.strip()):
+                piece = piece.strip()
+                if piece[:1] in ("'", '"'):
+                    path += piece[1:-1]
+                else:
+                    path += "1"
+            found.append((name, path))
+    return found
+
+
+calls = printed_paths()
+check("the screens do ask to print something",
+      len(calls) >= 3,
+      "found %d autoPrint calls, so this section is checking nothing"
+      % len(calls))
+
+adapter = app.url_map.bind("localhost")
+broken = []
+for name, path in calls:
+    try:
+        adapter.match(path)
+    except werkzeug.routing.RequestRedirect:
+        pass                                 # a real route, just tidier
+    except werkzeug.exceptions.HTTPException:
+        broken.append("%s asks for %s" % (name, path))
+
+check("and every one of those addresses is a real route",
+      not broken,
+      "; ".join(broken) or "n/a")
+
+# The two that matter, named outright, so a rename cannot quietly drop
+# them from the list above and still pass.
+asked = {path for _, path in calls}
+check("the kitchen ticket is among them",
+      any(path.endswith("/kot") for path in asked),
+      "nothing asks to print a kitchen ticket at all: %s" % sorted(asked))
+
+check("and so is the customer's bill",
+      any(path.endswith("/bill") for path in asked),
+      "nothing asks to print a bill at all: %s" % sorted(asked))
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))

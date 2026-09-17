@@ -123,7 +123,7 @@ function startKitchenScreen() {
         }).then(function (data) {
             if (!data || !data.claimed) return;   // somebody else had it
             if (window.CafeShell && window.CafeShell.autoPrint) {
-                window.CafeShell.autoPrint("/print/kot/" + orderId);
+                window.CafeShell.autoPrint("/orders/" + orderId + "/kot");
             }
         }).catch(function () { });
     }
