@@ -437,84 +437,114 @@ class _SharedConnection:
         return None
 
 
-_CONNECTION_POOL = None
+# A pool of our own, because the connector's own pool does two things on
+# every single checkout that together cost more than most pages spend on
+# their real work.
+#
+# It asks the database "are you still there?" before handing a connection
+# over - a real round trip, and from this app to this database that is
+# about 270ms. And it asks while holding a lock shared by the whole
+# process, so when two requests arrive together the second one waits for
+# the first one's question before it may even ask its own. Two people
+# ordering at the same moment were making each other slower for nothing.
+#
+# Removing the app's own extra ping earlier only removed the second of
+# the two; this one was underneath it the whole time, which is why the
+# health check went from about 540ms to about 270ms rather than to nearly
+# nothing.
+#
+# A connection that was in use seconds ago does not need to be asked. So
+# the question is only put to one that has sat unused long enough to have
+# plausibly been dropped at the far end, and the lock below is held only
+# long enough to move a connection on or off a list - never across
+# anything that touches the network.
 
-
-def _build_pool():
-    global _CONNECTION_POOL
-    if _CONNECTION_POOL is None:
-        _CONNECTION_POOL = mysql.connector.pooling.MySQLConnectionPool(
-            pool_name="cafe_pool",
-            pool_size=int(os.environ.get("DB_POOL_SIZE", "5")),
-            # Resetting the session on every release is a round trip to a
-            # database that is not in the same building, and it was costing
-            # about 170ms of every single request. Nothing here leans on
-            # session state surviving: autocommit is set explicitly on
-            # every acquire below, and every transaction is opened and
-            # closed inside one request.
-            pool_reset_session=False,
-            **DB_CONFIG,
-        )
-    return _CONNECTION_POOL
-
-
-# How long a pooled connection may sit unused before it is worth asking
-# the database whether it is still there. Measured from inside the
-# deployed app, that question costs a full round trip - 543ms - and it
-# used to be asked on every single request.
+# How long a connection may sit unused before it is worth checking.
 #
 # Half an hour, not a couple of minutes. A cafe with a handful of orders
 # an hour has gaps of several minutes all day, and at two minutes almost
-# every real visitor was paying the check anyway - which is most of what
-# removing it was meant to fix. MySQL drops an idle connection after
-# hours, not minutes, so half an hour is still far inside the window; the
-# keep-awake timer touches the database every ten minutes on top of that,
-# so in practice this rarely fires at all.
+# every real visitor was paying for the check anyway - which is the whole
+# thing this is meant to avoid. MySQL drops an idle connection after
+# hours, not minutes, so half an hour is still well inside the window,
+# and the keep-awake timer touches the database every ten minutes on top
+# of that, so in practice this rarely fires at all.
 POOL_PING_AFTER_SECONDS = int(
     os.environ.get("POOL_PING_AFTER_SECONDS", "1800"))
 
-
-def _underlying(connection):
-    """
-    The real connection inside a pool's wrapper.
-
-    The wrapper is thrown away and rebuilt on each checkout, so anything
-    remembered about a connection has to be kept on the object that
-    actually survives.
-    """
-    return getattr(connection, "_cnx", None) or connection
+DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "5"))
 
 
-def _new_raw_connection():
-    """
-    A pooled connection when possible, otherwise a direct one.
-
-    A connection that has been idle a while may have been dropped by the
-    database, so it is checked - but only then. Checking every time was
-    costing more than most pages spend on their real work.
-    """
+def _discard(connection):
+    """Close a connection we are not keeping, without fuss."""
     try:
-        connection = _build_pool().get_connection()
+        connection.close()
+    except Exception:
+        pass
 
-        raw = _underlying(connection)
-        idle_for = time.time() - getattr(raw, "_cafe_last_used", 0)
 
-        if idle_for > POOL_PING_AFTER_SECONDS:
+class _ConnectionPool:
+    """
+    Connections nobody is using, each with the time it was handed back.
+
+    Newest first: the one returned most recently is the one least likely
+    to have gone stale, so taking from the end means the check above
+    almost never has to fire.
+    """
+
+    def __init__(self, size):
+        self._size = size
+        self._free = []
+        self._lock = threading.Lock()
+
+    def acquire(self):
+        while True:
+            with self._lock:
+                entry = self._free.pop() if self._free else None
+
+            if entry is None:
+                connection = mysql.connector.connect(**DB_CONFIG)
+                connection.autocommit = False
+                return connection
+
+            connection, last_used = entry
+
+            if time.time() - last_used <= POOL_PING_AFTER_SECONDS:
+                connection.autocommit = False
+                return connection
+
             try:
                 connection.ping(reconnect=True, attempts=2, delay=1)
+                connection.autocommit = False
+                return connection
             except Exception:
-                try:
-                    connection.close()
-                except Exception:
-                    pass
-                connection = _build_pool().get_connection()
-    except Exception:
-        # Pool exhausted or unavailable (e.g. during start-up migrations
-        # outside a request) - fall back to a direct connection.
-        connection = mysql.connector.connect(**DB_CONFIG)
+                # Gone. Round again for another free one, or a new one.
+                _discard(connection)
 
-    connection.autocommit = False
-    return connection
+    def release(self, connection):
+        # A route that opened a transaction and neither committed nor
+        # rolled it back would otherwise hand the next request a
+        # connection with somebody else's half-finished work sitting on
+        # it, ready to be committed by whatever that request does next.
+        # In a system where each cafe must only ever see its own rows,
+        # that is the one leak worth spending a round trip on - and only
+        # when it happens, because asking whether a transaction is open
+        # reads a flag the connection already has and costs nothing.
+        try:
+            if connection.in_transaction:
+                connection.rollback()
+        except Exception:
+            _discard(connection)
+            return
+
+        with self._lock:
+            if len(self._free) < self._size:
+                self._free.append((connection, time.time()))
+                return
+
+        _discard(connection)
+
+
+_CONNECTION_POOL = _ConnectionPool(DB_POOL_SIZE)
 
 
 def get_db_connection():
@@ -525,16 +555,16 @@ def get_db_connection():
     independently closeable connection is returned instead.
     """
     if not has_request_context():
-        return _new_raw_connection()
+        return _CONNECTION_POOL.acquire()
 
     connection = getattr(g, "_db_connection", None)
 
-    # No ping here. This connection was taken from the pool earlier in
-    # this same request and checked then; anything after that is a live
-    # connection being asked, over the network, whether it is alive. A
-    # page that calls this five times was paying five of those.
+    # Nothing is checked here. This connection was taken for this same
+    # request moments ago; anything beyond that is a live connection
+    # being asked, over the network, whether it is alive. A page that
+    # calls this five times was paying for five of those.
     if connection is None:
-        connection = _new_raw_connection()
+        connection = _CONNECTION_POOL.acquire()
         g._db_connection = connection
 
     return _SharedConnection(connection)
@@ -545,19 +575,16 @@ def _close_db_connection(exception=None):
     connection = getattr(g, "_db_connection", None)
     if connection is None:
         return
-    try:
-        if exception is not None:
+    g._db_connection = None
+
+    if exception is not None:
+        try:
             connection.rollback()
-    except Exception:
-        pass
-    try:
-        _underlying(connection)._cafe_last_used = time.time()
-    except Exception:
-        pass
-    try:
-        connection.close()
-    except Exception:
-        pass
+        except Exception:
+            _discard(connection)
+            return
+
+    _CONNECTION_POOL.release(connection)
 
 
 PAYMENT_SCHEMA_READY = False

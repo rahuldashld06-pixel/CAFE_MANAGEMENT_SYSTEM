@@ -286,6 +286,13 @@ class _Connection:
         except Exception:
             pass
 
+    @property
+    def in_transaction(self):
+        # The app's pool asks this before putting a connection back, so
+        # the shim has to answer it honestly or the tests would never
+        # exercise the path that catches a route leaving a write open.
+        return self._raw.in_transaction
+
     def ping(self, **kwargs):
         return True
 
@@ -298,6 +305,11 @@ def connect(**kwargs):
 
 
 class _Pooling:
+    # The app keeps its own pool and no longer asks for this one. It is
+    # still here so that `import mysql.connector.pooling` anywhere else
+    # does not fail, and it still refuses, so a return to the connector's
+    # pool would be noticed rather than silently reinstating the ping on
+    # every checkout that this shim never simulated.
     class MySQLConnectionPool:
         def __init__(self, **kwargs):
             raise Error("pooling disabled in test shim")

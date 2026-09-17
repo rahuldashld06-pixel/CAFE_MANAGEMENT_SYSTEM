@@ -598,6 +598,152 @@ check("the threshold still sits well inside a database's own idle timeout",
       application.POOL_PING_AFTER_SECONDS < 28800,
       "a connection could be dropped at the far end before it is checked")
 
+print("\n=== 21. Handing out a connection costs no trip to the database ===")
+# The connector's own pool asks a connection "are you still there?" on
+# every checkout, and asks it holding a lock the whole process shares -
+# so two people ordering at the same moment queue behind each other's
+# question. The app keeps a pool of its own instead. These check it.
+import threading
+import time as clock
+
+Pool = application._ConnectionPool
+
+
+class FakeConnection:
+    def __init__(self):
+        self.pings = 0
+        self.rollbacks = 0
+        self.closed = False
+        self.autocommit = True
+        self.in_transaction = False
+
+    def ping(self, **kwargs):
+        self.pings += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+        self.in_transaction = False
+
+    def close(self):
+        self.closed = True
+
+
+def stale_time():
+    return clock.time() - application.POOL_PING_AFTER_SECONDS - 60
+
+
+pool = Pool(3)
+fresh = FakeConnection()
+pool.release(fresh)
+taken = pool.acquire()
+
+check("a connection handed back a moment ago is reused without a ping",
+      taken is fresh and fresh.pings == 0,
+      "every page load pays a round trip to ask a live connection "
+      "whether it is alive")
+
+check("and it comes back ready to control its own transactions",
+      taken.autocommit is False,
+      "a half-finished write would commit itself")
+
+pool = Pool(3)
+stale = FakeConnection()
+pool._free.append((stale, stale_time()))
+
+check("one that has sat unused for a long time is checked first",
+      pool.acquire() is stale and stale.pings == 1,
+      "a connection the database hung up on hours ago is handed to a "
+      "customer mid-order")
+
+
+def explode(**kwargs):
+    raise RuntimeError("the database hung up")
+
+
+pool = Pool(3)
+dead = FakeConnection()
+dead.ping = explode
+spare = FakeConnection()
+pool._free.append((spare, clock.time()))
+pool._free.append((dead, stale_time()))
+
+check("one that turns out to be gone is thrown away, not handed over",
+      pool.acquire() is spare and dead.closed,
+      "an order is sent down a dead connection")
+
+# Putting one back. The rollback matters and costs a round trip, so it
+# has to happen when it is needed and not when it is not.
+pool = Pool(3)
+tidy = FakeConnection()
+pool.release(tidy)
+
+check("putting one back costs nothing when the page tidied up after "
+      "itself",
+      tidy.rollbacks == 0,
+      "every request pays a round trip to roll back nothing")
+
+leaked = FakeConnection()
+leaked.in_transaction = True
+pool.release(leaked)
+
+check("but a page that left a write open has it undone before reuse",
+      leaked.rollbacks == 1,
+      "the next request inherits somebody else's half-finished write and "
+      "may commit it - and that request belongs to a different cafe")
+
+pool = Pool(2)
+handed_back = [FakeConnection() for _ in range(5)]
+for connection in handed_back:
+    pool.release(connection)
+
+check("it keeps only as many spare connections as it was told to",
+      len(pool._free) == 2
+      and sum(1 for c in handed_back if c.closed) == 3,
+      "each worker holds more connections open than the database plan "
+      "allows, and the site starts refusing people")
+
+# The point of the whole exercise: the check above, when it does fire,
+# must not stop anybody else being served meanwhile.
+pool = Pool(3)
+slow = FakeConnection()
+reached_the_ping = threading.Event()
+let_it_finish = threading.Event()
+
+
+def slow_ping(**kwargs):
+    reached_the_ping.set()
+    let_it_finish.wait(5)
+
+
+slow.ping = slow_ping
+other = FakeConnection()
+pool._free.append((other, clock.time()))
+pool._free.append((slow, stale_time()))
+
+first = threading.Thread(target=pool.acquire)
+first.start()
+reached_the_ping.wait(5)
+
+# The first request is now mid-round-trip. A second one arrives.
+began_waiting = clock.time()
+second = pool.acquire()
+waited = clock.time() - began_waiting
+let_it_finish.set()
+first.join(5)
+
+check("one request checking a stale connection does not hold up another",
+      second is other and waited < 1.0,
+      "the check is made holding a lock shared by the whole process, so "
+      "a second customer waits out the first one's round trip")
+
+source = io.open(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "app.py"), encoding="utf-8").read()
+
+check("and the connector's own pool is not used after all this",
+      "MySQLConnectionPool" not in source,
+      "it pings on every checkout behind a process-wide lock, which is "
+      "the whole thing this section exists to prevent")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:
