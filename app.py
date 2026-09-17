@@ -889,10 +889,18 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult, source="counter"):
     # The number people say out loud. Counted within this cafe's own day,
     # so two cafes both have a number 1 this morning and neither sees the
     # other's.
+    #
+    # FOR UPDATE, because this is read-then-write and the site runs
+    # several workers: a counter order and a phone order landing together
+    # would otherwise both read the same highest number and both claim it,
+    # and two customers would be waiting for the same number to be called.
+    # The lock is held over this cafe's rows for today only, so one cafe's
+    # busy lunchtime never makes another wait. Nothing else is read here,
+    # so it costs no extra trip to the database.
     today = date.today()
     cursor.execute(
         "SELECT COALESCE(MAX(daily_no), 0) + 1 AS next_no FROM orders "
-        "WHERE user_id = %s AND order_day = %s",
+        "WHERE user_id = %s AND order_day = %s FOR UPDATE",
         (owner_id, today)
     )
     row = cursor.fetchone()
@@ -1086,6 +1094,7 @@ _CORE_TABLES = [
             cafe_id INT NULL,
             INDEX idx_orders_user_id (user_id),
             INDEX idx_orders_cafe_id (cafe_id),
+            INDEX idx_orders_day (user_id, order_day),
             INDEX idx_orders_order_date (order_date)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """),
@@ -1229,6 +1238,11 @@ _INDEX_MIGRATIONS = [
     ("foods", "idx_foods_cafe_id", "foods(cafe_id)"),
     ("orders", "idx_orders_user_id", "orders(user_id)"),
     ("orders", "idx_orders_cafe_id", "orders(cafe_id)"),
+    # Not only for speed. The daily number is allocated with a locking
+    # read over one cafe's rows for today, and without this index InnoDB
+    # has no narrow range to lock - it would take a far wider lock and one
+    # cafe's lunchtime rush would hold up every other cafe on the system.
+    ("orders", "idx_orders_day", "orders(user_id, order_day)"),
     ("bills", "idx_bills_gateway_order_id", "bills(gateway_order_id)"),
 ]
 

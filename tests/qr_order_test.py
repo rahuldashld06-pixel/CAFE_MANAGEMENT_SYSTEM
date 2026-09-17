@@ -436,6 +436,39 @@ check("the second cafe counts its own day, from one",
       "the second cafe's first order is number %s"
       % (theirs[0] if theirs else None))
 
+print("\n=== 15. More than one person using it at once ===")
+# The site runs several worker processes, so a counter order and a phone
+# order really can land at the same moment. Two customers waiting for the
+# same number to be called is the failure worth guarding against.
+source = open(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "app.py"), encoding="utf-8").read()
+
+# The query is written across two adjacent string literals, so this reads
+# the lines around it rather than matching one statement in one go.
+at = source.find("COALESCE(MAX(daily_no), 0) + 1")
+nearby = source[at:at + 400] if at != -1 else ""
+
+check("the number is claimed with a lock, not just read",
+      at != -1 and "FOR UPDATE" in nearby,
+      "two orders at once could read the same highest number and both "
+      "take it")
+
+check("and there is an index for that lock to be narrow on",
+      "orders(user_id, order_day)" in source,
+      "without it one cafe's rush would hold up every other cafe")
+
+# Stock is the other thing two tills can race for.
+check("stock is taken with the check inside the update",
+      re.search(r"UPDATE inventory.{0,400}quantity >= %s", source, re.S)
+      is not None,
+      "two orders could each be told there was one left")
+
+# And the kitchen ticket, which two screens watch at once.
+check("a kitchen ticket is claimed by whoever asks first",
+      re.search(r"SET kot_printed = 1.{0,200}kot_printed = 0", source, re.S)
+      is not None,
+      "two screens could print the same ticket")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:
