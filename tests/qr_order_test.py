@@ -364,6 +364,78 @@ check("one cafe's kitchen screen does not silence another's counter",
                  .get_data(as_text=True)).get("kitchen_watching") is False,
       "one cafe's kitchen screen stopped another cafe printing")
 
+print("\n=== 13. The number people say out loud starts again each day ===")
+# order_id cannot do this: it is the key every bill and order line points
+# at, so reusing it would tie today's order to yesterday's bill. The
+# daily number sits alongside it.
+import datetime as _dt  # noqa: E402
+
+
+def numbers_for(owner):
+    return [tuple(row) for row in mysql_shim._DB.execute(
+        "SELECT order_id, order_day, daily_no FROM orders "
+        "WHERE user_id = ? ORDER BY order_id", (owner,)).fetchall()]
+
+
+with admin.session_transaction() as sess:
+    owner = sess.get("user_id")
+
+todays = [row for row in numbers_for(owner)
+          if str(row[1]) == str(_dt.date.today())]
+check("today's orders are numbered from one, in order",
+      [row[2] for row in todays] == list(range(1, len(todays) + 1)),
+      "they are numbered %s" % [row[2] for row in todays])
+
+check("and every order still has its own permanent id",
+      len({row[0] for row in numbers_for(owner)})
+      == len(numbers_for(owner)),
+      "two orders share an id")
+
+# Move everything to yesterday and order again: the count restarts.
+mysql_shim._DB.execute(
+    "UPDATE orders SET order_day = '2020-01-01' WHERE user_id = ?", (owner,))
+mysql_shim._DB.commit()
+
+after_menu = guest.get("/m/%s" % fresh).get_data(as_text=True)
+after_ids = re.findall(r'name="quantity_(\d+)"', after_menu)
+placed_today = guest.post("/m/%s/order" % fresh,
+                          data={"quantity_%s" % after_ids[0]: "1"},
+                          follow_redirects=True)
+
+newest = mysql_shim._DB.execute(
+    "SELECT order_id, daily_no FROM orders WHERE user_id = ? "
+    "ORDER BY order_id DESC LIMIT 1", (owner,)).fetchone()
+
+check("a new day starts again at one", newest and newest[1] == 1,
+      "the first order of the new day is number %s"
+      % (newest[1] if newest else None))
+check("while its permanent id carries on climbing",
+      newest and newest[0] > len(todays),
+      "the id restarted too, which would collide with yesterday's rows")
+
+check("and the customer is shown that number, not the id",
+      ("#%d<" % newest[1]) in placed_today.get_data(as_text=True),
+      "the confirmation shows something other than the day's number")
+
+
+print("\n=== 14. Two cafes both have a number one today ===")
+other_menu = guest.get("/m/%s" % other_token).get_data(as_text=True)
+other_ids = re.findall(r'name="quantity_(\d+)"', other_menu)
+guest.post("/m/%s/order" % other_token,
+           data={"quantity_%s" % other_ids[0]: "1"}, follow_redirects=True)
+
+with other_admin.session_transaction() as sess:
+    other_owner = sess.get("user_id")
+
+theirs = mysql_shim._DB.execute(
+    "SELECT daily_no FROM orders WHERE user_id = ? ORDER BY order_id DESC "
+    "LIMIT 1", (other_owner,)).fetchone()
+
+check("the second cafe counts its own day, from one",
+      theirs and theirs[0] == 1,
+      "the second cafe's first order is number %s"
+      % (theirs[0] if theirs else None))
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

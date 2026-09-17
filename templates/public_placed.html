@@ -38,7 +38,7 @@
         <div class="p-done__tick" aria-hidden="true">&check;</div>
 
         <div class="p-done__label">Your order number</div>
-        <div class="p-done__number">#{{ order.order_id }}</div>
+        <div class="p-done__number">#{{ order.daily_no or order.order_id }}</div>
 
         <p class="p-done__hint">
             Quote this number at the counter. Please keep this screen, or

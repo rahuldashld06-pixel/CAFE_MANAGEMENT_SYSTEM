@@ -26,7 +26,8 @@
 
     <header class="kot__head">
         <p class="kot__label">Kitchen Order Ticket</p>
-        <p class="kot__order">#{{ order.order_id }}</p>
+        {# The number called across the pass, not the database key. #}
+        <p class="kot__order">#{{ order.daily_no or order.order_id }}</p>
         <p class="kot__time">{{ order.order_date }}</p>
     </header>
 

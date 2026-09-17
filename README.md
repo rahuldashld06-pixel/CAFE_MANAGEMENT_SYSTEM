@@ -11,6 +11,10 @@ branding, fully isolated from the others.
 ## What it does
 
 - **Public signup.** `/register` creates a cafe and its first admin owner.
+- **A daily order number.** Orders are counted from 1 again each
+  morning, per cafe, and that is the number customers, the kitchen and
+  the printed ticket use. The permanent id keeps climbing underneath,
+  because bills and order lines point at it.
 - **Order by QR code.** Each cafe gets its own code, printable from
   Profile -> Table QR Code. A customer scans it, sees that cafe's menu with
   no account, sends an order and is given a number to quote at the counter.
@@ -142,7 +146,7 @@ python tests/mobile_nav_test.py   # expect PASSED: 84   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
-python tests/qr_order_test.py     # expect PASSED: 48   FAILED: 0
+python tests/qr_order_test.py     # expect PASSED: 54   FAILED: 0
 python tests/kitchen_screen_test.py # expect PASSED: 11  FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0

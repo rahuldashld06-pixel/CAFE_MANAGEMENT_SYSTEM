@@ -144,8 +144,8 @@ function startKitchenScreen() {
         return '<article class="kitchen-ticket'
             + (order.source === "qr" ? " kitchen-ticket--phone" : "") + '">'
             + '<header class="kitchen-ticket__head">'
-            + '<span class="kitchen-ticket__id">#' + escapeHtml(order.order_id)
-            + '</span>'
+            + '<span class="kitchen-ticket__id">#'
+            + escapeHtml(order.daily_no || order.order_id) + '</span>'
             + '<span class="kitchen-ticket__from">'
             + (order.source === "qr" ? "From a table" : "At the counter")
             + '</span>'

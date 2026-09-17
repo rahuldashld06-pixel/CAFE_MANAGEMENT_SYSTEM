@@ -5,7 +5,7 @@ import secrets
 import hashlib
 import hmac
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from flask import (
     Flask, render_template, request, redirect, url_for, flash, session, g,
     jsonify, abort, has_request_context, send_file
@@ -394,16 +394,37 @@ def _build_pool():
         _CONNECTION_POOL = mysql.connector.pooling.MySQLConnectionPool(
             pool_name="cafe_pool",
             pool_size=int(os.environ.get("DB_POOL_SIZE", "5")),
-            pool_reset_session=True,
+            # Resetting the session on every release is a round trip to a
+            # database that is not in the same building, and it was costing
+            # about 170ms of every single request. Nothing here leans on
+            # session state surviving: autocommit is set explicitly on
+            # every acquire below, and every transaction is opened and
+            # closed inside one request.
+            pool_reset_session=False,
             **DB_CONFIG,
         )
     return _CONNECTION_POOL
 
 
 def _new_raw_connection():
-    """A pooled connection when possible, otherwise a direct one."""
+    """
+    A pooled connection when possible, otherwise a direct one.
+
+    A connection coming out of the pool may have been sitting idle long
+    enough for the database to have dropped it, so it is checked once
+    here - this is the moment where staleness is actually possible, and
+    the only place worth paying a round trip for it.
+    """
     try:
         connection = _build_pool().get_connection()
+        try:
+            connection.ping(reconnect=True, attempts=2, delay=1)
+        except Exception:
+            try:
+                connection.close()
+            except Exception:
+                pass
+            connection = _build_pool().get_connection()
     except Exception:
         # Pool exhausted or unavailable (e.g. during start-up migrations
         # outside a request) - fall back to a direct connection.
@@ -424,16 +445,10 @@ def get_db_connection():
 
     connection = getattr(g, "_db_connection", None)
 
-    if connection is not None:
-        try:
-            connection.ping(reconnect=True, attempts=2, delay=1)
-        except Exception:
-            try:
-                connection.close()
-            except Exception:
-                pass
-            connection = None
-
+    # No ping here. This connection was taken from the pool earlier in
+    # this same request and checked then; anything after that is a live
+    # connection being asked, over the network, whether it is alive. A
+    # page that calls this five times was paying five of those.
     if connection is None:
         connection = _new_raw_connection()
         g._db_connection = connection
@@ -783,10 +798,22 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult, source="counter"):
     tax = (subtotal * tax_mult).quantize(Decimal("0.01"))
     total = subtotal + tax
 
+    # The number people say out loud. Counted within this cafe's own day,
+    # so two cafes both have a number 1 this morning and neither sees the
+    # other's.
+    today = date.today()
+    cursor.execute(
+        "SELECT COALESCE(MAX(daily_no), 0) + 1 AS next_no FROM orders "
+        "WHERE user_id = %s AND order_day = %s",
+        (owner_id, today)
+    )
+    row = cursor.fetchone()
+    daily_no = (row["next_no"] if row and row["next_no"] else 1)
+
     cursor.execute(
         "INSERT INTO orders (total_amount, order_status, user_id, cafe_id, "
-        "source) VALUES (%s, %s, %s, %s, %s)",
-        (total, "Pending", owner_id, cafe_id, source)
+        "source, order_day, daily_no) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        (total, "Pending", owner_id, cafe_id, source, today, daily_no)
     )
     order_id = cursor.lastrowid
 
@@ -844,6 +871,7 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult, source="counter"):
 
     return {
         "order_id": order_id,
+        "daily_no": daily_no,
         "subtotal": subtotal,
         "tax": tax,
         "total": total,
@@ -963,6 +991,8 @@ _CORE_TABLES = [
             total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             order_status VARCHAR(30) NOT NULL DEFAULT 'Pending',
             source VARCHAR(20) NOT NULL DEFAULT 'counter',
+            order_day DATE NULL,
+            daily_no INT NULL,
             kot_printed TINYINT(1) NOT NULL DEFAULT 0,
             user_id INT NULL,
             cafe_id INT NULL,
@@ -1053,6 +1083,12 @@ _COLUMN_MIGRATIONS = [
     # customer placed from their own phone. The kitchen needs to know
     # which, because nobody is standing there to carry the second one.
     ("orders", "source", "VARCHAR(20) NOT NULL DEFAULT 'counter'"),
+    # The number a customer is told and the kitchen calls out. It
+    # starts again at 1 every morning, per cafe. order_id cannot do
+    # this: it is the key every bill and order line points at, and
+    # reusing it would tie today's order to yesterday's bill.
+    ("orders", "order_day", "DATE NULL"),
+    ("orders", "daily_no", "INT NULL"),
     # Claimed by whichever till prints the ticket, so two screens
     # watching the same kitchen do not print it twice.
     ("orders", "kot_printed", "TINYINT(1) NOT NULL DEFAULT 0"),
@@ -3387,293 +3423,40 @@ def add_order():
 
         # ==================================================
         # CREATE ORDER
+        #
+        # The same code a customer's phone goes through. This used to be a
+        # second copy of it, which is exactly the kind of pair that drifts:
+        # one of them gets a stock check tightened and the other quietly
+        # does not, and the kitchen is oversold from whichever side was
+        # forgotten.
         # ==================================================
 
-        selected_items = []
+        wanted = {
+            field[len("quantity_"):]: value
+            for field, value in request.form.items()
+            if field.startswith("quantity_")
+        }
 
-
-        # Get ALL food records that are available
-        cursor.execute("""
-            SELECT
-                f.food_id,
-                f.food_name,
-                f.price,
-                f.availability,
-                COALESCE(i.quantity, 0) AS stock
-
-            FROM foods f
-
-            LEFT JOIN inventory i
-                ON f.food_id = i.food_id
-
-            WHERE f.availability = 1
-              AND f.user_id = %s
-        """, (scope_user_id(),))
-
-        available_foods = cursor.fetchall()
-
-
-        # ==================================================
-        # READ QUANTITIES
-        # ==================================================
-
-        for food in available_foods:
-
-            field_name = f"quantity_{food['food_id']}"
-
-            quantity_text = request.form.get(
-                field_name,
-                "0"
-            ).strip()
-
-
-            if quantity_text == "":
-                quantity_text = "0"
-
-
-            try:
-                quantity = int(quantity_text)
-
-            except ValueError:
-
-                return order_result(
-                    False,
-                    f"Invalid quantity for {food['food_name']}.",
-                    status_code=400
-                )
-
-
-            # Ignore zero
-            if quantity == 0:
-                continue
-
-
-            # Reject negative values
-            if quantity < 0:
-
-                return order_result(
-                    False,
-                    f"Quantity cannot be negative for {food['food_name']}.",
-                    status_code=400
-                )
-
-
-            # Check stock
-            if quantity > food["stock"]:
-
-                return order_result(
-                    False,
-                    f"Not enough stock for {food['food_name']}. "
-                    f"Available stock: {food['stock']}.",
-                    status_code=400
-                )
-
-
-            price = food["price"]
-
-            item_subtotal = price * quantity
-
-
-            selected_items.append({
-                "food_id": food["food_id"],
-                "food_name": food["food_name"],
-                "quantity": quantity,
-                "price": price,
-                "subtotal": item_subtotal
-            })
-
-
-        # ==================================================
-        # AT LEAST ONE FOOD REQUIRED
-        # ==================================================
-
-        if not selected_items:
-
-            return order_result(
-                False,
-                "Please select at least one food item.",
-                status_code=400
+        try:
+            available = available_foods_for(cursor, scope_user_id())
+            selected_items = collect_order_items(available, wanted)
+            written = write_order(
+                cursor,
+                scope_user_id(),
+                require_cafe_session(),
+                selected_items,
+                tax_multiplier(),
+                source="counter",
             )
+        except OrderError as error:
+            connection.rollback()
+            return order_result(False, str(error), status_code=400)
 
-
-        # ==================================================
-        # CALCULATE TOTAL
-        # ==================================================
-
-        subtotal = sum(
-            (
-                item["subtotal"]
-                for item in selected_items
-            ),
-            Decimal("0.00")
-        )
-
-
-        tax = (subtotal * tax_multiplier()).quantize(Decimal("0.01"))
-
+        order_id = written["order_id"]
+        subtotal = written["subtotal"]
+        tax = written["tax"]
         discount = Decimal("0.00")
-
-        total_amount = (
-            subtotal
-            + tax
-            - discount
-        )
-
-
-        # ==================================================
-        # CREATE ORDER
-        # ==================================================
-
-        cursor.execute("""
-            INSERT INTO orders
-            (
-                total_amount,
-                order_status,
-                user_id
-            )
-
-            VALUES
-            (
-                %s,
-                %s,
-                %s
-            )
-        """, (
-            total_amount,
-            "Pending",
-            scope_user_id()
-        ))
-
-
-        order_id = cursor.lastrowid
-
-
-        # ==================================================
-        # CREATE ORDER ITEMS + REDUCE INVENTORY
-        # ==================================================
-
-        for item in selected_items:
-
-            # ----------------------------------------------
-            # Re-check inventory immediately before update
-            # ----------------------------------------------
-
-            cursor.execute("""
-                SELECT i.quantity
-                FROM inventory i
-                INNER JOIN foods f ON i.food_id = f.food_id
-                WHERE i.food_id = %s
-                  AND f.user_id = %s
-                FOR UPDATE
-            """, (
-                item["food_id"],
-                scope_user_id()
-            ))
-
-            stock_record = cursor.fetchone()
-
-
-            if stock_record is None:
-
-                raise Exception(
-                    f"Inventory record not found for "
-                    f"{item['food_name']}."
-                )
-
-
-            current_stock = stock_record["quantity"]
-
-
-            if current_stock < item["quantity"]:
-
-                raise Exception(
-                    f"Not enough stock for "
-                    f"{item['food_name']}. "
-                    f"Available: {current_stock}."
-                )
-
-
-            # ----------------------------------------------
-            # Insert order item
-            # ----------------------------------------------
-
-            cursor.execute("""
-                INSERT INTO order_items
-                (
-                    order_id,
-                    food_id,
-                    item_name,
-                    quantity,
-                    price,
-                    subtotal
-                )
-
-                VALUES
-                (
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s
-                )
-            """, (
-                order_id,
-                item["food_id"],
-                item["food_name"],
-                item["quantity"],
-                item["price"],
-                item["subtotal"]
-            ))
-
-
-            # ----------------------------------------------
-            # Reduce inventory
-            # ----------------------------------------------
-
-            cursor.execute("""
-                UPDATE inventory
-
-                SET
-                    quantity = quantity - %s,
-                    last_updated = CURRENT_TIMESTAMP
-
-                WHERE food_id = %s
-                  AND quantity >= %s
-                  AND EXISTS (
-                      SELECT 1 FROM foods f
-                      WHERE f.food_id = inventory.food_id
-                        AND f.user_id = %s
-                  )
-            """, (
-                item["quantity"],
-                item["food_id"],
-                item["quantity"],
-                scope_user_id()
-            ))
-
-
-            if cursor.rowcount != 1:
-
-                raise Exception(
-                    f"Could not update inventory for "
-                    f"{item['food_name']}."
-                )
-
-
-            # Automatically mark food unavailable when stock reaches 0.
-            cursor.execute("""
-                UPDATE foods f
-                INNER JOIN inventory i
-                    ON f.food_id = i.food_id
-                SET f.availability = CASE
-                    WHEN i.quantity > 0 THEN 1
-                    ELSE 0
-                END
-                WHERE f.food_id = %s
-                  AND f.user_id = %s
-            """, (item["food_id"], scope_user_id()))
-
+        total_amount = written["total"]
 
         # ==================================================
         # CREATE BILL
@@ -3781,7 +3564,7 @@ def load_order_for_print(cursor, order_id):
     the same treatment the order page gives an id that is not yours.
     """
     cursor.execute("""
-        SELECT order_id, order_date, total_amount, order_status
+        SELECT order_id, order_date, total_amount, order_status, daily_no
         FROM orders
         WHERE order_id = %s AND user_id = %s
     """, (order_id, scope_user_id()))
@@ -6485,7 +6268,8 @@ def kitchen_board():
         owner = scope_user_id()
 
         cursor.execute("""
-            SELECT order_id, order_date, total_amount, source, kot_printed
+            SELECT order_id, order_date, total_amount, source,
+                   kot_printed, daily_no
             FROM orders
             WHERE user_id = %s AND order_status = 'Pending'
             ORDER BY order_id
@@ -6513,6 +6297,7 @@ def kitchen_board():
             "orders": [
                 {
                     "order_id": row["order_id"],
+                    "daily_no": row["daily_no"],
                     "placed": format_order_time(row["order_date"]),
                     "total": "%.2f" % float(row["total_amount"] or 0),
                     "source": row["source"] or "counter",
@@ -6789,7 +6574,8 @@ def public_order_placed(token, order_id):
             return render_template("public_gone.html"), 404
 
         cursor.execute("""
-            SELECT order_id, order_date, total_amount, order_status
+            SELECT order_id, order_date, total_amount, order_status,
+                   daily_no
             FROM orders
             WHERE order_id = %s AND user_id = %s AND source = 'qr'
         """, (order_id, cafe["owner_user_id"]))
@@ -7226,13 +7012,28 @@ def healthz():
     reported as unhealthy instead of serving 500s to customers.
     """
     try:
+        # Timed, because "the site is slow" is almost always a question
+        # about how far away the database is, and guessing at that from
+        # the outside means measuring this machine's distance to the app
+        # as well. These two numbers separate the app from the database.
+        started = time.perf_counter()
         connection = get_db_connection()
+        acquired = time.perf_counter()
+
         cursor = connection.cursor()
         cursor.execute("SELECT 1")
         cursor.fetchone()
         cursor.close()
+        queried = time.perf_counter()
+
         connection.close()
-        return jsonify({"status": "ok", "database": "ok"}), 200
+
+        return jsonify({
+            "status": "ok",
+            "database": "ok",
+            "connect_ms": round((acquired - started) * 1000, 1),
+            "query_ms": round((queried - acquired) * 1000, 1),
+        }), 200
     except Exception as error:
         app.logger.exception("health check failed")
         return jsonify({"status": "error", "database": str(error)}), 503

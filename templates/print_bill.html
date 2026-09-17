@@ -54,7 +54,7 @@
                and the counter both have in hand; the bill number is the
                system's own bookkeeping and means nothing across a
                counter. #}
-            <div><dt>Order</dt><dd>#{{ order.order_id }}</dd></div>
+            <div><dt>Order</dt><dd>#{{ order.daily_no or order.order_id }}</dd></div>
             <div class="receipt__meta--wide"><dt>Date</dt><dd>{{ order.order_date|receipt_time }}</dd></div>
             <div><dt>Status</dt><dd>{{ order.order_status }}</dd></div>
         </dl>
