@@ -157,10 +157,10 @@ check("stock came off the shelf",
 
 
 print("\n=== 4. It is an order like any other ===")
-listing = admin.get("/orders").get_data(as_text=True)
-check("it shows up in Order Management",
-      ("/orders/%d" % order_id) in listing,
-      "the order is not on the Order Management page")
+board = admin.get("/api/kitchen/board").get_json()["orders"]
+check("it shows up on the kitchen screen",
+      any(row["order_id"] == order_id for row in board),
+      "the order is not on the kitchen screen")
 check("and the counter can tell where it came from",
       row and row[0] == "qr",
       "nothing distinguishes it from one a member of staff rang up")
@@ -468,6 +468,276 @@ check("a kitchen ticket is claimed by whoever asks first",
       re.search(r"SET kot_printed = 1.{0,200}kot_printed = 0", source, re.S)
       is not None,
       "two screens could print the same ticket")
+
+print("\n=== 16. The kitchen screen is where orders are managed now ===")
+# Order Management was a second list of the same orders, on a page nobody
+# in a kitchen is standing in front of. It is gone, and its two useful
+# buttons moved onto the screen that is already on.
+rules = {str(rule.rule) for rule in app.url_map.iter_rules()}
+
+check("the Order Management page is gone",
+      "/orders" not in rules and "orders" not in app.view_functions,
+      "it is still registered")
+
+check("but a single order still opens by its own link",
+      "/orders/<int:order_id>" in rules,
+      "billing links to an order that cannot be opened")
+
+kitchen_html = admin.get("/kitchen").get_data(as_text=True)
+
+check("and nothing offers it in the sidebar any more",
+      "Order Management" not in kitchen_html,
+      "the link is still there, pointing at nothing")
+
+check("the kitchen offers Done",
+      "data-done=" in kitchen_html, "there is no way to finish an order")
+check("and Cancel",
+      "data-cancel=" in kitchen_html, "there is no way to call one off")
+check("and does not offer View",
+      "bi-eye" not in kitchen_html,
+      "the kitchen was asked for two buttons, not three")
+
+# Something of our own to act on, rung up at the counter.
+counter_foods = re.findall(r'id="quantity_(\d+)"',
+                           admin.get("/orders/add").get_data(as_text=True))
+admin.post("/orders/add",
+           data={"quantity_%s" % counter_foods[0]: "1",
+                 "_csrf_token": csrf(admin)}, follow_redirects=True)
+mine = max(row["order_id"] for row in
+           admin.get("/api/kitchen/board").get_json()["orders"])
+
+
+def board_row(order_id):
+    for row in admin.get("/api/kitchen/board").get_json()["orders"]:
+        if row["order_id"] == order_id:
+            return row
+    return None
+
+
+check("a waiting order says so on the board",
+      (board_row(mine) or {}).get("status") == "Pending",
+      "the board says %s" % (board_row(mine) or {}).get("status"))
+
+# The screen asks over fetch, so it wants an answer - not a page, and not
+# a message left behind for whatever is opened next.
+with admin.session_transaction() as sess:
+    sess.pop("_flashes", None)
+
+done = admin.post("/orders/complete/%d" % mine,
+                  data={"_csrf_token": csrf(admin)},
+                  headers={"X-Requested-With": "XMLHttpRequest"})
+
+check("marking one done answers the screen instead of redirecting it",
+      done.status_code == 200
+      and (done.get_json() or {}).get("success") is True,
+      "got HTTP %s: %s" % (done.status_code,
+                           done.get_data(as_text=True)[:120]))
+
+with admin.session_transaction() as sess:
+    left_behind = sess.get("_flashes") or []
+check("and leaves no message to ambush the next page opened",
+      not left_behind,
+      "a shift of these would arrive in a heap: %s" % (left_behind,))
+
+check("the finished order stays on the board",
+      board_row(mine) is not None,
+      "it vanished, so the dot that turned green cannot be seen")
+check("and the dot it shows is now the done one",
+      (board_row(mine) or {}).get("status") == "Completed",
+      "the board says %s" % (board_row(mine) or {}).get("status"))
+
+# And cancelling, the other button.
+admin.post("/orders/add",
+           data={"quantity_%s" % counter_foods[0]: "1",
+                 "_csrf_token": csrf(admin)}, follow_redirects=True)
+doomed = max(row["order_id"] for row in
+             admin.get("/api/kitchen/board").get_json()["orders"])
+
+cancelled = admin.post("/orders/cancel/%d" % doomed,
+                       data={"_csrf_token": csrf(admin)},
+                       headers={"X-Requested-With": "XMLHttpRequest"})
+
+check("cancelling answers the screen too",
+      cancelled.status_code == 200
+      and (cancelled.get_json() or {}).get("success") is True,
+      "got HTTP %s: %s" % (cancelled.status_code,
+                           cancelled.get_data(as_text=True)[:120]))
+
+check("and the cancelled order says so rather than disappearing",
+      (board_row(doomed) or {}).get("status") == "Cancelled",
+      "the board says %s" % (board_row(doomed) or {}).get("status"))
+
+# Printing must not follow orders onto the finished pile. This reads the
+# screen's own filter, because the guard lives in the browser.
+check("a finished order is not sent to the printer again",
+      'order.status === "Pending"' in kitchen_html,
+      "now that finished orders stay on the board, the printing filter "
+      "has to exclude them or every one reprints on the next sweep")
+
+print("\n=== 17. Yesterday's forgotten orders do not wait for ever ===")
+# The board shows one day. An order nobody pressed Done or Cancel on
+# before closing would otherwise sit waiting behind it for ever - and
+# every count of what is outstanding would go on including it.
+
+
+def status_of(order_id):
+    row = mysql_shim._DB.execute(
+        "SELECT order_status FROM orders WHERE order_id = ?",
+        (order_id,)).fetchone()
+    return row[0] if row else None
+
+
+def place_one():
+    admin.post("/orders/add",
+               data={"quantity_%s" % counter_foods[0]: "1",
+                     "_csrf_token": csrf(admin)}, follow_redirects=True)
+    return mysql_shim._DB.execute(
+        "SELECT MAX(order_id) FROM orders").fetchone()[0]
+
+
+def move_to_yesterday(order_id):
+    yesterday = _dt.date.today() - _dt.timedelta(days=1)
+    mysql_shim._DB.execute(
+        "UPDATE orders SET order_day = ?, order_date = ? WHERE order_id = ?",
+        (yesterday.isoformat(), yesterday.isoformat() + " 20:40:00",
+         order_id))
+    mysql_shim._DB.commit()
+
+
+forgotten = place_one()
+called_off = place_one()
+admin.post("/orders/cancel/%d" % called_off,
+           data={"_csrf_token": csrf(admin)}, follow_redirects=True)
+
+still_today = place_one()
+
+move_to_yesterday(forgotten)
+move_to_yesterday(called_off)
+
+check("an order left open yesterday is still open before anyone looks",
+      status_of(forgotten) == "Pending",
+      "it is %s already" % status_of(forgotten))
+
+# The sweep runs once per cafe per day in each worker, and this cafe has
+# been swept in this process already. Clearing that is the difference
+# between testing the sweep and testing the guard in front of it.
+application._ORDERS_SWEPT_FOR.clear()
+
+admin.get("/api/kitchen/board")
+
+check("opening the kitchen on the next day marks it done",
+      status_of(forgotten) == "Completed",
+      "it is %s" % status_of(forgotten))
+
+check("but one that was cancelled stays cancelled",
+      status_of(called_off) == "Cancelled",
+      "somebody said no to that one on purpose, and it is now %s"
+      % status_of(called_off))
+
+check("and today's own orders are left alone",
+      status_of(still_today) == "Pending",
+      "an order from today was closed off: it is %s"
+      % status_of(still_today))
+
+today_board = [row["order_id"] for row in
+               admin.get("/api/kitchen/board").get_json()["orders"]]
+check("yesterday's order is not on today's board",
+      forgotten not in today_board,
+      "the board is showing %s" % today_board)
+check("and today's is",
+      still_today in today_board,
+      "the board is showing %s" % today_board)
+
+# Running twice must not undo anything or cost a second write.
+application._ORDERS_SWEPT_FOR.clear()
+admin.get("/api/kitchen/board")
+check("sweeping again changes nothing",
+      status_of(forgotten) == "Completed"
+      and status_of(called_off) == "Cancelled"
+      and status_of(still_today) == "Pending",
+      "a second sweep moved something")
+
+print("\n=== 18. The customer is told when their food is ready ===")
+# Somebody at a table has no counter to watch and no staff account. The
+# page they were left holding asks, and says so when the kitchen presses
+# Done - which is the whole reason that button now reaches them at all.
+shopper = app.test_client()
+shop_menu = shopper.get("/m/%s" % fresh).get_data(as_text=True)
+shop_ids = re.findall(r'name="quantity_(\d+)"', shop_menu)
+sent = shopper.post("/m/%s/order" % fresh,
+                    data={"quantity_%s" % shop_ids[0]: "1"},
+                    follow_redirects=False)
+waiting_id = int(sent.headers["Location"].rstrip("/").split("/")[-1])
+
+asking = "/m/%s/status/%d" % (fresh, waiting_id)
+nobody = app.test_client()          # never signed in, never will be
+
+answer = nobody.get(asking)
+check("a customer can ask without an account",
+      answer.status_code == 200
+      and (answer.get_json() or {}).get("status") == "Pending",
+      "got HTTP %s: %s" % (answer.status_code,
+                           answer.get_data(as_text=True)[:120]))
+
+check("and the answer carries nothing but the status",
+      sorted((answer.get_json() or {}).keys()) == ["status"],
+      "it also hands over %s"
+      % sorted((answer.get_json() or {}).keys()))
+
+check("another cafe's code cannot be used to watch this order",
+      nobody.get("/m/%s/status/%d" % (other_token, waiting_id))
+      .status_code == 404,
+      "one cafe can follow another cafe's orders")
+
+check("and a retired code cannot either",
+      nobody.get("/m/%s/status/%d" % (token, waiting_id)).status_code == 404,
+      "the code that was replaced still works")
+
+page = shopper.get("/m/%s/placed/%d" % (fresh, waiting_id)) \
+              .get_data(as_text=True)
+# Both wordings are in the page - the dictionary it changes itself from
+# is embedded as JSON - so what matters is which one is being shown.
+check("while it waits the page says it is with the kitchen",
+      'data-state="pending"' in page
+      and '<span id="orderStateText">In the kitchen</span>' in page,
+      "the page is telling the customer the wrong thing")
+check("and it asks on its own rather than waiting to be reloaded",
+      asking in page,
+      "the customer would have to refresh to find out")
+
+# The kitchen presses Done.
+admin.post("/orders/complete/%d" % waiting_id,
+           data={"_csrf_token": csrf(admin)},
+           headers={"X-Requested-With": "XMLHttpRequest"})
+
+check("once the kitchen presses Done the answer changes",
+      (nobody.get(asking).get_json() or {}).get("status") == "Completed",
+      "it still says %s"
+      % (nobody.get(asking).get_json() or {}).get("status"))
+
+ready_page = shopper.get("/m/%s/placed/%d" % (fresh, waiting_id)) \
+                    .get_data(as_text=True)
+check("and someone opening the page fresh is told straight away",
+      "Your food is ready" in ready_page,
+      "a customer reloading after it is done still sees the waiting page")
+check("without it still asking, now that there is nothing left to ask",
+      'data-state="ready"' in ready_page,
+      "the page would go on polling a finished order for ever")
+
+# Cancelling has to reach them too, or they sit there waiting for food
+# that is not coming.
+cancel_menu = shopper.post("/m/%s/order" % fresh,
+                           data={"quantity_%s" % shop_ids[0]: "1"},
+                           follow_redirects=False)
+doomed_id = int(cancel_menu.headers["Location"].rstrip("/").split("/")[-1])
+admin.post("/orders/cancel/%d" % doomed_id,
+           data={"_csrf_token": csrf(admin)},
+           headers={"X-Requested-With": "XMLHttpRequest"})
+
+check("a cancelled order tells the customer as well",
+      (nobody.get("/m/%s/status/%d" % (fresh, doomed_id)).get_json()
+       or {}).get("status") == "Cancelled",
+      "they would wait for food nobody is making")
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))

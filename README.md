@@ -18,14 +18,22 @@ branding, fully isolated from the others.
 - **Order by QR code.** Each cafe gets its own code, printable from
   Profile -> Table QR Code. A customer scans it, sees that cafe's menu with
   no account, sends an order and is given a number to quote at the counter.
-  The order lands in Order Management marked as having come from a phone,
-  and its kitchen ticket is claimed and printed by exactly one staff
-  screen.
+  The order lands on the kitchen screen marked as having come from a
+  phone, and its kitchen ticket is claimed and printed by exactly one
+  staff screen. When the kitchen presses Done, the page the customer is
+  still holding says so on its own - they are sitting at a table with no
+  counter to watch.
 - **Categories and menu.** Categories, food items with photos, prices.
 - **Inventory.** Stock levels drive availability automatically — an item
   at zero stock disappears from the order screen.
-- **Orders.** Multi-item orders, with cancel and complete actions and a
-  live order-status feed.
+- **Orders.** Multi-item orders, with a live order-status feed. The
+  day's orders are worked from the Kitchen screen: a dot for each one,
+  Done when it goes out, Cancel to put the food back on the shelf.
+  Finished and cancelled orders stay on the board, dimmed, so the dot
+  that just changed is still there to see. The board holds one day.
+  Anything still waiting when the day turns over is marked done the next
+  time the screen is opened, rather than waiting for ever behind a board
+  that no longer shows it.
 - **Billing.** A bill per order, cash/card/UPI, and optional Razorpay
   online payment with server-side signature verification.
 - **Reports.** Revenue, top items and trends for the current cafe.
@@ -159,7 +167,7 @@ python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 95   FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
-python tests/print_test.py        # expect PASSED: 45   FAILED: 0
+python tests/print_test.py        # expect PASSED: 51   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 35   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 25   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 23   FAILED: 0
@@ -171,8 +179,8 @@ python tests/mobile_nav_test.py   # expect PASSED: 84   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
-python tests/qr_order_test.py     # expect PASSED: 58   FAILED: 0
-python tests/kitchen_screen_test.py # expect PASSED: 11  FAILED: 0
+python tests/qr_order_test.py     # expect PASSED: 89   FAILED: 0
+python tests/kitchen_screen_test.py # expect PASSED: 18  FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
 ```
@@ -288,10 +296,16 @@ the default.
 `billing_paid_test.py` pins down what settles a bill: only the Paid button.
 Choosing UPI or Card records how a bill will be paid, not that it has been,
 and a verified gateway payment leaves its reference against the bill while
-still waiting for someone to press Paid. It also checks which list shows what: Billing
-history keeps every day until a period is asked for, while Order Management
-shows only today — the shift the till is on. An older order still opens by
-its own link and its bill stays in Billing.
+still waiting for someone to press Paid. It also checks which list shows what:
+Billing history keeps every day until a period is asked for, while the Kitchen
+screen shows only today — the shift the till is on. An older order still opens
+by its own link and its bill stays in Billing.
+
+Billing prints a customer's receipt on request rather than automatically: the
+kitchen ticket has to print because somebody must cook the food, but most
+customers walk off without a receipt, and printing every one burns a roll a
+day. The button sits beside the payment status, where the money is already
+being taken.
 
 ## Security notes
 

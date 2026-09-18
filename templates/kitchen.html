@@ -4,11 +4,11 @@
 
 {% block content %}
 
-<div class="page-header">
+<div class="page-header page-header--stack">
     <div>
         <div class="eyebrow">Kitchen</div>
         <h1><i class="bi bi-fire"></i> Kitchen Screen</h1>
-        <p>Leave this open. Tickets print here.</p>
+        <p>Today's orders. Leave this open &mdash; tickets print here.</p>
     </div>
 
     <div class="page-header__actions">
@@ -27,10 +27,12 @@
 <div class="note-card">
     <i class="bi bi-info-circle"></i>
     <div>
-        While this screen is open it prints the ticket for every order a
-        customer sends from their phone, and the other screens leave that
-        to it. Close it and they take the job back, so a ticket is never
-        simply lost.
+        Every order of the day is here: tap <strong>Done</strong> when it
+        goes out and the dot turns green, or <strong>Cancel</strong> to send
+        the items back into stock. While this screen is open it also prints
+        the ticket for every order a customer sends from their phone, and
+        the other screens leave that to it. Close it and they take the job
+        back, so a ticket is never simply lost.
     </div>
 </div>
 
@@ -135,27 +137,55 @@ function startKitchenScreen() {
         return holder.innerHTML;
     }
 
+    // Colour alone, the same three the rest of the app uses: yellow
+    // still to make, green gone out, red called off.
+    function statusDot(status) {
+        var kind = status === "Cancelled" ? "red"
+            : status === "Completed" ? "green"
+                : "yellow";
+        var said = status === "Pending" ? "Still to make" : status;
+        return '<span class="status-dot status-dot--' + kind + '" title="'
+            + escapeHtml(said) + '"></span>';
+    }
+
     function card(order) {
         var lines = order.items.map(function (item) {
             return '<li><span class="kitchen-qty">' + escapeHtml(item.quantity)
                 + '</span> ' + escapeHtml(item.name) + '</li>';
         }).join("");
 
-        return '<article class="kitchen-ticket'
-            + (order.source === "qr" ? " kitchen-ticket--phone" : "") + '">'
+        var waiting = order.status === "Pending";
+        var number = escapeHtml(order.daily_no || order.order_id);
+
+        var classes = "kitchen-ticket";
+        if (order.source === "qr") classes += " kitchen-ticket--phone";
+        if (order.status === "Completed") classes += " kitchen-ticket--done";
+        if (order.status === "Cancelled") classes += " kitchen-ticket--cancelled";
+
+        // Nothing to press once an order is finished or called off - the
+        // dot is the whole of what it has left to say.
+        var buttons = waiting
+            ? '<button type="button" class="btn btn--delete btn--sm"'
+                + ' data-cancel="' + escapeHtml(order.order_id) + '"'
+                + ' data-number="' + number + '">Cancel</button>'
+                + '<button type="button" class="btn btn--primary btn--sm"'
+                + ' data-done="' + escapeHtml(order.order_id) + '">Done</button>'
+            : '';
+
+        return '<article class="' + classes + '">'
             + '<header class="kitchen-ticket__head">'
-            + '<span class="kitchen-ticket__id">#'
-            + escapeHtml(order.daily_no || order.order_id) + '</span>'
+            + '<span class="kitchen-ticket__id">#' + number + '</span>'
+            + '<span class="kitchen-ticket__meta">'
+            + statusDot(order.status)
             + '<span class="kitchen-ticket__from">'
             + (order.source === "qr" ? "From a table" : "At the counter")
-            + '</span>'
+            + '</span></span>'
             + '</header>'
             + '<ul class="kitchen-ticket__items">'
             + (lines || '<li>No items</li>') + '</ul>'
             + '<footer class="kitchen-ticket__foot">'
             + '<span>' + escapeHtml(order.placed) + '</span>'
-            + '<button type="button" class="btn btn--primary btn--sm"'
-            + ' data-done="' + escapeHtml(order.order_id) + '">Done</button>'
+            + '<span class="kitchen-ticket__actions">' + buttons + '</span>'
             + '</footer>'
             + '</article>';
     }
@@ -171,8 +201,8 @@ function startKitchenScreen() {
 
         if (!orders.length) {
             board.innerHTML =
-                '<p class="kitchen-empty">Nothing waiting. '
-                + 'New orders appear here on their own.</p>';
+                '<p class="kitchen-empty">No orders yet today. '
+                + 'New ones appear here on their own.</p>';
             return;
         }
         board.innerHTML = orders.map(card).join("");
@@ -190,10 +220,13 @@ function startKitchenScreen() {
 
             if (!printing) return;
 
-            // Only what a customer sent: an order rung up at the counter
-            // already printed its own ticket there.
+            // Only what a customer sent and nobody has dealt with: an
+            // order rung up at the counter already printed its own ticket
+            // there, and one already done or called off must not print now
+            // that finished orders stay on this board.
             return orders.filter(function (order) {
-                return order.source === "qr" && !order.printed;
+                return order.status === "Pending"
+                    && order.source === "qr" && !order.printed;
             }).reduce(function (chain, order) {
                 return chain.then(function () {
                     return claimAndPrint(order.order_id);
@@ -202,15 +235,14 @@ function startKitchenScreen() {
         }).catch(function () { });
     }
 
-    board.addEventListener("click", function (event) {
-        var button = event.target.closest("[data-done]");
-        if (!button) return;
-
+    function send(button, url) {
         button.disabled = true;
         var form = new FormData();
         form.append("_csrf_token", csrfToken());
 
-        fetch("/orders/complete/" + button.dataset.done, {
+        // Asked as a fetch, so the server answers yes or no instead of
+        // handing back a page and leaving a message for the next one.
+        fetch(url, {
             method: "POST",
             body: form,
             credentials: "same-origin",
@@ -219,6 +251,26 @@ function startKitchenScreen() {
             lastDrawn = "";     // force a redraw
             look();
         });
+    }
+
+    board.addEventListener("click", function (event) {
+        var done = event.target.closest("[data-done]");
+        if (done) {
+            send(done, "/orders/complete/" + done.dataset.done);
+            return;
+        }
+
+        var cancel = event.target.closest("[data-cancel]");
+        if (!cancel) return;
+
+        // Worth asking. It puts the food back into stock and cannot be
+        // taken back, and these are big buttons on a screen in a kitchen.
+        var sure = window.confirm(
+            "Cancel order #" + cancel.dataset.number + "? The items go back "
+            + "into stock. The order stays in billing history.");
+        if (!sure) return;
+
+        send(cancel, "/orders/cancel/" + cancel.dataset.cancel);
     });
 
     beat();

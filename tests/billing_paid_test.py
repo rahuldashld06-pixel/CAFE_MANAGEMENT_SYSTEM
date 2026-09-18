@@ -169,19 +169,21 @@ print("\n=== 6. Order Management is today's work ===")
 # Bills 1-3 were raised today; bill 4 was moved to February above, and its
 # order with it. The till wants the list in front of it to be this shift.
 mysql_shim._DB.execute(
-    "UPDATE orders SET order_date = '2026-02-03 09:00:00' WHERE order_id = 4")
+    "UPDATE orders SET order_date = '2026-02-03 09:00:00', "
+    "order_day = '2026-02-03' WHERE order_id = 4")
 mysql_shim._DB.commit()
 
-listed_orders = sorted(set(re.findall(
-    r'/orders/(\d+)"', client.get("/orders").get_data(as_text=True))))
+listed_orders = sorted(
+    str(row["order_id"])
+    for row in client.get("/api/kitchen/board").get_json()["orders"])
 
-check("a February order is not in Order Management",
+check("a February order is not on the kitchen screen",
       "4" not in listed_orders, "listed %s" % listed_orders)
 check("today's orders are",
       {"1", "2", "3"}.issubset(set(listed_orders)),
       "listed %s" % listed_orders)
-check("the page says it is showing today",
-      "Today" in client.get("/orders").get_data(as_text=True),
+check("the screen says it is showing today",
+      "Today's orders" in client.get("/kitchen").get_data(as_text=True),
       "nothing tells the user why older orders are absent")
 
 # Nothing is lost: the order is still reachable and still billed.

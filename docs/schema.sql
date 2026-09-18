@@ -34,6 +34,21 @@ CREATE TABLE IF NOT EXISTS cafes (
     login_photo_mime   VARCHAR(80) NULL,
     login_photo_blob   MEDIUMBLOB NULL,
     branding_version   INT NOT NULL DEFAULT 1,
+    -- What the sidebar says, when a cafe would rather it said something
+    -- else. NULL means the platform's own name and tagline.
+    brand_name         VARCHAR(150) NULL,
+    brand_tagline      VARCHAR(150) NULL,
+    -- The secret in this cafe's QR code. Whoever holds it sees this
+    -- cafe's menu and may order from it, with no account.
+    public_token       VARCHAR(40) NULL,
+    -- Last time a kitchen screen said it was open. While that is recent,
+    -- the counter screens stop printing customers' tickets themselves.
+    kitchen_seen_at    DATETIME NULL,
+    tax_percent        DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+    theme              VARCHAR(20) NOT NULL DEFAULT 'copper',
+    auto_kot_enabled   TINYINT(1) NOT NULL DEFAULT 0,
+    auto_kot_delay     INT NOT NULL DEFAULT 5,
+    auto_bill_enabled  TINYINT(1) NOT NULL DEFAULT 0,
     created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_active          TINYINT(1) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -113,10 +128,26 @@ CREATE TABLE IF NOT EXISTS orders (
     order_date     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     total_amount   DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     order_status   VARCHAR(30) NOT NULL DEFAULT 'Pending',
+    -- 'counter' or 'qr'. A customer's own order is worth telling apart:
+    -- it is the one nobody spoke to.
+    source         VARCHAR(20) NOT NULL DEFAULT 'counter',
+    -- The day this order belongs to, and its number within that day.
+    -- daily_no is what is called out and printed; order_id keeps
+    -- climbing underneath, because bills and lines point at it.
+    order_day      DATE NULL,
+    daily_no       INT NULL,
+    -- Set by whichever screen printed the kitchen ticket, so no second
+    -- screen prints it again.
+    kot_printed    TINYINT(1) NOT NULL DEFAULT 0,
     user_id        INT NULL,
     cafe_id        INT NULL,
     INDEX idx_orders_user_id (user_id),
     INDEX idx_orders_cafe_id (cafe_id),
+    -- Both the daily numbering and the kitchen screen work a day at a
+    -- time. Without this the locking read that hands out the next number
+    -- has no narrow range to lock, and one cafe's rush would hold up
+    -- every other cafe on the system.
+    INDEX idx_orders_day (user_id, order_day),
     INDEX idx_orders_order_date (order_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

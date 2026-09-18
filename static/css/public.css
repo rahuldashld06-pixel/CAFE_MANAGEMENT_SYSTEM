@@ -307,6 +307,82 @@ body {
     margin: 0;
 }
 
+/* ---------- Is it ready yet ---------- */
+/* The one thing a customer at a table actually wants from this page. It
+   sits under the number and changes on its own when the kitchen presses
+   Done, so nobody has to walk up and ask. */
+.p-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 10px;
+    padding: 7px 15px 7px 12px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+    background: rgba(242, 201, 76, .12);
+    color: #F2C94C;
+}
+
+.p-state__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+/* Waiting: a slow breath, so the page reads as live rather than stuck. */
+@keyframes p-state-breathe {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .35; }
+}
+
+.p-done[data-state="pending"] .p-state__dot {
+    animation: p-state-breathe 1.8s ease-in-out infinite;
+}
+
+/* Ready. The whole panel says so, not just the pill - this is read at
+   arm's length, on a table, in a cafe. */
+.p-done[data-state="ready"] {
+    border-color: rgba(143, 187, 153, .5);
+    background: rgba(143, 187, 153, .08);
+}
+
+.p-done[data-state="ready"] .p-state {
+    background: rgba(143, 187, 153, .18);
+    color: #8FBB99;
+    font-size: 16px;
+}
+
+.p-done[data-state="ready"] .p-done__tick {
+    background: #8FBB99;
+    color: #15241A;
+}
+
+.p-done[data-state="cancelled"] {
+    border-color: rgba(225, 97, 79, .45);
+}
+
+.p-done[data-state="cancelled"] .p-state {
+    background: rgba(225, 97, 79, .14);
+    color: #E1614F;
+}
+
+.p-done[data-state="cancelled"] .p-done__tick {
+    background: rgba(225, 97, 79, .16);
+    color: #E1614F;
+}
+
+.p-done[data-state="cancelled"] .p-done__number {
+    text-decoration: line-through;
+    opacity: .7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .p-done[data-state="pending"] .p-state__dot { animation: none; }
+}
+
 .p-lines {
     margin: 18px 0 0;
     border-top: 1px solid var(--p-line);

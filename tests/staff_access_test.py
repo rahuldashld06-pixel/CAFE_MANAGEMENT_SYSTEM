@@ -81,7 +81,7 @@ check("Categories is offered", "Categories" in links, "sidebar: %s" % links)
 check("the counter's own sections are all there",
       all(item in links for item in
           ["Food Management", "Inventory", "New Order",
-           "Order Management", "Billing"]),
+           "Kitchen", "Billing"]),
       "sidebar: %s" % links)
 
 admin_links = sidebar(admin)
@@ -194,7 +194,7 @@ for username, role in [("mgr", "manager"), ("cash2", "cashier"),
         "phone_number": "", "password": "password123",
         "_csrf_token": csrf(admin)}, follow_redirects=True)
 
-PAGES = ["/orders/add", "/orders", "/foods", "/inventory", "/categories",
+PAGES = ["/orders/add", "/kitchen", "/foods", "/inventory", "/categories",
          "/billing", "/account/password", "/account/photo",
          "/settings/printing"]
 

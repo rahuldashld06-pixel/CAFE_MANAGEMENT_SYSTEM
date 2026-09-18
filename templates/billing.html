@@ -25,6 +25,20 @@
         overflow-wrap: anywhere;
     }
 
+    /* Every table's headings are kept on one line, which is right until a
+       table has thirteen columns on a laptop: "Payment Mode" then runs
+       straight into "Return" and the row reads as one long word. Only
+       this table wraps them - at spaces, though. The cells below may
+       break mid-word because a food name has to fit somehow, but a
+       heading broken that way reads as "Subt otal". */
+    .billing-table thead th {
+        white-space: normal;
+        overflow-wrap: normal;
+        word-break: normal;
+        line-height: 1.25;
+        font-size: 11px;
+    }
+
     /* Keep the complete billing module inside a normal laptop viewport. */
     .billing-table th:nth-child(1)  { width: 5%; }
     .billing-table th:nth-child(2)  { width: 5%; }
@@ -33,11 +47,22 @@
     .billing-table th:nth-child(5)  { width: 5%; }
     .billing-table th:nth-child(6)  { width: 7%; }
     .billing-table th:nth-child(7)  { width: 7%; }
-    .billing-table th:nth-child(8)  { width: 15%; }
+    .billing-table th:nth-child(8)  { width: 13%; }
     .billing-table th:nth-child(9)  { width: 9%; }
-    .billing-table th:nth-child(10) { width: 10%; }
+    .billing-table th:nth-child(10) { width: 9%; }
     .billing-table th:nth-child(11) { width: 10%; }
-    .billing-table th:nth-child(12) { width: 12%; }
+    .billing-table th:nth-child(12) { width: 10%; }
+    .billing-table th:nth-child(13) { width: 5%; }
+
+    /* One word in a 50px column with overflow-wrap:anywhere comes out one
+       letter per line, so this column holds a symbol and says what it is
+       to anyone who cannot see it. */
+    .billing-table .print-bill-cell { text-align: center; }
+
+    .billing-table .print-bill-btn {
+        padding: 6px 9px;
+        white-space: nowrap;
+    }
 
 
     .billing-table .payment-select {
@@ -165,7 +190,7 @@
         display: flex;
         flex-direction: column;
         gap: 4px;
-        min-width: 100px;
+        min-width: 0;
     }
 
     .cash-received-input {
@@ -330,6 +355,9 @@
             min-width: 1150px;
             table-layout: auto;
         }
+
+        /* Room to scroll into, so the floor is worth having again. */
+        .return-cell { min-width: 100px; }
     }
 
     @media (max-width: 760px) {
@@ -352,8 +380,8 @@
         </div>
 
         <div class="page-header__actions">
-            <a href="{{ url_for('orders') }}" class="btn btn--ghost">
-                <i class="bi bi-cart"></i> Orders
+            <a href="{{ url_for('kitchen_display') }}" class="btn btn--ghost">
+                <i class="bi bi-fire"></i> Kitchen
             </a>
         </div>
     </div>
@@ -481,6 +509,7 @@
                         <th>Payment Mode</th>
                         <th>Return</th>
                         <th>Payment Status</th>
+                        <th>Print Bill</th>
                     </tr>
                 </thead>
 
@@ -595,13 +624,27 @@
                             {% endif %}
                         </td>
 
+                        {# Not every customer wants a receipt, and printing
+                           one for every order wastes a roll a day. This is
+                           here for the ones who ask. The kitchen ticket is
+                           a different thing and still prints by itself. #}
+                        <td class="print-bill-cell">
+                            <button type="button"
+                                    class="btn btn--sm btn--ghost print-bill-btn"
+                                    data-print-order="{{ bill.order_id }}"
+                                    aria-label="Print the receipt for Order #{{ bill.order_id }}"
+                                    title="Print the receipt for Order #{{ bill.order_id }}">
+                                <i class="bi bi-printer"></i>
+                            </button>
+                        </td>
+
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="12" class="empty-row">
+                        <td colspan="13" class="empty-row">
                             <i class="bi bi-receipt"></i>
                             <p>No bills found for the selected period.</p>
-                            <a href="{{ url_for('orders') }}" class="btn btn--sm btn--primary">
+                            <a href="{{ url_for('add_order') }}" class="btn btn--sm btn--primary">
                                 <i class="bi bi-cart-plus"></i> Create Order
                             </a>
                         </td>
@@ -819,6 +862,26 @@
             select.dataset.previousValue = select.dataset.previousValue || select.value;
             select.closest('form').requestSubmit();
         }
+    });
+
+    // Print a receipt for the customer who asks for one.
+    //
+    // Through the same hidden frame the automatic printing uses, so the
+    // page is not navigated away from and the cashier keeps their place in
+    // the list. Delegated, because the rows are re-rendered in place.
+    document.addEventListener('click', function (event) {
+        const button = event.target.closest('.print-bill-btn');
+        if (!button) return;
+
+        const orderId = button.dataset.printOrder;
+        if (!orderId) return;
+
+        if (!window.CafeShell || !window.CafeShell.autoPrint) {
+            showBillingToast('Printing is not available on this screen.', true);
+            return;
+        }
+
+        window.CafeShell.autoPrint('/orders/' + orderId + '/bill');
     });
 
     // Capture each dropdown's server-rendered value up front, so a failed

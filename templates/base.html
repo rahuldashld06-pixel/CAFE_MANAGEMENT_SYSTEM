@@ -109,13 +109,8 @@
                 {# The screen left on in the kitchen. Staff work, so it
                    is offered to everyone who takes orders. #}
                 <a href="{{ url_for('kitchen_display') }}"
-                   class="nav-link {{ 'active' if request.endpoint == 'kitchen_display' else '' }}">
+                   class="nav-link {{ 'active' if request.endpoint in ['kitchen_display', 'order_details'] else '' }}">
                     <i class="bi bi-fire"></i><span>Kitchen</span>
-                </a>
-
-                <a href="{{ url_for('orders') }}"
-                   class="nav-link {{ 'active' if request.endpoint in ['orders', 'order_details'] else '' }}">
-                    <i class="bi bi-receipt-cutoff"></i><span>Order Management</span>
                 </a>
 
                 <a href="{{ url_for('billing') }}"

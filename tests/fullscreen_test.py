@@ -363,7 +363,7 @@ try:
 
     print("\n=== 6. With the preference set, the first tap fills it ===")
     browser.evaluate("localStorage.setItem('cafe.fullscreen', '1')")
-    browser.call("Page.navigate", url=BASE + "/orders")
+    browser.call("Page.navigate", url=BASE + "/kitchen")
     wait_for("!!document.getElementById('fullscreenBtn')", "the button")
     time.sleep(0.3)
 

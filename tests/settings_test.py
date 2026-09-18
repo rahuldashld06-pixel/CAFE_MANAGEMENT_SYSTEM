@@ -263,7 +263,7 @@ check("café B is untouched by café A's rate",
 
 
 print("\n=== 10. What the top corner says, by default ===")
-SHELL_PAGES = ["/orders/add", "/orders", "/foods", "/inventory",
+SHELL_PAGES = ["/orders/add", "/kitchen", "/foods", "/inventory",
                "/categories", "/billing"]
 
 

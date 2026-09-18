@@ -68,7 +68,7 @@
     // the user. Whoever is signed in only warms what their own sidebar
     // offers, so a cashier never touches the admin screens.
     var WARM_ORDER = [
-        "/orders/add", "/orders", "/billing", "/foods", "/inventory",
+        "/orders/add", "/kitchen", "/billing", "/foods", "/inventory",
         "/categories", "", "/reports", "/users"
     ];
     // One past the end, so a page not named above is still warmed, last.

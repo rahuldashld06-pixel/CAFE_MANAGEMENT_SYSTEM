@@ -239,8 +239,8 @@ try:
     """)
     time.sleep(3.0)
 
-    latest = seed.get("/orders").get_data(as_text=True)
-    newest = re.findall(r'/orders/(\d+)"', latest)[0]
+    board = seed.get("/api/kitchen/board").get_json()["orders"]
+    newest = max(row["order_id"] for row in board)
     detail = seed.get("/orders/%s" % newest).get_data(as_text=True)
     quantities = re.findall(r'<span class="badge">\s*(\d+)\s*</span>', detail)
 

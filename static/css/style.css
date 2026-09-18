@@ -3077,6 +3077,27 @@ body.nav-locked {
 /* ---------- The screen that lives in the kitchen ---------- */
 /* Read from a step or two away, across a pass, by someone holding a pan.
    Everything here is bigger than the rest of the app on purpose. */
+/* A header carrying two controls as well as a title has no room for all
+   three on a phone, and the title is the one that loses: it was being cut
+   off mid-word with no ellipsis to show for it. Here the controls drop to
+   a line of their own instead. */
+@media (max-width: 560px) {
+    .page-header--stack {
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .page-header--stack h1 {
+        white-space: normal;
+        overflow: visible;
+    }
+
+    .page-header--stack .page-header__actions {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+}
+
 .kitchen-board {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -3169,6 +3190,55 @@ body.nav-locked {
     border-top: 1px solid var(--espresso-800);
     font-size: 12px;
     color: var(--cream-faint);
+}
+
+/* The dot and where the order came from, kept together so the head stays
+   two things with the number on one side and these on the other. */
+.kitchen-ticket__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Time on the left, buttons on the right, and allowed to stack rather
+   than squeeze on a narrow screen - these get pressed with a thumb. */
+.kitchen-ticket__foot { flex-wrap: wrap; }
+
+.kitchen-ticket__actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+}
+
+/* Finished and called-off orders stay on the board so the dot that just
+   turned green is still there to see, but they must not compete with the
+   ones still to be made. Dimmed, and stripped of the outline that marks
+   an order somebody sent from a table - that outline is there to catch
+   the eye, and there is nothing left to catch it for.
+
+   Faded piece by piece rather than as a whole card. Opacity on the
+   article would take the status dot down with it, and on a finished
+   ticket the dot is the one thing left that still has something to say -
+   which is the entire reason these stay on the board. */
+.kitchen-ticket--done,
+.kitchen-ticket--cancelled {
+    --ticket-fade: .5;
+    border-color: var(--espresso-700);
+    box-shadow: none;
+}
+
+.kitchen-ticket--done:hover,
+.kitchen-ticket--cancelled:hover { --ticket-fade: 1; }
+
+.kitchen-ticket__id,
+.kitchen-ticket__from,
+.kitchen-ticket__items,
+.kitchen-ticket__foot {
+    opacity: var(--ticket-fade, 1);
+}
+
+.kitchen-ticket--cancelled .kitchen-ticket__items li {
+    text-decoration: line-through;
 }
 
 /* Whether this screen is actually reaching the server. A kitchen needs to

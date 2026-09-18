@@ -1,4 +1,18 @@
 {% from "_brand_mark.html" import coffee_mark %}
+{% set SAYS = {
+    "Pending": [
+        "In the kitchen",
+        "Quote this number at the counter. Keep this screen open and it will tell you when your food is ready."],
+    "Completed": [
+        "Your food is ready",
+        "Collect it from the counter and quote this number."],
+    "Cancelled": [
+        "This order was cancelled",
+        "Nothing has been made. Please speak to the counter."]
+} %}
+{% set STATE = {"Completed": "ready", "Cancelled": "cancelled"}
+                .get(order.order_status, "pending") %}
+{% set WORDS = SAYS.get(order.order_status, SAYS["Pending"]) %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ cafe_theme }}">
 <head>
@@ -30,20 +44,24 @@
         </span>
         <div>
             <h1 class="p-head__name">{{ branding.cafe_name }}</h1>
-            <p class="p-head__sub">Your order is with the kitchen</p>
+            <p class="p-head__sub">{{ WORDS[0] }}</p>
         </div>
     </header>
 
-    <div class="p-done">
+    <div class="p-done" id="orderPanel" data-state="{{ STATE }}">
         <div class="p-done__tick" aria-hidden="true">&check;</div>
 
         <div class="p-done__label">Your order number</div>
         <div class="p-done__number">#{{ order.daily_no or order.order_id }}</div>
 
-        <p class="p-done__hint">
-            Quote this number at the counter. Please keep this screen, or
-            note the number down.
+        {# Spoken as well as shown: the page changes under someone who may
+           not be looking at it when it does. #}
+        <p class="p-state" id="orderState" role="status" aria-live="polite">
+            <span class="p-state__dot" aria-hidden="true"></span>
+            <span id="orderStateText">{{ WORDS[0] }}</span>
         </p>
+
+        <p class="p-done__hint" id="orderHint">{{ WORDS[1] }}</p>
     </div>
 
     <div class="p-lines">
@@ -70,6 +88,83 @@
     <p class="p-foot">Served by {{ branding.cafe_name }}</p>
 
 </div>
+
+<script id="orderSays" type="application/json">{{ SAYS|tojson }}</script>
+<script>
+// Asking, every few seconds, whether the kitchen has finished. The
+// customer is sitting at a table with this open; the alternative is
+// walking up to the counter to ask.
+(function () {
+    "use strict";
+
+    var panel = document.getElementById("orderPanel");
+    var line = document.getElementById("orderStateText");
+    var hint = document.getElementById("orderHint");
+    var sub = document.querySelector(".p-head__sub");
+    var says = document.getElementById("orderSays");
+    if (!panel || !line || !says) return;
+
+    var WORDS;
+    try {
+        WORDS = JSON.parse(says.textContent);
+    } catch (error) {
+        return;
+    }
+
+    var ASK = {{ url_for('public_order_status', token=token,
+                         order_id=order.order_id)|tojson }};
+    var EVERY = 5000;
+    // A table this order was left at hours ago. Nobody is reading it and
+    // the kitchen closed; stop asking rather than poll all night.
+    var GIVE_UP_AFTER = 3 * 60 * 60 * 1000;
+
+    var STATES = {Completed: "ready", Cancelled: "cancelled"};
+    var began = Date.now();
+    var timer = null;
+
+    function stop() {
+        if (timer) { window.clearInterval(timer); timer = null; }
+    }
+
+    function show(status) {
+        var words = WORDS[status];
+        if (!words) return false;
+
+        panel.dataset.state = STATES[status] || "pending";
+        line.textContent = words[0];
+        if (hint) hint.textContent = words[1];
+        if (sub) sub.textContent = words[0];
+        return status !== "Pending";
+    }
+
+    function ask() {
+        if (Date.now() - began > GIVE_UP_AFTER) { stop(); return; }
+        if (document.hidden) return;
+
+        fetch(ASK, {
+            credentials: "same-origin",
+            headers: {"X-Requested-With": "XMLHttpRequest"}
+        }).then(function (response) {
+            return response.ok ? response.json() : null;
+        }).then(function (data) {
+            if (!data || !show(data.status)) return;
+            stop();
+            // A phone face-down on the table. Refused or unsupported
+            // nearly everywhere, and nothing here depends on it.
+            if (navigator.vibrate) { navigator.vibrate([90, 60, 90]); }
+        }).catch(function () { });
+    }
+
+    if (panel.dataset.state === "pending") {
+        timer = window.setInterval(ask, EVERY);
+        // A phone that was asleep wakes up behind; catch up at once.
+        document.addEventListener("visibilitychange", function () {
+            if (!document.hidden && timer) { ask(); }
+        });
+        ask();
+    }
+}());
+</script>
 
 </body>
 </html>

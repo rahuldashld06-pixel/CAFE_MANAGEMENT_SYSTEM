@@ -1951,7 +1951,8 @@ def require_role(*roles):
 
 
 # Non-admin staff (manager/cashier/staff) are limited to these sections
-# only: New Order, Food Management, Inventory, and Billing (history).
+# only: New Order, the Kitchen screen, Food Management, Inventory, and
+# Billing (history).
 # order_details is included because creating a new order redirects there
 # to show the receipt/summary of the order just placed.
 # Applies to every role except 'admin', so 'staff' automatically gets the
@@ -1960,7 +1961,7 @@ STAFF_ALLOWED_ENDPOINTS = {
     "add_order", "order_details",
     # Printing a bill or a kitchen ticket is counter work, not admin work.
     "print_bill", "print_kot",
-    "orders", "cancel_order", "complete_order", "delete_order",
+    "cancel_order", "complete_order", "delete_order",
     "foods", "add_food", "edit_food", "delete_food",
     # Categories sit alongside food management, which staff already run.
     "categories", "add_category", "edit_category", "delete_category",
@@ -3125,46 +3126,6 @@ def update_stock(food_id):
 
 #ORDER MANAGEMENT SYSTEM
 
-@app.route("/orders")
-def orders():
-
-    connection = None
-    cursor = None
-
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-
-        cursor.execute("""
-            SELECT
-                order_id,
-                order_date,
-                total_amount,
-                order_status
-            FROM orders
-            WHERE user_id = %s
-              AND DATE(order_date) = CURDATE()
-            ORDER BY order_id DESC
-        """, (scope_user_id(),))
-
-        orders = cursor.fetchall()
-
-    except mysql.connector.Error as error:
-        flash(f"Database error: {error}")
-        return redirect(url_for("home"))
-
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-    return render_template(
-        "orders.html",
-        orders=orders
-    )
-
-
 def format_order_time(value):
     """
     An order's time as "13 Sep, 07:45 PM", whatever shape it arrives in.
@@ -3659,7 +3620,7 @@ def add_order():
         flash(message)
 
         return redirect(
-            url_for("orders")
+            url_for("kitchen_display")
         )
 
 
@@ -3676,7 +3637,7 @@ def add_order():
         flash(message)
 
         return redirect(
-            url_for("orders")
+            url_for("kitchen_display")
         )
 
 
@@ -3747,7 +3708,7 @@ def print_bill(order_id):
         data = load_order_for_print(cursor, order_id)
         if data is None:
             flash("Order not found.")
-            return redirect(url_for("orders"))
+            return redirect(url_for("kitchen_display"))
 
         return render_template(
             "print_bill.html",
@@ -3759,7 +3720,7 @@ def print_bill(order_id):
         )
     except mysql.connector.Error as error:
         flash(f"Database error: {error}")
-        return redirect(url_for("orders"))
+        return redirect(url_for("kitchen_display"))
     finally:
         if cursor:
             cursor.close()
@@ -3782,7 +3743,7 @@ def print_kot(order_id):
         data = load_order_for_print(cursor, order_id)
         if data is None:
             flash("Order not found.")
-            return redirect(url_for("orders"))
+            return redirect(url_for("kitchen_display"))
 
         return render_template(
             "print_kot.html",
@@ -3792,7 +3753,7 @@ def print_kot(order_id):
         )
     except mysql.connector.Error as error:
         flash(f"Database error: {error}")
-        return redirect(url_for("orders"))
+        return redirect(url_for("kitchen_display"))
     finally:
         if cursor:
             cursor.close()
@@ -3837,7 +3798,7 @@ def order_details(order_id):
             flash("Order not found.")
 
             return redirect(
-                url_for("orders")
+                url_for("kitchen_display")
             )
 
 
@@ -3912,7 +3873,7 @@ def order_details(order_id):
         )
 
         return redirect(
-            url_for("orders")
+            url_for("kitchen_display")
         )
 
 
@@ -3927,6 +3888,25 @@ def order_details(order_id):
 # ==========================================
 # CANCEL ORDER
 # ==========================================
+
+def order_action_result(ok, message):
+    """
+    The answer to "mark this done" or "cancel this".
+
+    The kitchen screen asks over fetch and then redraws itself from the
+    board, so what it wants back is yes or no - not a page, and not a
+    message to be shown later. Anything that is not a fetch gets the flash
+    and the redirect it came expecting.
+
+    Without this every tap on that screen left a flash sitting in the
+    session, and a shift's worth of them arrived in a heap on whatever
+    page somebody opened next.
+    """
+    if wants_json_response():
+        return jsonify({"success": bool(ok), "message": message}), 200
+    flash(message)
+    return redirect(url_for("kitchen_display"))
+
 
 @app.route("/orders/cancel/<int:order_id>", methods=["POST"])
 def cancel_order(order_id):
@@ -3950,13 +3930,16 @@ def cancel_order(order_id):
         order = cursor.fetchone()
 
         if order is None:
-            flash("Order not found.")
-            return redirect(url_for("orders"))
+            return order_action_result(
+                False,
+                "Order not found.")
 
         # Do not restore stock twice.
         if order["order_status"] == "Cancelled":
-            flash(f"Order #{order_id} is already cancelled.")
-            return redirect(url_for("orders"))
+            # Already where the caller wanted it, so not a failure.
+            return order_action_result(
+                True,
+                f"Order #{order_id} is already cancelled.")
 
         # Get all items so their stock can be returned to inventory.
         cursor.execute("""
@@ -4011,28 +3994,28 @@ def cancel_order(order_id):
 
         connection.commit()
 
-        flash(
+        return order_action_result(
+            True,
             f"Order #{order_id} cancelled successfully. "
-            "The bill and order history have been preserved."
-        )
-
-        return redirect(url_for("orders"))
+            "The bill and order history have been preserved.")
 
     except mysql.connector.Error as error:
 
         if connection:
             connection.rollback()
 
-        flash(f"Database error: {error}")
-        return redirect(url_for("orders"))
+        return order_action_result(
+            False,
+            f"Database error: {error}")
 
     except Exception as error:
 
         if connection:
             connection.rollback()
 
-        flash(f"Order could not be cancelled: {error}")
-        return redirect(url_for("orders"))
+        return order_action_result(
+            False,
+            f"Order could not be cancelled: {error}")
 
     finally:
 
@@ -4070,16 +4053,19 @@ def complete_order(order_id):
         order = cursor.fetchone()
 
         if order is None:
-            flash("Order not found.")
-            return redirect(url_for("orders"))
+            return order_action_result(
+                False,
+                "Order not found.")
 
         if order["order_status"] == "Cancelled":
-            flash(f"Order #{order_id} is cancelled and cannot be marked done.")
-            return redirect(url_for("orders"))
+            return order_action_result(
+                False,
+                f"Order #{order_id} is cancelled and cannot be marked done.")
 
         if order["order_status"] == "Completed":
-            flash(f"Order #{order_id} is already marked as done.")
-            return redirect(url_for("orders"))
+            return order_action_result(
+                True,
+                f"Order #{order_id} is already marked as done.")
 
         cursor.execute("""
             UPDATE orders
@@ -4090,16 +4076,18 @@ def complete_order(order_id):
 
         connection.commit()
 
-        flash(f"Order #{order_id} marked as done.")
-        return redirect(url_for("orders"))
+        return order_action_result(
+            True,
+            f"Order #{order_id} marked as done.")
 
     except mysql.connector.Error as error:
 
         if connection:
             connection.rollback()
 
-        flash(f"Database error: {error}")
-        return redirect(url_for("orders"))
+        return order_action_result(
+            False,
+            f"Database error: {error}")
 
     finally:
 
@@ -5588,9 +5576,12 @@ def require_login():
         # is safe to answer before sign-in.
         "web_manifest",
         # A customer scanning the code on their table is not a user
-        # of this system and never signs in. These three pages are
-        # the whole of what they can reach.
+        # of this system and never signs in. These are the whole of
+        # what they can reach.
         "public_menu", "public_place_order", "public_order_placed",
+        # And the one their page asks, over and over, to find out
+        # whether the food is ready.
+        "public_order_status",
         # The browser asks for the icon on the sign-in screen too. Without
         # this it is redirected to /login, and the browser then renders the
         # whole login page again - a wasted database round-trip on every
@@ -6389,10 +6380,64 @@ def kitchen_is_watching(cursor, cafe_id):
     return (datetime.now() - seen).total_seconds() <= KITCHEN_STALE_SECONDS
 
 
+# Which day each cafe was last tidied up for, per worker process. The
+# sweep below changes nothing on a second run, so the worst a worker's
+# separate copy of this costs is one more UPDATE that matches no rows.
+_ORDERS_SWEPT_FOR = {}
+_ORDERS_SWEPT_LOCK = threading.Lock()
+
+
+def close_yesterdays_orders(cursor, owner_id, today):
+    """
+    Yesterday's untouched orders, marked done.
+
+    The kitchen screen shows one day at a time. An order nobody pressed
+    Done or Cancel on before closing would otherwise sit waiting for
+    ever - off the board, out of sight, and still counted as outstanding
+    by everything that asks. Once its day is over there is nothing left
+    to decide: the food went out or it did not, and the kitchen is
+    certainly not making it now.
+
+    Cancelled orders are left alone. Somebody said no to those on
+    purpose, and that is not the same as forgetting.
+
+    Orders older than this column have no day recorded at all. They are
+    from before it existed, so they are as finished as the rest.
+    """
+    with _ORDERS_SWEPT_LOCK:
+        if _ORDERS_SWEPT_FOR.get(owner_id) == today:
+            return 0
+
+    cursor.execute(
+        "UPDATE orders SET order_status = 'Completed' "
+        "WHERE user_id = %s AND order_status = 'Pending' "
+        "  AND (order_day < %s OR order_day IS NULL)",
+        (owner_id, today)
+    )
+    closed = cursor.rowcount or 0
+
+    with _ORDERS_SWEPT_LOCK:
+        _ORDERS_SWEPT_FOR[owner_id] = today
+
+    return closed
+
+
 @app.route("/api/kitchen/board")
 def kitchen_board():
     """
-    Everything the kitchen screen draws: what is waiting, and its lines.
+    Everything the kitchen screen draws: the day's orders and their lines.
+
+    Waiting orders come first, oldest first, because that is the order a
+    kitchen works in. Finished and cancelled ones follow, newest first, so
+    the one just dealt with is at the top of them and the dot that turned
+    green is where the eye already is. When there are more than fit, it is
+    the oldest finished ones that fall off the end rather than anything
+    still to be made.
+
+    Grouped by order_day rather than by the timestamp, because that is the
+    column the order numbers are counted within - a customer holding number
+    7 and a kitchen that disagreed about which day it was would be looking
+    for different orders.
 
     One request rather than one per order - a screen refreshing every few
     seconds must not cost a query per ticket on it.
@@ -6403,15 +6448,23 @@ def kitchen_board():
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
         owner = scope_user_id()
+        today = date.today()
+
+        # The screen that is always on is the one that notices the day
+        # turned over, so this is where the previous day is closed off.
+        if close_yesterdays_orders(cursor, owner, today):
+            connection.commit()
 
         cursor.execute("""
             SELECT order_id, order_date, total_amount, source,
-                   kot_printed, daily_no
+                   kot_printed, daily_no, order_status
             FROM orders
-            WHERE user_id = %s AND order_status = 'Pending'
-            ORDER BY order_id
-            LIMIT 40
-        """, (owner,))
+            WHERE user_id = %s AND order_day = %s
+            ORDER BY CASE WHEN order_status = 'Pending' THEN 0 ELSE 1 END,
+                     CASE WHEN order_status = 'Pending'
+                          THEN order_id ELSE -order_id END
+            LIMIT 60
+        """, (owner, today))
         orders = cursor.fetchall()
 
         lines = {}
@@ -6438,6 +6491,7 @@ def kitchen_board():
                     "placed": format_order_time(row["order_date"]),
                     "total": "%.2f" % float(row["total_amount"] or 0),
                     "source": row["source"] or "counter",
+                    "status": row["order_status"],
                     "printed": bool(row["kot_printed"]),
                     "items": lines.get(row["order_id"], []),
                 }
@@ -6737,6 +6791,44 @@ def public_order_placed(token, order_id):
             order=order,
             items=items,
         )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/m/<token>/status/<int:order_id>")
+def public_order_status(token, order_id):
+    """
+    Whether the kitchen has finished a customer's order yet.
+
+    The page a customer is left holding asks this every few seconds, so
+    it answers with the status and nothing else - no totals, no lines, no
+    other orders. Looked up by cafe as well as by id, the same way the
+    page itself is, so one cafe's code cannot be used to watch another's
+    orders by changing the number in the address.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cafe = cafe_for_token(cursor, token)
+        if cafe is None:
+            return jsonify({"status": "gone"}), 404
+
+        cursor.execute(
+            "SELECT order_status FROM orders "
+            "WHERE order_id = %s AND user_id = %s AND source = 'qr'",
+            (order_id, cafe["owner_user_id"])
+        )
+        order = cursor.fetchone()
+        if order is None:
+            return jsonify({"status": "gone"}), 404
+
+        return jsonify({"status": order["order_status"]})
     finally:
         if cursor:
             cursor.close()

@@ -66,6 +66,7 @@ def check(name, condition, detail=""):
 
 _lock = threading.Lock()
 REJECTED = []
+ASKED = []
 
 
 @app.before_request
@@ -81,6 +82,9 @@ def _watch_for_refusals(response):
     # written for showed up here as a 400 and nowhere else.
     if response.status_code >= 400 and request.path.startswith("/api/"):
         REJECTED.append((request.method, request.path, response.status_code))
+    # Every time a customer's page asks whether the food is ready.
+    if request.path.startswith("/m/") and "/status/" in request.path:
+        ASKED.append(request.path)
     return response
 
 
@@ -261,8 +265,13 @@ try:
     print("\n=== 4. It claims the ticket and prints it ===")
     wait_for("window.__printed.length > 0", "the ticket to be printed")
     printed = browser.evaluate("JSON.stringify(window.__printed)")
+    ticket = mysql_shim._DB.execute(
+        "SELECT order_id FROM orders WHERE source = 'qr' "
+        "ORDER BY order_id LIMIT 1").fetchone()
     check("the kitchen ticket was sent to the printer",
-          "/print/kot/" in printed, "it printed %s" % printed)
+          ticket is not None
+          and ("/orders/%d/kot" % ticket[0]) in printed,
+          "it printed %s" % printed)
 
     claimed = mysql_shim._DB.execute(
         "SELECT kot_printed FROM orders WHERE source = 'qr' "
@@ -279,17 +288,86 @@ try:
           int(browser.evaluate("window.__printed.length")) == before,
           "the same ticket printed more than once")
 
-    print("\n=== 5. Marking one done clears it ===")
+    print("\n=== 5. Marking one done turns its dot green ===")
     browser.evaluate("document.querySelector('[data-done]').click()")
     time.sleep(2.0)
-    check("the board empties once nothing is waiting",
+
+    check("the order stays on the board",
           browser.evaluate(
-              "document.querySelectorAll('.kitchen-ticket').length") == 0,
-          "the finished order is still on the board")
+              "document.querySelectorAll('.kitchen-ticket').length") >= 1,
+          "it vanished, so there is nothing left to have turned green")
+    check("its dot is the green one",
+          browser.evaluate(
+              "document.querySelectorAll("
+              "'.kitchen-ticket--done .status-dot--green').length") >= 1,
+          "no finished ticket is showing a green dot")
+    check("and it offers no buttons once it is done",
+          browser.evaluate(
+              "document.querySelectorAll("
+              "'.kitchen-ticket--done [data-done], "
+              ".kitchen-ticket--done [data-cancel]').length") == 0,
+          "a finished order can still be finished again")
+
     check("nothing was refused while doing it",
           not [row for row in REJECTED if row[2] >= 400
                and "kitchen" in row[1]],
           "the server refused: %s" % REJECTED)
+
+    print("\n=== 6. And it does not print again once it is done ===")
+    settled = int(browser.evaluate("window.__printed.length"))
+    time.sleep(7)
+    check("a finished order is not sent to the printer again",
+          int(browser.evaluate("window.__printed.length")) == settled,
+          "now that finished orders stay on the board, one of them "
+          "reprinted on the next sweep")
+
+    print("\n=== 7. The customer at the table is told, without reloading ===")
+    # The whole point of Done reaching them: someone sitting at a table has
+    # no counter to watch. Their page has to change under them.
+    waiting = guest.post("/m/%s/order" % token,
+                         data={"quantity_%s" % food_ids[0]: "1"},
+                         follow_redirects=False)
+    theirs = int(waiting.headers["Location"].rstrip("/").split("/")[-1])
+
+    browser.call("Page.navigate",
+                 url=BASE + "/m/%s/placed/%d" % (token, theirs))
+    wait_for("!!document.getElementById('orderStateText')",
+             "the customer's page")
+
+    def said():
+        return browser.evaluate(
+            "document.getElementById('orderStateText').textContent")
+
+    check("it starts by saying the order is with the kitchen",
+          said() == "In the kitchen", "it says %r" % said())
+
+    # Pressed from the till rather than in this browser, because what is
+    # being tested is that the customer's page hears about it by itself.
+    seed.post("/orders/complete/%d" % theirs,
+              data={"_csrf_token": csrf(seed)}, follow_redirects=True)
+
+    told = wait_for(
+        "document.getElementById('orderStateText').textContent"
+        " === 'Your food is ready'",
+        "the customer to be told", timeout=25)
+
+    check("and it changes to say the food is ready, on its own", told,
+          "after the kitchen pressed Done the page still says %r" % said())
+
+    check("the panel reads as ready, not just the words",
+          browser.evaluate(
+              "document.getElementById('orderPanel')"
+              ".getAttribute('data-state')") == "ready",
+          "the page still reads as waiting")
+
+    # And it lets go. A page that went on asking every five seconds would
+    # sit on a table all evening doing it.
+    settled = len(ASKED)
+    time.sleep(12)
+    check("and it stops asking once there is nothing left to ask",
+          len(ASKED) == settled,
+          "it asked %d more times after the answer arrived"
+          % (len(ASKED) - settled))
 
 finally:
     browser.close()

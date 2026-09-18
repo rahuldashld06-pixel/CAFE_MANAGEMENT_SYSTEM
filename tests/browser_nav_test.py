@@ -267,7 +267,7 @@ try:
           "no _csrf_token input in #orderForm after the swap")
 
     print("\n=== 4. Orders -> Billing -> New Order -> Billing ===")
-    for destination in ["/orders", "/billing", "/orders/add", "/billing"]:
+    for destination in ["/kitchen", "/billing", "/orders/add", "/billing"]:
         browser.evaluate("window.Instant.visit('%s%s', {})" % (BASE, destination), False)
         wait_for("location.pathname === '%s'" % destination, "arrival at %s" % destination)
         time.sleep(0.6)

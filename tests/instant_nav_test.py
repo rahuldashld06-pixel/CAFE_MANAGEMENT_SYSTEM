@@ -52,7 +52,7 @@ client = app.test_client()
 sign_up(client, "Instant Cafe", "instant_admin")
 
 PAGES = ["/dashboard", "/categories", "/foods", "/inventory",
-         "/orders/add", "/orders", "/billing", "/reports", "/users",
+         "/orders/add", "/kitchen", "/billing", "/reports", "/users",
          "/account/password", "/settings/branding"]
 
 missing_view, missing_js = [], []
@@ -134,7 +134,7 @@ check("a prefetched page never draws a queued message into its HTML",
       "Order has been placed." not in warm.get_data(as_text=True),
       "the warm-up baked a flash into the HTML instant.js caches")
 
-real = client.get("/orders").get_data(as_text=True)
+real = client.get("/kitchen").get_data(as_text=True)
 check("the message survives the prefetch and reaches the next real page",
       "Order has been placed." in real,
       "the warm-up consumed the flash queue")
@@ -193,7 +193,7 @@ check("it reaches the next real page instead",
 
 print("\n=== 3. Caching headers ===")
 
-page = client.get("/orders")
+page = client.get("/kitchen")
 check("rendered pages are never written to a shared disk cache",
       "no-store" in (page.headers.get("Cache-Control") or ""),
       "Cache-Control=%r" % page.headers.get("Cache-Control"))
@@ -208,14 +208,14 @@ check("static assets are cached hard (a ?v= stamp busts them on deploy)",
 check("the asset stamp is exposed to templates",
       application.ASSET_VERSION.isdigit() and
       ("css/style.css?v=%s" % application.ASSET_VERSION)
-      in client.get("/orders").get_data(as_text=True),
+      in client.get("/kitchen").get_data(as_text=True),
       "ASSET_VERSION=%r" % application.ASSET_VERSION)
 
 
 print("\n=== 4. Signed-out prefetches cannot leak a page ===")
 
 stranger = app.test_client()
-for path in ["/orders", "/billing", "/dashboard"]:
+for path in ["/kitchen", "/billing", "/dashboard"]:
     response = stranger.get(path, headers={"X-Instant-Prefetch": "1"})
     check("a prefetch of %s without a session is redirected, not served" % path,
           response.status_code in (301, 302, 303, 307, 308),

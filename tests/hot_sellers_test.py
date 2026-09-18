@@ -198,7 +198,8 @@ for _ in range(8):
 check("Brownie leads while its orders stand",
       hot_shelf(b)[0] == "Brownie", "got %s" % hot_shelf(b))
 
-order_ids = re.findall(r'/orders/(\d+)"', b.get("/orders").get_data(as_text=True))
+order_ids = [str(row["order_id"])
+             for row in b.get("/api/kitchen/board").get_json()["orders"]]
 cancelled = 0
 for order_id in order_ids:
     detail = b.get("/orders/%s" % order_id).get_data(as_text=True)

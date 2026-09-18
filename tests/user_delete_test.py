@@ -179,12 +179,12 @@ food = re.findall(r'id="quantity_(\d+)"',
 c.post("/orders/add", data={"quantity_%s" % food: "2",
                             "_csrf_token": csrf(c)}, follow_redirects=True)
 
-orders_before = c.get("/orders").get_data(as_text=True).count("/orders/")
+orders_before = len(c.get("/api/kitchen/board").get_json()["orders"])
 add_user(c, "till1", "cashier")
 gamma_ids = user_ids(c)
 delete(c, gamma_ids["till1"])
 
-orders_after = c.get("/orders").get_data(as_text=True).count("/orders/")
+orders_after = len(c.get("/api/kitchen/board").get_json()["orders"])
 check("orders are still listed after a staff account is deleted",
       orders_after == orders_before and orders_before > 0,
       "before=%d after=%d" % (orders_before, orders_after))

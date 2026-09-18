@@ -71,8 +71,8 @@ def place(client, pairs):
     data = {"quantity_%s" % fid: str(q) for fid, q in pairs.items()}
     data["_csrf_token"] = csrf(client)
     client.post("/orders/add", data=data, follow_redirects=True)
-    return re.findall(r'/orders/(\d+)"',
-                      client.get("/orders").get_data(as_text=True))[0]
+    board = client.get("/api/kitchen/board").get_json()["orders"]
+    return max(row["order_id"] for row in board)
 
 
 print("\n=== 1. The bill carries the café and the order ===")
@@ -357,6 +357,53 @@ check("the kitchen ticket is among them",
 check("and so is the customer's bill",
       any(path.endswith("/bill") for path in asked),
       "nothing asks to print a bill at all: %s" % sorted(asked))
+
+print("\n=== 13. A receipt for the customer who asks for one ===")
+# The kitchen ticket prints by itself, because somebody has to cook the
+# food. The customer's copy does not: most people walk off without one and
+# printing every time burns a roll a day. So it is a button, sitting where
+# the money is already being taken.
+billing_html = a.get("/billing").get_data(as_text=True)
+
+check("billing offers a print button on the row",
+      "print-bill-btn" in billing_html,
+      "there is no way to print a receipt from the billing list")
+
+check("and it sits beside the payment status",
+      re.search(r"<th>Payment Status</th>\s*<th>Print Bill</th>",
+                billing_html) is not None,
+      "the column is not where the cashier's hand already is")
+
+printed = re.findall(r'data-print-order="(\d+)"', billing_html)
+check("each button names the order it would print",
+      bool(printed), "no button carries an order number")
+
+check("and that order really does have a printable bill",
+      bool(printed)
+      and a.get("/orders/%s/bill" % printed[0]).status_code == 200,
+      "the button points at something that does not print")
+
+check("pressing it prints rather than leaving the page",
+      "autoPrint('/orders/' + orderId + '/bill')" in billing_html,
+      "the cashier loses their place in the list every time somebody "
+      "asks for a receipt")
+
+# The row grew a column. If the message shown when a filter finds nothing
+# still spans the old number, the table comes apart on that day only -
+# which is exactly the sort of thing nobody sees until a customer does.
+billing_template = io.open(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "templates", "billing.html"),
+    encoding="utf-8").read()
+
+thead = re.search(
+    r'<table class="data-table billing-table">\s*<thead>(.*?)</thead>',
+    billing_template, re.S)
+columns = len(re.findall(r"<th>", thead.group(1))) if thead else 0
+spans = sorted(set(re.findall(r'colspan="(\d+)"', billing_template)))
+
+check("and the empty-day message still spans every column",
+      columns > 0 and spans == [str(columns)],
+      "%d columns, but colspan says %s" % (columns, spans))
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))

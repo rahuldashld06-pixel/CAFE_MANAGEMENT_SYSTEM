@@ -253,16 +253,19 @@ r = a.post("/orders/add", data={
     follow_redirects=True)
 check("Café A can place an order", r.status_code == 200, f"status={r.status_code}")
 
-r = a.get("/orders")
-check("Order appears in the order list", b"</table>" in r.data and r.status_code == 200)
+r = a.get("/api/kitchen/board")
+check("Order appears on the kitchen screen",
+      r.status_code == 200 and len(r.get_json()["orders"]) == 1,
+      "the board holds %s" % r.get_data(as_text=True)[:200])
 
 r = a.get("/billing")
 check("Billing page renders and auto-creates the bill",
       r.status_code == 200, f"status={r.status_code}")
 
-r = b.get("/orders")
+r = b.get("/api/kitchen/board")
 check("Café B does not see café A's orders",
-      r.status_code == 200 and r.data.count(b"/orders/") <= 3, r.data[:200])
+      r.status_code == 200 and r.get_json()["orders"] == [],
+      "the board holds %s" % r.get_data(as_text=True)[:200])
 
 r = b.get("/billing")
 check("Café B's billing history is empty of café A's bills",
