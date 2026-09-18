@@ -95,6 +95,13 @@
 
     <p class="p-foot">Served by {{ branding.cafe_name }}</p>
 
+    {# The cafe served them; this only says what the cafe runs its orders
+       on, so it sits under that line and stays quieter than it. #}
+    <p class="p-by">
+        <span class="p-by__mark">{{ coffee_mark() }}</span>
+        <span class="p-by__name">{{ platform_name }}</span>
+    </p>
+
 </div>
 
 <script id="orderSays" type="application/json">{{ SAYS|tojson }}</script>

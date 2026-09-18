@@ -20,6 +20,7 @@ What has to hold:
 
 Run with:  python tests/qr_order_test.py
 """
+import io
 import json
 import os
 import re
@@ -882,6 +883,48 @@ marks = mysql_shim._DB.execute(
 check("pressing Done marks every line on the ticket",
       marks and all(row[0] == 1 for row in marks),
       "the lines are %s" % [row[0] for row in marks])
+
+print("\n=== 21. The system is credited under the cafe ===")
+# The cafe served them; the software only ran the order. So it sits under
+# that line, on both pages a customer sees, and says the same thing in
+# both places without either page spelling it out for itself.
+credit_pages = {
+    "the menu": guest.get("/m/%s" % fresh).get_data(as_text=True),
+    "the page after ordering": both_customer.get(
+        "/m/%s/placed/%d" % (fresh, both)).get_data(as_text=True),
+}
+
+for where, html in credit_pages.items():
+    check("%s credits the cafe that served them" % where,
+          "Served by" in html,
+          "the cafe is not named on it")
+    check("and %s carries the system's name under it" % where,
+          re.search(r'class="p-foot".*?class="p-by".*?Cafe Manager',
+                    html, re.S) is not None,
+          "the credit is missing, or sits somewhere other than under it")
+    check("with the drawn mark rather than a typed emoji on %s" % where,
+          re.search(r'class="p-by__mark">\s*<svg', html) is not None,
+          "an emoji renders as whatever the device decides and never "
+          "matches the accent the page is painted in")
+
+# One name, not one per template - the receipt credits it as well, and
+# the two must not drift apart.
+receipt = admin.get("/orders/%d/bill" % both).get_data(as_text=True)
+check("and the printed receipt credits the same name",
+      application.DEFAULT_BRAND_NAME in receipt,
+      "the receipt names something else")
+
+sources = {}
+for name in ("public_menu.html", "public_placed.html", "print_bill.html"):
+    sources[name] = io.open(
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
+            __file__))), "templates", name), encoding="utf-8").read()
+
+check("no template types that name in by hand",
+      not [name for name, body in sources.items()
+           if application.DEFAULT_BRAND_NAME in body],
+      "typed into %s" % [name for name, body in sources.items()
+                         if application.DEFAULT_BRAND_NAME in body])
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))

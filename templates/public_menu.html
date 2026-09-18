@@ -110,6 +110,13 @@
 
     <p class="p-foot">Served by {{ branding.cafe_name }}</p>
 
+    {# The same credit the page after this one carries. A customer sees
+       both, and one of them quietly missing it looks like a mistake. #}
+    <p class="p-by">
+        <span class="p-by__mark">{{ coffee_mark() }}</span>
+        <span class="p-by__name">{{ platform_name }}</span>
+    </p>
+
 </div>
 
 <script>

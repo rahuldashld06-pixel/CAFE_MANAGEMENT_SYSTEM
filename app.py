@@ -6123,6 +6123,19 @@ def delete_user(user_id):
 # What the sidebar reads when a café has not chosen its own. These are
 # exactly what every café saw before the wording was customisable.
 DEFAULT_BRAND_NAME = "Cafe Manager"
+
+
+@app.context_processor
+def inject_platform_name():
+    """
+    What the software is called, as opposed to what the cafe is called.
+
+    A cafe can rename its own sidebar; it cannot rename the system its
+    orders run on. The printed receipt and the page a customer is left
+    holding both credit that system, and they should agree without either
+    of them having it typed in by hand.
+    """
+    return {"platform_name": DEFAULT_BRAND_NAME}
 DEFAULT_BRAND_TAGLINE = "Food & Service Admin"
 
 

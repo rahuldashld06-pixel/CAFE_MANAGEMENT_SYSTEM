@@ -473,12 +473,41 @@ body {
 }
 
 .p-foot {
-    margin: 26px 0 34px;
+    margin: 26px 0 9px;
     text-align: center;
     font-size: 11px;
     letter-spacing: .08em;
     text-transform: uppercase;
     color: var(--p-faint);
+}
+
+/* The software's own mark and name, under the cafe's. Drawn rather than
+   typed, like every other place this symbol appears - an emoji renders
+   as whatever the device's font decides and never matches the accent the
+   page is painted in. */
+.p-by {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin: 0 0 34px;
+    font-size: 12px;
+    color: var(--p-faint);
+}
+
+.p-by__mark {
+    display: inline-grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    color: var(--copper-light, #F0A85F);
+}
+
+.p-by__mark .brand-glyph { width: 100%; height: 100%; }
+
+.p-by__name {
+    font-weight: 700;
+    letter-spacing: .04em;
 }
 
 @media (max-width: 380px) {
