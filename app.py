@@ -6720,59 +6720,81 @@ def kitchen_claim(order_id):
 # never opens Reports and never adds a member of staff, and walking them
 # through those is the surest way to have the whole thing skipped.
 
-TUTORIAL_ADMIN = [
-    ("bi-cup-hot", "Welcome",
-     "This runs your counter, your kitchen and your till. Here is the "
-     "short tour - a minute, and you can open it again any time from your "
-     "name in the top corner."),
-    ("bi-tags", "Build the menu",
-     "Categories first, for the groups you sell in. Then Food Management "
-     "for the dishes themselves, each with a price and a photo."),
-    ("bi-boxes", "Stock looks after itself",
-     "Inventory holds what you have. When something reaches zero it "
-     "leaves the order screen on its own, so nobody can sell what you "
-     "have run out of."),
-    ("bi-cart-plus", "Take an order",
-     "New Order is the counter screen. Tap the food, set how many, send "
-     "it. The kitchen has it straight away."),
-    ("bi-fire", "The kitchen screen",
-     "Leave this one open where the food is made. Every dish has a "
-     "circle beside it - tap it as that dish is done, and the last one "
-     "closes the order. Done finishes a whole ticket at once; Cancel "
-     "puts the food back on the shelf."),
-    ("bi-credit-card-2-front", "Take the money",
-     "Billing opens on today. Press Paid when they pay, and the printer "
-     "beside it if they ask for a receipt."),
-    ("bi-qr-code", "Let the table order",
-     "Table QR Code, under your name, prints a code for your tables. A "
-     "customer scans it, orders from their own phone, and their ticket "
-     "prints in the kitchen like any other."),
-    ("bi-bar-chart-line", "And the rest",
-     "Reports shows how the days are going. User Management adds the "
-     "people who work here. Everything else - your cafe's name, colour, "
-     "tax rate and printing - is under your name, top right."),
+# Each step points at the thing it is describing and says what pressing
+# it does, because a paragraph on its own is the thing this replaced.
+# "at" is a name on the element rather than its address or its wording -
+# both of those are things somebody may change one day without ever
+# thinking about the tour. Unquoted inside the brackets on purpose: Jinja
+# escapes quotes in an attribute value, and while a browser decodes them
+# again, it makes the rendered markup awkward to read and to check.
+
+def _step(icon, title, at, what, then=None):
+    return {"icon": icon, "title": title, "at": at,
+            "what": what, "then": then}
+
+
+_WELCOME = _step(
+    "bi-cup-hot", "Welcome", None,
+    "Here is the short tour. Each step lights up the thing it is talking "
+    "about - press that, or press Next, and you can stop at any point.")
+
+_PROFILE = _step(
+    "bi-person-circle", "Your name, top right", "[data-tour=profile]",
+    "Everything about the cafe itself lives behind your name.",
+    "It opens your cafe's name and colour, the tax rate, automatic "
+    "printing, the QR code for your tables - and this tour again, under "
+    "How this works.")
+
+_COUNTER = [
+    _step("bi-tags", "Categories", "[data-tour=categories]",
+          "The groups your menu is sorted into - Coffee, Bakery, whatever "
+          "you sell in.",
+          "It lists them, with a button to add one. A dish needs a "
+          "category before you can add it."),
+    _step("bi-cup-straw", "Food Management", "[data-tour=foods]",
+          "Every dish you sell, with its price and its photo.",
+          "It lists the menu and lets you add a dish, change a price or "
+          "take something off."),
+    _step("bi-boxes", "Inventory", "[data-tour=inventory]",
+          "How much of everything you have left.",
+          "It lets you top stock up. Anything that reaches zero leaves "
+          "the order screen by itself, so nobody can sell it."),
+    _step("bi-cart-plus", "New Order", "[data-tour=add_order]",
+          "The counter screen - where an order is rung up.",
+          "It opens the menu as a grid. Tap the food, set how many, and "
+          "send it. The kitchen has it straight away."),
+    _step("bi-fire", "Kitchen", "[data-tour=kitchen]",
+          "The screen to leave open where the food is made.",
+          "It shows the day's tickets. Every dish has a circle - tap it "
+          "as that dish is done, and tapping the last one closes the "
+          "order. Done finishes a whole ticket; Cancel puts the food back "
+          "on the shelf."),
+    _step("bi-credit-card-2-front", "Billing", "[data-tour=billing]",
+          "Today's bills, and the money.",
+          "It lists them. Press Paid when they pay, and the printer "
+          "beside it if they want a receipt."),
 ]
 
-TUTORIAL_STAFF = [
-    ("bi-cup-hot", "Welcome",
-     "Here is the short tour of the screens you will use. A minute, and "
-     "you can open it again any time from your name in the top corner."),
-    ("bi-cart-plus", "Take an order",
-     "New Order is the counter screen. Tap the food, set how many, send "
-     "it. The kitchen has it straight away."),
-    ("bi-fire", "The kitchen screen",
-     "Leave this one open where the food is made. Every dish has a "
-     "circle beside it - tap it as that dish is done, and the last one "
-     "closes the order. Done finishes a whole ticket at once; Cancel "
-     "puts the food back on the shelf."),
-    ("bi-credit-card-2-front", "Take the money",
-     "Billing opens on today. Press Paid when they pay, and the printer "
-     "beside it if they ask for a receipt."),
-    ("bi-boxes", "Keep the menu straight",
-     "Food Management and Inventory are yours too. An item that runs out "
-     "of stock leaves the order screen by itself, and comes back when you "
-     "put stock in."),
+TUTORIAL_ADMIN = [_WELCOME, _step(
+    "bi-speedometer2", "Dashboard", "[data-tour=home]",
+    "The day so far, at a glance.",
+    "It opens today's orders and takings, and what is running low.",
+)] + _COUNTER + [
+    _step("bi-bar-chart-line", "Reports", "[data-tour=reports]",
+          "How the days are going.",
+          "It shows sales, orders and stock over whatever period you "
+          "choose."),
+    _step("bi-people", "User Management", "[data-tour=users]",
+          "The people who work here.",
+          "It lets you add someone, give them a password, and choose "
+          "whether they are an owner or on the till."),
+    _PROFILE,
 ]
+
+# Somebody on the till never opens Reports and never adds a member of
+# staff. Walking them through those is the surest way to have the whole
+# thing skipped.
+TUTORIAL_STAFF = [_WELCOME] + _COUNTER + [_PROFILE]
 
 
 def tutorial_for(role):

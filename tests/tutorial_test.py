@@ -17,6 +17,7 @@ Run with:  python tests/tutorial_test.py
 """
 import io
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -102,21 +103,65 @@ check("an admin is walked through more than a cashier",
       admin_steps > cashier_steps > 0,
       "admin %d steps, cashier %d" % (admin_steps, cashier_steps))
 
-check("the admin's covers reports and staff",
-      "User Management adds" in page(admin),
-      "an owner is not told where to add the people who work for them")
-check("and the cashier's does not",
-      "User Management adds" not in page(cashier),
-      "somebody on the till is walked through screens they cannot open - "
-      "the surest way to have the whole thing skipped")
+# Checked by what each tour points at rather than by its wording, which
+# is a thing somebody may reasonably reword one day.
+def points_at(html):
+    return set(re.findall(r'data-at="\[data-tour=([a-z_]+)\]"', html))
 
-check("both are told about the kitchen screen",
-      "kitchen screen" in page(admin).lower()
-      and "kitchen screen" in page(cashier).lower(),
+
+admin_at = points_at(page(admin))
+cashier_at = points_at(page(cashier))
+
+check("the admin's points at reports and at staff",
+      {"reports", "users"} <= admin_at,
+      "an owner's tour points at %s" % sorted(admin_at))
+check("and the cashier's points at neither",
+      not ({"reports", "users"} & cashier_at),
+      "somebody on the till is walked through screens they cannot open - "
+      "the surest way to have the whole thing skipped: %s"
+      % sorted(cashier_at))
+
+check("both are pointed at the kitchen screen",
+      "kitchen" in admin_at and "kitchen" in cashier_at,
       "the screen the food is made from is left out of one of them")
 
+check("and at the counter screen and the till",
+      {"add_order", "billing"} <= admin_at
+      and {"add_order", "billing"} <= cashier_at,
+      "admin %s, cashier %s" % (sorted(admin_at), sorted(cashier_at)))
 
-print("\n=== 3. Once, not every morning ===")
+
+print("\n=== 3. It points at the thing it is describing ===")
+# A paragraph naming a screen is what this replaced. A step that cannot
+# point at anything falls back to the middle of the page, which is right
+# for the welcome and wrong for everything else.
+shown = page(admin)
+
+for who, html in (("an owner", page(admin)), ("a cashier", page(cashier))):
+    steps = re.findall(r'<section class="tour__step".*?</section>',
+                       html, re.S)
+    aimed = [s for s in steps if "data-at=" in s]
+
+    check("%s is pointed at something on all but the welcome" % who,
+          len(aimed) == len(steps) - 1,
+          "%d steps, %d of them point at anything"
+          % (len(steps), len(aimed)))
+
+    check("and every one of those says what pressing it does for %s" % who,
+          all('class="tour__then"' in s for s in aimed),
+          "%d pointing steps, %d say what happens"
+          % (len(aimed), len([s for s in aimed
+                              if 'class="tour__then"' in s])))
+
+# A selector matching nothing would quietly become a card in the middle
+# of the screen with no ring - the failure that looks like a design.
+for name in points_at(shown):
+    check("the tour can actually find %s on the page" % name,
+          ('data-tour="%s"' % name) in shown,
+          "the tour points at something that is not there")
+
+
+print("\n=== 4. Once, not every morning ===")
 done = admin.post("/api/tutorial/seen", data={"_csrf_token": csrf(admin)},
                   headers={"X-Requested-With": "XMLHttpRequest"})
 
@@ -140,12 +185,26 @@ check("and the way back to it is in the profile menu",
       "nothing on the pages explains them any more, so this has to be "
       "findable")
 
+# Last thing in the menu before signing out, which is where somebody
+# looking for help looks.
+menu = after[after.index('id="profileDropdown"'):]
+check("sitting at the bottom of that menu",
+      menu.index('id="tourReplay"') > menu.index("Automatic Printing"),
+      "it is above the settings rather than under them")
+check("and styled as the links beside it, not as a raw button",
+      "button.profile-dropdown__item" in io.open(
+          os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
+              __file__))), "static", "css", "style.css"),
+          encoding="utf-8").read(),
+      "a button among links keeps its own border, background and centred "
+      "text, and is plainly the odd one out")
+
 check("marking one person shown does not mark another",
       seen_flag("till") == 0,
       "the cashier was marked shown by the admin finishing theirs")
 
 
-print("\n=== 4. Who may say they have seen it ===")
+print("\n=== 5. Who may say they have seen it ===")
 check("a cashier can mark their own",
       cashier.post("/api/tutorial/seen",
                    data={"_csrf_token": csrf(cashier)},
@@ -159,7 +218,7 @@ check("and nobody signed out can",
       "an endpoint that writes to a user row is open to anyone")
 
 
-print("\n=== 5. The screens no longer explain themselves ===")
+print("\n=== 6. The screens no longer explain themselves ===")
 # What the tour now says, taken off the pages that carry the day's work.
 gone = {
     "New Order": ("add_order.html", "set quantities"),
@@ -178,7 +237,7 @@ check("and the QR page no longer names a page that was removed",
       "that job over")
 
 
-print("\n=== 6. What a tour cannot hand back stays put ===")
+print("\n=== 7. What a tour cannot hand back stays put ===")
 # A tour is given once, on somebody's first day. These are needed at the
 # moment of acting, by somebody who was shown round months ago.
 kept = {

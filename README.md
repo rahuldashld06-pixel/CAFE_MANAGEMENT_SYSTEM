@@ -28,7 +28,10 @@ branding, fully isolated from the others.
 - **Inventory.** Stock levels drive availability automatically — an item
   at zero stock disappears from the order screen.
 - **A tour, once.** The first time somebody signs in they are shown
-  round: what each screen is for, in a handful of steps. An owner and
+  round. Each step puts a ring round the thing it is describing and says
+  what pressing it does - and pressing that thing is how the tour moves
+  on, so the first time somebody opens a screen is while it is being
+  explained. On a phone it opens the drawer to point into the sidebar. An owner and
   somebody on the till get different ones, because somebody on the till
   never opens Reports and never adds staff. It is remembered against the
   person rather than the browser, so it does not start again on the
@@ -202,8 +205,8 @@ python tests/qr_order_test.py     # expect PASSED: 112  FAILED: 0
 python tests/kitchen_screen_test.py # expect PASSED: 23  FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
-python tests/tutorial_test.py     # expect PASSED: 24   FAILED: 0
-python tests/tour_browser_test.py # expect PASSED: 18  FAILED: 0
+python tests/tutorial_test.py     # expect PASSED: 41   FAILED: 0
+python tests/tour_browser_test.py # expect PASSED: 26  FAILED: 0
 ```
 
 All twenty-eight run in memory against a SQLite stand-in — no database or

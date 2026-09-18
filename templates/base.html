@@ -82,26 +82,31 @@
 
                 {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('home') }}"
+                   data-tour="home"
                    class="nav-link {{ 'active' if request.endpoint == 'home' else '' }}">
                     <i class="bi bi-speedometer2"></i><span>Dashboard</span>
                 </a>
                 {% endif %}
 
                 <a href="{{ url_for('categories') }}"
+                   data-tour="categories"
                    class="nav-link {{ 'active' if request.endpoint in ['categories', 'add_category', 'edit_category'] else '' }}">
                     <i class="bi bi-tags"></i><span>Categories</span>
                 </a>
 
                 <a href="{{ url_for('foods') }}"
+                   data-tour="foods"
                    class="nav-link {{ 'active' if request.endpoint in ['foods', 'add_food', 'edit_food'] else '' }}">
                     <i class="bi bi-egg-fried"></i><span>Food Management</span>
                 </a>
                 <a href="{{ url_for('inventory') }}"
+                   data-tour="inventory"
                    class="nav-link {{ 'active' if request.endpoint in ['inventory', 'update_stock'] else '' }}">
                     <i class="bi bi-boxes"></i><span>Inventory</span>
                 </a>
 
                 <a href="{{ url_for('add_order') }}"
+                   data-tour="add_order"
                    class="nav-link {{ 'active' if request.endpoint in ['add_order'] else '' }}">
                     <i class="bi bi-cart-plus"></i><span>New Order</span>
                 </a>
@@ -109,17 +114,20 @@
                 {# The screen left on in the kitchen. Staff work, so it
                    is offered to everyone who takes orders. #}
                 <a href="{{ url_for('kitchen_display') }}"
+                   data-tour="kitchen"
                    class="nav-link {{ 'active' if request.endpoint in ['kitchen_display', 'order_details'] else '' }}">
                     <i class="bi bi-fire"></i><span>Kitchen</span>
                 </a>
 
                 <a href="{{ url_for('billing') }}"
+                   data-tour="billing"
                     class="nav-link {{ 'active' if request.endpoint in ['billing'] else '' }}">
                     <i class="bi bi-credit-card-2-front"></i><span>Billing</span>
                 </a>
 
                 {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('reports') }}"
+                   data-tour="reports"
                    class="nav-link {{ 'active' if request.endpoint in ['reports'] else '' }}">
                     <i class="bi bi-bar-chart-line"></i>
                     <span>Reports</span>
@@ -127,6 +135,7 @@
                 {% endif %}
                 {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('users') }}"
+                   data-tour="users"
                    class="nav-link {{ 'active' if request.endpoint in ['users', 'add_user', 'edit_user'] else '' }}">
                     <i class="bi bi-people"></i>
                     <span>User Management</span>
@@ -184,7 +193,8 @@
 
                 <div class="profile-menu" id="profileMenu">
 
-                    <button type="button" class="profile-trigger" id="profileTrigger">
+                    <button type="button" class="profile-trigger" id="profileTrigger"
+                            data-tour="profile">
                         <span class="profile-avatar">
                             {% if current_user.has_photo %}
                             <img src="{{ url_for('user_media', user_id=current_user.user_id, v=current_user.photo_version or 1) }}"
@@ -224,16 +234,6 @@
                                 <div class="profile-role">{{ current_user.role|capitalize }} · @{{ current_user.username }}</div>
                             </div>
                         </div>
-
-                        <div class="profile-dropdown__section">Help</div>
-
-                        {# The tour again, for anyone who skipped it or has
-                           forgotten. Nothing on the pages themselves explains
-                           how they work any more, so this has to be findable. #}
-                        <button type="button" class="profile-dropdown__item"
-                                id="tourReplay">
-                            <i class="bi bi-question-circle"></i><span>How this works</span>
-                        </button>
 
                         <div class="profile-dropdown__section">Account</div>
 
@@ -280,6 +280,16 @@
                             <i class="bi bi-qr-code"></i><span>Table QR Code</span>
                         </a>
                         {% endif %}
+
+                        <div class="profile-dropdown__section">Help</div>
+
+                        {# The tour again, for anyone who skipped it or has
+                           forgotten. Nothing on the pages themselves explains
+                           how they work any more, so this has to be findable. #}
+                        <button type="button" class="profile-dropdown__item"
+                                id="tourReplay">
+                            <i class="bi bi-question-circle"></i><span>How this works</span>
+                        </button>
 
                         <div class="profile-dropdown__divider"></div>
 
@@ -354,22 +364,35 @@
 
 
     {% if tutorial_steps %}
-    {# The tour. Lives out here in the shell rather than inside the page,
-       so moving between pages neither closes it nor starts it again. #}
+    {# The tour. Out here in the shell rather than inside the page, so
+       moving between pages neither closes it nor starts it again. #}
     <div class="tour" id="tour" hidden
          data-due="{{ 1 if tutorial_due else 0 }}">
-        <div class="tour__box" role="dialog" aria-modal="true"
-             aria-labelledby="tourTitle">
+
+        {# The ring around whatever the step is talking about. Its own
+           shadow is what dims the rest of the screen, which leaves the
+           thing underneath it clickable - the point being that the first
+           time somebody uses a screen is while it is being explained. #}
+        <div class="tour__spot" id="tourSpot" hidden aria-hidden="true"></div>
+
+        <div class="tour__box" id="tourBox" role="dialog" aria-modal="true"
+             aria-label="Guided tour">
 
             <button type="button" class="tour__skip" id="tourSkip">Skip</button>
 
-            {% for icon, title, body in tutorial_steps %}
+            {% for step in tutorial_steps %}
             <section class="tour__step" data-step="{{ loop.index0 }}"
+                     {% if step.at %}data-at="{{ step.at }}"{% endif %}
                      {% if not loop.first %}hidden{% endif %}>
-                <span class="tour__icon"><i class="bi {{ icon }}"></i></span>
-                <h2 class="tour__title"
-                    {% if loop.first %}id="tourTitle"{% endif %}>{{ title }}</h2>
-                <p class="tour__body">{{ body }}</p>
+                <span class="tour__icon"><i class="bi {{ step.icon }}"></i></span>
+                <h2 class="tour__title">{{ step.title }}</h2>
+                <p class="tour__what">{{ step.what }}</p>
+                {% if step.then %}
+                <p class="tour__then">
+                    <span class="tour__then-label">When you press it</span>
+                    {{ step.then }}
+                </p>
+                {% endif %}
             </section>
             {% endfor %}
 
@@ -1020,19 +1043,106 @@ window.CafeShell = {
 
     // ---- The tour -------------------------------------------------
     //
-    // Shown once, the first time somebody signs in, and after that only
-    // when they ask for it. It lives in the shell, so walking between
-    // pages neither closes it nor starts it over.
+    // Shown once on somebody's first sign-in, and after that only when
+    // they ask. It lives in the shell, so walking between pages neither
+    // closes it nor starts it over.
+    //
+    // Each step lights up the thing it is describing rather than only
+    // naming it, and pressing that thing moves the tour along - so the
+    // first time somebody uses a screen is during the explanation of it.
     const tour = document.getElementById("tour");
 
     if (tour) {
         const steps = tour.querySelectorAll(".tour__step");
         const dots = tour.querySelectorAll(".tour__dot");
+        const spot = document.getElementById("tourSpot");
+        const card = document.getElementById("tourBox");
         const back = document.getElementById("tourBack");
         const next = document.getElementById("tourNext");
         const skip = document.getElementById("tourSkip");
         const replay = document.getElementById("tourReplay");
+
+        // The same question the drawer itself asks, so the two can never
+        // disagree about which layout is on screen.
+        const drawerLayout = window.matchMedia(
+            "(max-width: 1024px), (max-width: 1400px) and (pointer: coarse)");
+
         let at = 0;
+        let aimed = null;        // what this step is pointing at
+        let openedDrawer = false;
+
+        function showSidebar(on) {
+            const shell = document.querySelector(".app-shell");
+            if (!shell) return;
+            shell.classList.toggle("nav-open", on);
+            document.body.classList.toggle("nav-locked", on);
+            const backdrop = document.querySelector(".sidebar-backdrop");
+            if (backdrop) backdrop.hidden = !on;
+        }
+
+        function place() {
+            const step = steps[at];
+            const selector = step.getAttribute("data-at");
+            const target = selector
+                ? document.querySelector(selector) : null;
+
+            // On a phone the sidebar is a drawer, so what this step is
+            // pointing at is behind the burger. Open it, and put it back
+            // when the tour moves on to something that is not in there.
+            if (target && drawerLayout.matches
+                    && target.closest(".sidebar")) {
+                showSidebar(true);
+                openedDrawer = true;
+            } else if (openedDrawer) {
+                showSidebar(false);
+                openedDrawer = false;
+            }
+
+            const box = target ? target.getBoundingClientRect() : null;
+            const onScreen = box && box.width > 1 && box.height > 1
+                && box.bottom > 0 && box.top < window.innerHeight;
+
+            if (!onScreen) {
+                // Nothing to point at - the middle of the screen, and the
+                // words still say what the thing is.
+                aimed = null;
+                spot.hidden = true;
+                tour.classList.add("tour--middle");
+                card.style.top = "";
+                card.style.left = "";
+                return;
+            }
+
+            aimed = target;
+            tour.classList.remove("tour--middle");
+
+            const pad = 6;
+            spot.hidden = false;
+            spot.style.top = (box.top - pad) + "px";
+            spot.style.left = (box.left - pad) + "px";
+            spot.style.width = (box.width + pad * 2) + "px";
+            spot.style.height = (box.height + pad * 2) + "px";
+
+            // Beside it where there is room, underneath it where there is
+            // not, and never off the edge of the screen either way.
+            const gap = 18;
+            const size = card.getBoundingClientRect();
+            let left = box.right + gap;
+            let top = box.top - 8;
+
+            if (left + size.width + gap > window.innerWidth) {
+                left = box.left;
+                top = box.bottom + gap;
+            }
+
+            left = Math.max(gap, Math.min(
+                left, window.innerWidth - size.width - gap));
+            top = Math.max(gap, Math.min(
+                top, window.innerHeight - size.height - gap));
+
+            card.style.left = left + "px";
+            card.style.top = top + "px";
+        }
 
         function paint() {
             steps.forEach(function (step, index) {
@@ -1044,22 +1154,32 @@ window.CafeShell = {
             });
             back.disabled = at === 0;
             next.textContent = at === steps.length - 1 ? "Finish" : "Next";
+            place();
+        }
+
+        function forward() {
+            if (at >= steps.length - 1) { close(); return; }
+            at += 1;
+            paint();
         }
 
         function open() {
             at = 0;
-            paint();
             tour.hidden = false;
             document.body.classList.add("tour-open");
+            paint();
             next.focus();
         }
 
-        // Both finishing and skipping count. Somebody who skipped has
+        // Finishing and skipping both count. Somebody who skipped has
         // decided they do not need it, and asking again tomorrow is not
         // respecting that.
         function close() {
             tour.hidden = true;
+            spot.hidden = true;
+            aimed = null;
             document.body.classList.remove("tour-open");
+            if (openedDrawer) { showSidebar(false); openedDrawer = false; }
 
             fetch("/api/tutorial/seen", {
                 method: "POST",
@@ -1071,11 +1191,7 @@ window.CafeShell = {
             }).catch(function () { });
         }
 
-        next.addEventListener("click", function () {
-            if (at >= steps.length - 1) { close(); return; }
-            at += 1;
-            paint();
-        });
+        next.addEventListener("click", forward);
 
         back.addEventListener("click", function () {
             if (at === 0) return;
@@ -1093,6 +1209,28 @@ window.CafeShell = {
             });
         }
 
+        // Pressing the thing the step is pointing at moves the tour on.
+        // Captured, and the click is left to do its own job - so the
+        // first time somebody opens a screen is while it is being
+        // explained to them.
+        document.addEventListener("click", function (event) {
+            if (tour.hidden || !aimed) return;
+            if (!aimed.contains(event.target)) return;
+            window.setTimeout(forward, 0);
+        }, true);
+
+        // The page underneath changes shape: a swap, a turned phone, a
+        // scrolled sidebar. What is being pointed at has to keep up.
+        document.addEventListener("instant:load", function () {
+            if (!tour.hidden) window.setTimeout(place, 60);
+        });
+        window.addEventListener("resize", function () {
+            if (!tour.hidden) place();
+        });
+        window.addEventListener("scroll", function () {
+            if (!tour.hidden) place();
+        }, true);
+
         document.addEventListener("keydown", function (event) {
             if (tour.hidden) return;
             if (event.key === "Escape") { close(); return; }
@@ -1102,6 +1240,7 @@ window.CafeShell = {
 
         if (tour.dataset.due === "1") { open(); }
     }
+
 
 });
 </script>

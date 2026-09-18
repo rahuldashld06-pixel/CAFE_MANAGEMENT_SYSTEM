@@ -173,7 +173,59 @@ try:
     check("and Back comes home", showing() == "Welcome",
           "Back left it on %r" % showing())
 
-    print("\n=== 3. The end of it closes it, for good ===")
+    print("\n=== 3. It points at what it is talking about ===")
+    # This is the whole of what a paragraph on a page could not do. A
+    # step that says "Dashboard" and does not show which thing that is
+    # has not explained anything.
+    b.evaluate("document.getElementById('tourNext').click()")
+    time.sleep(0.6)
+
+    check("a step that names a screen puts a ring round it",
+          not b.evaluate("document.getElementById('tourSpot').hidden"),
+          "showing %r with nothing marked" % showing())
+
+    fits = b.evaluate("""
+        (function () {
+            var spot = document.getElementById('tourSpot')
+                .getBoundingClientRect();
+            var link = document.querySelector('[data-tour=home]')
+                .getBoundingClientRect();
+            return Math.abs(spot.left - link.left) < 14
+                && Math.abs(spot.top - link.top) < 14
+                && spot.width >= link.width
+                && spot.height >= link.height;
+        }())
+    """)
+    check("and the ring is round the right thing", fits,
+          "the ring is somewhere other than over the link it names")
+
+    check("the words say what pressing it does",
+          b.evaluate(
+              "!!document.querySelector('.tour__step:not([hidden]) "
+              ".tour__then')"),
+          "it names the screen and stops there")
+
+    check("and the thing itself is still reachable under the ring",
+          b.evaluate(
+              "document.getElementById('tourSpot')"
+              ".getBoundingClientRect().width > 0 && "
+              "getComputedStyle(document.getElementById('tourSpot'))"
+              ".pointerEvents === 'none'"),
+          "the ring swallows the click it is inviting")
+
+    was = showing()
+    b.evaluate("document.querySelector('[data-tour=home]').click()")
+    time.sleep(1.6)
+    check("pressing the thing it points at moves the tour on",
+          showing() != was and showing() != "",
+          "still on %r after pressing it" % showing())
+
+    check("and the tour survives the page it just opened",
+          open_now(),
+          "following its own instruction closed it")
+
+
+    print("\n=== 4. The end of it closes it, for good ===")
     for _ in range(20):
         if b.evaluate(
                 "document.getElementById('tourNext').textContent") == "Finish":
@@ -198,7 +250,7 @@ try:
           "it starts again on every page, which is worse than the "
           "paragraphs it replaced")
 
-    print("\n=== 4. But it can be asked for again ===")
+    print("\n=== 5. But it can be asked for again ===")
     b.evaluate("document.getElementById('tourReplay').click()")
     time.sleep(0.7)
     check("the profile menu opens it again", open_now(),
@@ -210,7 +262,7 @@ try:
     time.sleep(0.8)
     check("and Skip shuts it too", not open_now(), "Skip did nothing")
 
-    print("\n=== 5. Somebody on the till gets a shorter one ===")
+    print("\n=== 6. Somebody on the till gets a shorter one ===")
     sign_in("ravi")
     check("it opens for them as well",
           wait("!document.getElementById('tour').hidden", "the tour", 12),
@@ -225,7 +277,7 @@ try:
               "!document.body.innerText.includes('User Management adds')"),
           "they are walked through a screen they cannot open")
 
-    print("\n=== 6. On a phone ===")
+    print("\n=== 7. On a phone ===")
     b.call("Emulation.setDeviceMetricsOverride", width=390, height=844,
            deviceScaleFactor=2, mobile=True)
     time.sleep(0.8)
@@ -239,6 +291,22 @@ try:
               "document.getElementById('tourNext').getBoundingClientRect()"
               ".bottom <= window.innerHeight + 1"),
           "Next is off the bottom of the screen")
+
+    # The sidebar is behind the burger at this width, so a step pointing
+    # into it has to open the drawer or it is pointing at nothing.
+    for _ in range(3):
+        b.evaluate("document.getElementById('tourNext').click()")
+        time.sleep(0.5)
+
+    check("a step pointing into the sidebar opens the drawer to do it",
+          b.evaluate(
+              "document.querySelector('.app-shell')"
+              ".classList.contains('nav-open')"),
+          "on %r, and the sidebar is still shut" % showing())
+
+    check("and the ring lands on something that is actually showing",
+          b.evaluate("!document.getElementById('tourSpot').hidden"),
+          "nothing is marked, on %r" % showing())
 
 finally:
     try:
