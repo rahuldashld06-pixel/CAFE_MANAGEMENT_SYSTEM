@@ -402,7 +402,15 @@
             <div>
                 <h2><i class="bi bi-calendar3"></i> Billing History Period</h2>
                 <p class="panel-subtitle">
-                    Choose the period you want to view. Filtering does not delete any saved bills.
+                    {% if showing_today %}
+                    Showing today. Choose a period, or All History, to see
+                    earlier bills &mdash; nothing is ever deleted.
+                    {% elif show_all %}
+                    Showing every bill ever saved.
+                    {% else %}
+                    Showing the period below. Filtering does not delete any
+                    saved bills.
+                    {% endif %}
                 </p>
             </div>
         </div>
@@ -422,7 +430,7 @@
                 <i class="bi bi-funnel-fill"></i> Apply Period
             </button>
 
-            <a href="{{ url_for('billing') }}" class="btn btn--ghost">
+            <a href="{{ url_for('billing', all=1) }}" class="btn btn--ghost">
                 <i class="bi bi-arrow-counterclockwise"></i> All History
             </a>
         </form>
@@ -523,9 +531,13 @@
                         <td class="bill-id">#{{ bill.bill_id }}</td>
 
                         <td>
+                            {# The number the kitchen screen shows and the
+                               customer was given. The link still goes to the
+                               order's own page, which is keyed on the
+                               permanent id. #}
                             <a href="{{ url_for('order_details', order_id=bill.order_id) }}"
                                style="color: var(--copper-light); font-weight:600;">
-                                #{{ bill.order_id }}
+                                #{{ bill.daily_no or bill.order_id }}
                             </a>
                         </td>
 

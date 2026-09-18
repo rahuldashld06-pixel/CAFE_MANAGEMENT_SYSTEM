@@ -397,8 +397,57 @@ body {
     font-size: 14px;
 }
 
-.p-line__name { min-width: 0; }
+.p-line__name {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+}
+
 .p-line__qty { color: var(--p-faint); }
+
+/* One mark per dish, matching the ones the kitchen is tapping. Hollow
+   while it is being made, a green tick once it is. */
+.p-line__mark {
+    flex: 0 0 auto;
+    position: relative;
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    border-radius: 50%;
+    border: 2px solid var(--p-faint);
+}
+
+.p-line[data-made="1"] .p-line__mark {
+    background: #8FBB99;
+    border-color: #8FBB99;
+}
+
+.p-line[data-made="1"] .p-line__mark::after {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid #15241A;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* The word only appears on a dish that is done, so the list reads as a
+   list until there is something to say about a line. */
+.p-line__said {
+    display: none;
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #8FBB99;
+}
+
+.p-line[data-made="1"] .p-line__said { display: inline; }
 
 .p-total {
     display: flex;

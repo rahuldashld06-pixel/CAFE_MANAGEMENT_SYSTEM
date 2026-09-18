@@ -1146,6 +1146,9 @@ _CORE_TABLES = [
             quantity INT NOT NULL DEFAULT 1,
             price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            -- Ticked off in the kitchen as this dish is made. When the
+            -- last line on an order is ticked, the order is done.
+            made TINYINT(1) NOT NULL DEFAULT 0,
             INDEX idx_order_items_order_id (order_id),
             INDEX idx_order_items_food_id (food_id),
             CONSTRAINT fk_order_items_order
@@ -1227,6 +1230,11 @@ _COLUMN_MIGRATIONS = [
     # The item's name as sold, so a deleted food does not blank out the
     # lines of every bill it ever appeared on.
     ("order_items", "item_name", "VARCHAR(150) NULL"),
+    # Ticked off in the kitchen as the dish is made. Orders that predate
+    # this column read as not yet made, which is right for the ones still
+    # waiting and invisible on the ones already finished - a finished
+    # ticket shows every line as made whatever this says.
+    ("order_items", "made", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("cafes", "logo_mime", "VARCHAR(80) NULL"),
     ("cafes", "logo_blob", "MEDIUMBLOB NULL"),
     ("cafes", "login_photo_mime", "VARCHAR(80) NULL"),
@@ -1978,6 +1986,7 @@ STAFF_ALLOWED_ENDPOINTS = {
     "kitchen_pending", "kitchen_claim",
     # The screen that lives in the kitchen, and its own feed.
     "kitchen_display", "kitchen_board", "kitchen_heartbeat",
+    "kitchen_item_made",
 }
 
 
@@ -4090,6 +4099,12 @@ def complete_order(order_id):
                 True,
                 f"Order #{order_id} is already marked as done.")
 
+        # Done means the whole ticket, so nothing is left reading as
+        # still to make on an order that is finished.
+        cursor.execute(
+            "UPDATE order_items SET made = 1 WHERE order_id = %s",
+            (order_id,))
+
         cursor.execute("""
             UPDATE orders
             SET order_status = 'Completed'
@@ -4574,6 +4589,21 @@ def billing():
         from_date = request.args.get("from_date", "").strip()
         to_date = request.args.get("to_date", "").strip()
 
+        # Everything, but only when asked for outright - that is what the
+        # All History button is.
+        show_all = request.args.get("all", "").strip() in ("1", "yes", "true")
+
+        # Otherwise today. Somebody at the till is settling bills from the
+        # shift they are standing in, and scrolling past a month of
+        # history to reach one of them is not what this page is for. The
+        # dates are filled in rather than left blank, so the page says
+        # plainly which day it is showing.
+        if not show_all and not from_date and not to_date:
+            from_date = to_date = date.today().isoformat()
+
+        showing_today = (not show_all
+                         and from_date == to_date == date.today().isoformat())
+
         where_parts = ["o.user_id = %s"]
         params = [scope_user_id()]
 
@@ -4597,6 +4627,10 @@ def billing():
             SELECT
                 b.bill_id,
                 b.order_id,
+                -- The number called out and printed on the ticket. Billing
+                -- showed the permanent row id, so the same order was #47
+                -- here and #6 everywhere else.
+                o.daily_no,
                 b.subtotal,
                 b.tax,
                 b.discount,
@@ -4708,7 +4742,9 @@ def billing():
             revenue_today=summary["revenue"] or Decimal("0.00"),
             # Tells the page whether those figures describe the filtered
             # period or just today, so it can label them honestly.
-            summary_is_today=not is_admin,
+            summary_is_today=showing_today or not is_admin,
+            showing_today=showing_today,
+            show_all=show_all,
             from_date=from_date,
             to_date=to_date
         )
@@ -6501,15 +6537,17 @@ def kitchen_board():
             ids = [row["order_id"] for row in orders]
             marks = ", ".join(["%s"] * len(ids))
             cursor.execute("""
-                SELECT order_id, item_name, quantity
+                SELECT order_item_id, order_id, item_name, quantity, made
                 FROM order_items
                 WHERE order_id IN (%s)
                 ORDER BY order_item_id
             """ % marks, tuple(ids))
             for row in cursor.fetchall():
                 lines.setdefault(row["order_id"], []).append({
+                    "item_id": row["order_item_id"],
                     "name": row["item_name"],
                     "quantity": row["quantity"],
+                    "made": bool(row["made"]),
                 })
 
         return jsonify({
@@ -6638,6 +6676,82 @@ def kitchen_claim(order_id):
         if connection:
             connection.rollback()
         return jsonify({"claimed": False, "error": str(error)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/api/kitchen/item/<int:order_item_id>", methods=["POST"])
+def kitchen_item_made(order_item_id):
+    """
+    Tick one dish off a ticket, or put it back.
+
+    A ticket with three dishes on it is three jobs, and on a busy pass the
+    one that is ready first is rarely the one at the top. Ticking them off
+    as they go is how a kitchen actually works through a ticket, and when
+    the last one goes the order closes itself - nobody has to remember to
+    press Done as well.
+
+    Only while the order is still waiting. Once it is finished or called
+    off there is nothing left to tick, and allowing it would mean telling
+    a customer at a table that their food was ready and then taking it
+    back.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        owner = scope_user_id()
+
+        # Locked, because two screens can be working the same ticket and
+        # this is read-then-write: both could read two dishes outstanding,
+        # each tick one, and neither see the order finish.
+        cursor.execute("""
+            SELECT oi.order_item_id, oi.order_id, oi.made, o.order_status
+            FROM order_items oi
+            INNER JOIN orders o ON o.order_id = oi.order_id
+            WHERE oi.order_item_id = %s AND o.user_id = %s
+            FOR UPDATE
+        """, (order_item_id, owner))
+        line = cursor.fetchone()
+
+        if line is None:
+            return jsonify({"ok": False, "reason": "no such line"}), 404
+
+        if line["order_status"] != "Pending":
+            return jsonify({"ok": False, "reason": "already settled",
+                            "status": line["order_status"]}), 409
+
+        made = 0 if line["made"] else 1
+        cursor.execute(
+            "UPDATE order_items SET made = %s WHERE order_item_id = %s",
+            (made, order_item_id))
+
+        cursor.execute(
+            "SELECT COUNT(*) AS outstanding FROM order_items "
+            "WHERE order_id = %s AND made = 0",
+            (line["order_id"],))
+        outstanding = int((cursor.fetchone() or {}).get("outstanding") or 0)
+
+        finished = outstanding == 0
+        if finished:
+            cursor.execute(
+                "UPDATE orders SET order_status = 'Completed' "
+                "WHERE order_id = %s AND user_id = %s "
+                "  AND order_status = 'Pending'",
+                (line["order_id"], owner))
+
+        connection.commit()
+        return jsonify({"ok": True, "made": bool(made),
+                        "order_finished": finished})
+
+    except mysql.connector.Error as error:
+        if connection:
+            connection.rollback()
+        return jsonify({"ok": False, "reason": str(error)}), 500
     finally:
         if cursor:
             cursor.close()
@@ -6840,12 +6954,20 @@ def public_order_placed(token, order_id):
             return render_template("public_gone.html"), 404
 
         cursor.execute("""
-            SELECT item_name, quantity, price, subtotal
+            SELECT order_item_id, item_name, quantity, price, subtotal, made
             FROM order_items
             WHERE order_id = %s
             ORDER BY order_item_id
         """, (order_id,))
         items = cursor.fetchall()
+
+        # A finished order reads as all made, whatever the lines say. An
+        # order closed with the Done button, or by the overnight sweep,
+        # would otherwise tell a customer their food is ready and show
+        # half of it still being cooked.
+        if order["order_status"] == "Completed":
+            for line in items:
+                line["made"] = 1
 
         return render_template(
             "public_placed.html",
@@ -6868,10 +6990,12 @@ def public_order_status(token, order_id):
     Whether the kitchen has finished a customer's order yet.
 
     The page a customer is left holding asks this every few seconds, so
-    it answers with the status and nothing else - no totals, no lines, no
-    other orders. Looked up by cafe as well as by id, the same way the
-    page itself is, so one cafe's code cannot be used to watch another's
-    orders by changing the number in the address.
+    it answers with as little as will do the job: the order's status, and
+    which of its lines have been made. No names, no prices, no totals -
+    the page already has those, and nothing else needs them. Looked up by
+    cafe as well as by id, the same way the page itself is, so one cafe's
+    code cannot be used to watch another's orders by changing the number
+    in the address.
     """
     connection = None
     cursor = None
@@ -6892,7 +7016,21 @@ def public_order_status(token, order_id):
         if order is None:
             return jsonify({"status": "gone"}), 404
 
-        return jsonify({"status": order["order_status"]})
+        finished = order["order_status"] == "Completed"
+
+        cursor.execute(
+            "SELECT order_item_id, made FROM order_items "
+            "WHERE order_id = %s ORDER BY order_item_id",
+            (order_id,))
+
+        return jsonify({
+            "status": order["order_status"],
+            "items": [
+                {"id": row["order_item_id"],
+                 "made": bool(row["made"]) or finished}
+                for row in cursor.fetchall()
+            ],
+        })
     finally:
         if cursor:
             cursor.close()

@@ -288,7 +288,7 @@ try:
           int(browser.evaluate("window.__printed.length")) == before,
           "the same ticket printed more than once")
 
-    print("\n=== 5. Marking one done turns its dot green ===")
+    print("\n=== 5. Marking one done marks its dishes ===")
     browser.evaluate("document.querySelector('[data-done]').click()")
     time.sleep(2.0)
 
@@ -296,11 +296,14 @@ try:
           browser.evaluate(
               "document.querySelectorAll('.kitchen-ticket').length") >= 1,
           "it vanished, so there is nothing left to have turned green")
-    check("its dot is the green one",
+    check("and every dish on it reads as made",
           browser.evaluate(
               "document.querySelectorAll("
-              "'.kitchen-ticket--done .status-dot--green').length") >= 1,
-          "no finished ticket is showing a green dot")
+              "'.kitchen-ticket--done .kitchen-line--made').length") >= 1
+          and browser.evaluate(
+              "document.querySelectorAll("
+              "'.kitchen-ticket--done .kitchen-line--todo').length") == 0,
+          "a finished ticket still has lines reading as still to make")
     check("and it offers no buttons once it is done",
           browser.evaluate(
               "document.querySelectorAll("
@@ -368,6 +371,75 @@ try:
           len(ASKED) == settled,
           "it asked %d more times after the answer arrived"
           % (len(ASKED) - settled))
+
+    print("\n=== 8. Ticking dishes off one at a time ===")
+    # A ticket with two things on it is two jobs. This is the part a cook
+    # actually touches, so it is worth pressing for real rather than
+    # trusting that the markup looks right.
+    two = guest.post("/m/%s/order" % token,
+                     data={"quantity_%s" % food_ids[0]: "1",
+                           "quantity_%s" % food_ids[1]: "1"},
+                     follow_redirects=False)
+    two_id = int(two.headers["Location"].rstrip("/").split("/")[-1])
+
+    browser.call("Page.navigate", url=BASE + "/kitchen")
+    wait_for("!!document.querySelector('.kitchen-tick')",
+             "a ticket with dishes on it")
+    time.sleep(2.0)
+
+    def ticket():
+        return ("document.querySelector('.kitchen-ticket [data-done=\"%d\"]')"
+                ".closest('.kitchen-ticket')" % two_id)
+
+    check("each dish on the ticket has something to press",
+          browser.evaluate("%s.querySelectorAll('button.kitchen-tick').length"
+                           % ticket()) == 2,
+          "found %s"
+          % browser.evaluate("%s.querySelectorAll('button.kitchen-tick')"
+                             ".length" % ticket()))
+
+    browser.evaluate("%s.querySelectorAll('button.kitchen-tick')[0].click()"
+                     % ticket())
+    time.sleep(2.5)
+
+    check("pressing one marks that one and leaves the other",
+          browser.evaluate("%s.querySelectorAll('.kitchen-line--made').length"
+                           % ticket()) == 1
+          and browser.evaluate("%s.querySelectorAll('.kitchen-line--todo')"
+                               ".length" % ticket()) == 1,
+          "made %s, still to make %s"
+          % (browser.evaluate("%s.querySelectorAll('.kitchen-line--made')"
+                              ".length" % ticket()),
+             browser.evaluate("%s.querySelectorAll('.kitchen-line--todo')"
+                              ".length" % ticket())))
+
+    settled = mysql_shim._DB.execute(
+        "SELECT order_status FROM orders WHERE order_id = ?",
+        (two_id,)).fetchone()
+    check("and the order is still with the kitchen",
+          settled and settled[0] == "Pending",
+          "the order went to %s with a dish still to make"
+          % (settled[0] if settled else None))
+
+    # The board redraws after each tap, so the one still to make is found
+    # by its state rather than by its position - tapping [0] again would
+    # simply un-tick the dish just ticked.
+    browser.evaluate("%s.querySelector('.kitchen-line--todo "
+                     "button.kitchen-tick').click()" % ticket())
+    time.sleep(2.5)
+
+    closed = mysql_shim._DB.execute(
+        "SELECT order_status FROM orders WHERE order_id = ?",
+        (two_id,)).fetchone()
+    check("pressing the last one closes the order by itself",
+          closed and closed[0] == "Completed",
+          "the order is %s - somebody still has to press Done"
+          % (closed[0] if closed else None))
+
+    check("nothing was refused while ticking",
+          not [row for row in REJECTED if row[2] >= 400
+               and "kitchen" in row[1]],
+          "the server refused: %s" % REJECTED)
 
 finally:
     browser.close()

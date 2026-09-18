@@ -679,10 +679,20 @@ check("a customer can ask without an account",
       "got HTTP %s: %s" % (answer.status_code,
                            answer.get_data(as_text=True)[:120]))
 
-check("and the answer carries nothing but the status",
-      sorted((answer.get_json() or {}).keys()) == ["status"],
+check("and the answer carries only what the page needs",
+      sorted((answer.get_json() or {}).keys()) == ["items", "status"],
       "it also hands over %s"
       % sorted((answer.get_json() or {}).keys()))
+
+# The page already knows what was ordered and what it cost. This is asked
+# every few seconds by anyone holding the address, so it should say which
+# lines are made and stop there.
+check("and no names, prices or totals come back with it",
+      all(sorted(dish.keys()) == ["id", "made"]
+          for dish in (answer.get_json() or {}).get("items", [])),
+      "a line carries %s"
+      % [sorted(dish.keys())
+         for dish in (answer.get_json() or {}).get("items", [])])
 
 check("another cafe's code cannot be used to watch this order",
       nobody.get("/m/%s/status/%d" % (other_token, waiting_id))
@@ -738,6 +748,140 @@ check("a cancelled order tells the customer as well",
       (nobody.get("/m/%s/status/%d" % (fresh, doomed_id)).get_json()
        or {}).get("status") == "Cancelled",
       "they would wait for food nobody is making")
+
+print("\n=== 19. Each dish is ticked off on its own ===")
+# A ticket with two things on it is two jobs, and the one that is ready
+# first is rarely the one at the top.
+
+# Plenty of everything, so a two-line order can actually be placed this
+# late in the run.
+mysql_shim._DB.execute("UPDATE inventory SET quantity = 50")
+mysql_shim._DB.execute("UPDATE foods SET availability = 1")
+mysql_shim._DB.commit()
+
+
+def order_two():
+    """A customer sends an order with two different things on it."""
+    customer = app.test_client()
+    menu = customer.get("/m/%s" % fresh).get_data(as_text=True)
+    picks = re.findall(r'name="quantity_(\d+)"', menu)
+    reply = customer.post(
+        "/m/%s/order" % fresh,
+        data={"quantity_%s" % picks[0]: "1", "quantity_%s" % picks[1]: "1"},
+        follow_redirects=False)
+    return customer, int(reply.headers["Location"].rstrip("/").split("/")[-1])
+
+
+def ticket_lines(order_id):
+    for row in admin.get("/api/kitchen/board").get_json()["orders"]:
+        if row["order_id"] == order_id:
+            return row["items"]
+    return []
+
+
+def tick(item_id, client=None):
+    return (client or admin).post(
+        "/api/kitchen/item/%d" % item_id,
+        data={"_csrf_token": csrf(client or admin)},
+        headers={"X-Requested-With": "XMLHttpRequest"})
+
+
+both_customer, both = order_two()
+lines = ticket_lines(both)
+
+check("a ticket's lines each come back with a mark of their own",
+      len(lines) == 2
+      and all("item_id" in row and "made" in row for row in lines),
+      "the board gives %s" % lines)
+check("and they start as still to make",
+      all(row["made"] is False for row in lines),
+      "they start as %s" % [row["made"] for row in lines])
+
+one = tick(lines[0]["item_id"])
+check("ticking one marks that one",
+      (one.get_json() or {}).get("made") is True,
+      "it answered %s" % one.get_json())
+check("and does not finish the order on its own",
+      (one.get_json() or {}).get("order_finished") is False
+      and status_of(both) == "Pending",
+      "the order is %s" % status_of(both))
+
+back = tick(lines[0]["item_id"])
+check("tapping the same one again puts it back",
+      (back.get_json() or {}).get("made") is False,
+      "a mistap cannot be undone: %s" % back.get_json())
+
+tick(lines[0]["item_id"])
+last = tick(lines[1]["item_id"])
+check("and ticking the last one closes the order",
+      (last.get_json() or {}).get("order_finished") is True
+      and status_of(both) == "Completed",
+      "the order is %s after every line was ticked" % status_of(both))
+
+refused = tick(lines[0]["item_id"])
+check("a finished ticket cannot be un-ticked",
+      refused.status_code == 409,
+      "it answered HTTP %s - a customer would be told their food was "
+      "ready and then have it taken back" % refused.status_code)
+
+theirs = tick(lines[0]["item_id"], client=other_admin)
+check("and another cafe cannot tick this cafe's lines",
+      theirs.status_code == 404,
+      "it answered HTTP %s" % theirs.status_code)
+
+print("\n=== 20. And the customer watches it happen ===")
+# Someone at a table would rather know their coffee is ready than wait to
+# hear about the whole order.
+nobody_at_all = app.test_client()
+
+told = nobody_at_all.get("/m/%s/status/%d" % (fresh, both)).get_json() or {}
+check("a finished order tells them every line is ready",
+      told.get("items") and all(dish["made"] for dish in told["items"]),
+      "it says %s" % told)
+
+finished_page = both_customer.get(
+    "/m/%s/placed/%d" % (fresh, both)).get_data(as_text=True)
+check("and their page marks both",
+      finished_page.count('data-made="1"') == 2,
+      "the page marks %d of 2" % finished_page.count('data-made="1"'))
+
+# The half-way case, which is the one worth having.
+half_customer, half = order_two()
+half_lines = ticket_lines(half)
+tick(half_lines[0]["item_id"])
+
+halfway = nobody_at_all.get(
+    "/m/%s/status/%d" % (fresh, half)).get_json() or {}
+check("one dish ready and one still coming is reported as exactly that",
+      [dish["made"] for dish in halfway.get("items", [])] == [True, False],
+      "it says %s" % halfway)
+
+half_page = half_customer.get(
+    "/m/%s/placed/%d" % (fresh, half)).get_data(as_text=True)
+check("and their page marks only the one that is ready",
+      half_page.count('data-made="1"') == 1
+      and half_page.count('data-made="0"') == 1,
+      "the page marks %d ready and %d not"
+      % (half_page.count('data-made="1"'), half_page.count('data-made="0"')))
+
+check("the order itself is still with the kitchen",
+      halfway.get("status") == "Pending",
+      "it says %s, so they would be told to come and collect half an "
+      "order" % halfway.get("status"))
+
+# Pressing Done finishes the ticket, so nothing may be left reading as
+# still to make on an order that is over.
+done_customer, done_order = order_two()
+admin.post("/orders/complete/%d" % done_order,
+           data={"_csrf_token": csrf(admin)},
+           headers={"X-Requested-With": "XMLHttpRequest"})
+marks = mysql_shim._DB.execute(
+    "SELECT made FROM order_items WHERE order_id = ?",
+    (done_order,)).fetchall()
+
+check("pressing Done marks every line on the ticket",
+      marks and all(row[0] == 1 for row in marks),
+      "the lines are %s" % [row[0] for row in marks])
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))

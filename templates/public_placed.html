@@ -66,10 +66,18 @@
 
     <div class="p-lines">
         {% for item in items %}
-        <div class="p-line">
+        {# Each dish has its own state: the kitchen ticks them off one at a
+           time, and a customer watching this would rather know that their
+           coffee is ready than wait to hear about the whole order. #}
+        <div class="p-line" data-item="{{ item.order_item_id }}"
+             data-made="{{ 1 if item.made else 0 }}">
             <span class="p-line__name">
-                {{ item.item_name }}
-                <span class="p-line__qty">&times; {{ item.quantity }}</span>
+                <span class="p-line__mark" aria-hidden="true"></span>
+                <span>
+                    {{ item.item_name }}
+                    <span class="p-line__qty">&times; {{ item.quantity }}</span>
+                    <span class="p-line__said">Ready</span>
+                </span>
             </span>
             <span>&#8377;{{ "%.2f"|format(item.subtotal|float) }}</span>
         </div>
@@ -126,6 +134,16 @@
         if (timer) { window.clearInterval(timer); timer = null; }
     }
 
+    // Which dishes have been made. Marked one at a time, because that
+    // is how the kitchen works through a ticket.
+    function showDishes(dishes) {
+        (dishes || []).forEach(function (dish) {
+            var row = document.querySelector(
+                '.p-line[data-item="' + dish.id + '"]');
+            if (row) { row.dataset.made = dish.made ? "1" : "0"; }
+        });
+    }
+
     function show(status) {
         var words = WORDS[status];
         if (!words) return false;
@@ -147,7 +165,9 @@
         }).then(function (response) {
             return response.ok ? response.json() : null;
         }).then(function (data) {
-            if (!data || !show(data.status)) return;
+            if (!data) return;
+            showDishes(data.items);
+            if (!show(data.status)) return;
             stop();
             // A phone face-down on the table. Refused or unsupported
             // nearly everywhere, and nothing here depends on it.

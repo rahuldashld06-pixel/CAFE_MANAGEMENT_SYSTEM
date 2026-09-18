@@ -159,6 +159,10 @@ CREATE TABLE IF NOT EXISTS order_items (
     quantity       INT NOT NULL DEFAULT 1,
     price          DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     subtotal       DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    -- Ticked off in the kitchen as this dish is made. When the last line
+    -- on an order is ticked, the order is done - and the customer who
+    -- sent it from a table sees that line marked Ready.
+    made           TINYINT(1) NOT NULL DEFAULT 0,
     INDEX idx_order_items_order_id (order_id),
     INDEX idx_order_items_food_id (food_id),
     CONSTRAINT fk_order_items_order

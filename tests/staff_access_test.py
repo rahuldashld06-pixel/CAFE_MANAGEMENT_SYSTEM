@@ -135,7 +135,7 @@ check("the admin sees the same category list",
       and admin.get("/categories").status_code == 200)
 
 
-print("\n=== 4. Billing: today's counts for staff, the period for admins ===")
+print("\n=== 4. Billing: today by default, the period when asked for ===")
 staff_billing = staff.get("/billing").get_data(as_text=True)
 admin_billing = admin.get("/billing").get_data(as_text=True)
 
@@ -149,9 +149,18 @@ check("staff see the counts, labelled as today's",
       and "Pending Today" in staff_billing
       and "Cancelled Today" in staff_billing,
       "the cashier's summary is missing or mislabelled")
-check("an admin sees the same counts for the filtered period",
-      "Bills in Period" in admin_billing and "Paid Bills" in admin_billing,
-      "the admin summary changed")
+# Billing opens on today for everyone now, so an admin's default view is
+# labelled the same way a cashier's is. The period labels belong to a
+# period somebody actually chose.
+check("an admin opens on today as well, and it says so",
+      "Bills Today" in admin_billing,
+      "the admin's default view is labelled as something else")
+
+admin_period = admin.get(
+    "/billing?from_date=2020-01-01&to_date=2020-12-31").get_data(as_text=True)
+check("and a period they choose is labelled as a period",
+      "Bills in Period" in admin_period and "Paid Bills" in admin_period,
+      "a chosen period is still labelled as today")
 check("staff are not shown the period labels",
       "Bills in Period" not in staff_billing,
       "a cashier is being told these are period figures when they are not")

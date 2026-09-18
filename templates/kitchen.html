@@ -27,9 +27,11 @@
 <div class="note-card">
     <i class="bi bi-info-circle"></i>
     <div>
-        Every order of the day is here: tap <strong>Done</strong> when it
-        goes out and the dot turns green, or <strong>Cancel</strong> to send
-        the items back into stock. While this screen is open it also prints
+        Every order of the day is here. Tap the circle beside a dish as
+        it is made; when the last one on a ticket is tapped the order
+        closes itself. <strong>Done</strong> finishes a whole ticket at
+        once, and <strong>Cancel</strong> sends the items back into
+        stock. While this screen is open it also prints
         the ticket for every order a customer sends from their phone, and
         the other screens leave that to it. Close it and they take the job
         back, so a ticket is never simply lost.
@@ -137,21 +139,42 @@ function startKitchenScreen() {
         return holder.innerHTML;
     }
 
-    // Colour alone, the same three the rest of the app uses: yellow
-    // still to make, green gone out, red called off.
-    function statusDot(status) {
-        var kind = status === "Cancelled" ? "red"
-            : status === "Completed" ? "green"
-                : "yellow";
-        var said = status === "Pending" ? "Still to make" : status;
-        return '<span class="status-dot status-dot--' + kind + '" title="'
-            + escapeHtml(said) + '"></span>';
+    // Each dish on a ticket is its own job, so each gets its own mark.
+    // Tap it as that dish goes out; tapping the last one closes the order
+    // on its own, so nobody has to remember to press Done as well.
+    //
+    // Colour alone, the same three the rest of the app uses: hollow while
+    // it is still to make, green once it is, red if the whole ticket was
+    // called off.
+    function dish(order, item) {
+        var settled = order.status !== "Pending";
+        // A finished ticket reads as all made whatever the lines say, so
+        // an order closed by the Done button - or by the overnight sweep,
+        // which never touched the lines at all - does not sit there
+        // looking half-cooked.
+        var made = item.made || order.status === "Completed";
+        var kind = order.status === "Cancelled" ? "off"
+            : made ? "made" : "todo";
+
+        var mark = settled
+            ? '<span class="kitchen-tick" aria-hidden="true"></span>'
+            : '<button type="button" class="kitchen-tick"'
+                + ' data-item="' + escapeHtml(item.item_id) + '"'
+                + ' aria-pressed="' + (made ? "true" : "false") + '"'
+                + ' aria-label="' + escapeHtml(item.name)
+                + (made ? ', made' : ', not made yet') + '"></button>';
+
+        return '<li class="kitchen-line kitchen-line--' + kind + '">'
+            + mark
+            + '<span class="kitchen-line__text">'
+            + '<span class="kitchen-qty">' + escapeHtml(item.quantity)
+            + '</span> ' + escapeHtml(item.name)
+            + '</span></li>';
     }
 
     function card(order) {
         var lines = order.items.map(function (item) {
-            return '<li><span class="kitchen-qty">' + escapeHtml(item.quantity)
-                + '</span> ' + escapeHtml(item.name) + '</li>';
+            return dish(order, item);
         }).join("");
 
         var waiting = order.status === "Pending";
@@ -162,8 +185,9 @@ function startKitchenScreen() {
         if (order.status === "Completed") classes += " kitchen-ticket--done";
         if (order.status === "Cancelled") classes += " kitchen-ticket--cancelled";
 
-        // Nothing to press once an order is finished or called off - the
-        // dot is the whole of what it has left to say.
+        // Nothing to press once an order is finished or called off.
+        // The marks on its lines are the whole of what it has left to
+        // say, and they stop being tappable at the same moment.
         var buttons = waiting
             ? '<button type="button" class="btn btn--delete btn--sm"'
                 + ' data-cancel="' + escapeHtml(order.order_id) + '"'
@@ -175,14 +199,13 @@ function startKitchenScreen() {
         return '<article class="' + classes + '">'
             + '<header class="kitchen-ticket__head">'
             + '<span class="kitchen-ticket__id">#' + number + '</span>'
-            + '<span class="kitchen-ticket__meta">'
-            + statusDot(order.status)
             + '<span class="kitchen-ticket__from">'
             + (order.source === "qr" ? "From a table" : "At the counter")
-            + '</span></span>'
+            + '</span>'
             + '</header>'
             + '<ul class="kitchen-ticket__items">'
-            + (lines || '<li>No items</li>') + '</ul>'
+            + (lines || '<li class="kitchen-line">No items</li>')
+            + '</ul>'
             + '<footer class="kitchen-ticket__foot">'
             + '<span>' + escapeHtml(order.placed) + '</span>'
             + '<span class="kitchen-ticket__actions">' + buttons + '</span>'
@@ -254,6 +277,12 @@ function startKitchenScreen() {
     }
 
     board.addEventListener("click", function (event) {
+        var tick = event.target.closest("[data-item]");
+        if (tick) {
+            send(tick, "/api/kitchen/item/" + tick.dataset.item);
+            return;
+        }
+
         var done = event.target.closest("[data-done]");
         if (done) {
             send(done, "/orders/complete/" + done.dataset.done);

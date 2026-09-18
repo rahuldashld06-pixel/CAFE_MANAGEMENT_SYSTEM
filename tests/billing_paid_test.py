@@ -144,7 +144,7 @@ check("pressing Paid then settles it", bill_row(3)["status"] == "Paid",
       "status is %s" % bill_row(3)["status"])
 
 
-print("\n=== 5. The history lists every day until a period is asked for ===")
+print("\n=== 5. The history opens on today, and keeps everything ===")
 mysql_shim._DB.execute(
     "UPDATE bills SET bill_date = '2026-02-03 09:00:00' WHERE bill_id = 4")
 mysql_shim._DB.commit()
@@ -153,16 +153,25 @@ def listed(query=""):
     html = client.get("/billing" + query).get_data(as_text=True)
     return sorted(set(re.findall(r'data-bill-id="(\d+)"', html)))
 
-check("with no dates, older bills are listed alongside today's",
-      "4" in listed(), "listed %s - the February bill is missing" % listed())
-check("every bill is there", len(listed()) == 4, "listed %s" % listed())
+# Somebody at the till is settling bills from the shift they are
+# standing in, so that is what the page opens on.
+check("it opens on today, not on everything ever saved",
+      "4" not in listed(),
+      "listed %s - a February bill is in front of the till" % listed())
+check("with today's bills all there",
+      sorted(listed()) == ["1", "2", "3"], "listed %s" % listed())
 
 february = listed("?from_date=2026-02-01&to_date=2026-02-28")
-check("a period narrows it to that period",
+check("a period shows that period",
       february == ["4"], "listed %s" % february)
 
-check("clearing the dates brings them all back", len(listed()) == 4,
-      "listed %s" % listed())
+everything = listed("?all=1")
+check("and All History brings back every bill ever saved",
+      len(everything) == 4, "listed %s" % everything)
+
+check("nothing was deleted to make today's list short",
+      "4" in everything,
+      "the February bill is gone for good, not merely out of view")
 
 
 print("\n=== 6. Order Management is today's work ===")
@@ -191,7 +200,36 @@ check("the older order still opens by its own link",
       client.get("/orders/4").status_code == 200,
       "an order that dropped off the list became unreachable")
 check("and its bill is still in Billing history",
-      "4" in listed(), "the bill vanished along with the order")
+      "4" in listed("?all=1"),
+      "the bill vanished along with the order")
+
+print("\n=== 7. Billing shows the number people say out loud ===")
+# The kitchen screen, the printed ticket and the customer holding their
+# phone all use the number that starts again each morning. Billing was
+# showing the permanent row id instead, so one order was #47 on this page
+# and #6 everywhere else - and the person reconciling the till had to
+# work out that they were the same order.
+mysql_shim._DB.execute("UPDATE orders SET daily_no = 7 WHERE order_id = 1")
+mysql_shim._DB.commit()
+
+history = client.get("/billing").get_data(as_text=True)
+row = re.search(r'data-bill-id="1".*?</tr>', history, re.S)
+row = row.group(0) if row else ""
+
+shown = re.search(r'<a href="/orders/1"[^>]*>\s*#(\d+)\s*</a>', row)
+check("the order column shows the number the kitchen calls out",
+      bool(shown) and shown.group(1) == "7",
+      "it shows #%s" % (shown.group(1) if shown else "nothing at all"))
+
+check("and the link still opens the order itself",
+      '/orders/1"' in row,
+      "the number is no longer a way into the order")
+
+# The bill keeps its own number. They are different things counted
+# differently, and the bill number is what the bill is filed under.
+check("the bill keeps its own number",
+      re.search(r'class="bill-id">#1<', row) is not None,
+      "the bill number changed along with the order number")
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))

@@ -3164,13 +3164,69 @@ body.nav-locked {
     list-style: none;
 }
 
-.kitchen-ticket__items li {
+.kitchen-line {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 11px;
     padding: 5px 0;
     font-size: 16px;
     line-height: 1.35;
     color: var(--cream);
+}
+
+.kitchen-line__text {
+    display: flex;
+    gap: 10px;
+    min-width: 0;
+}
+
+/* The mark beside each dish. A circle the size of a thumb, because it is
+   pressed with one, in a kitchen, by somebody holding a pan. */
+.kitchen-tick {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    position: relative;
+    border-radius: 50%;
+    border: 2px solid var(--gold);
+    background: transparent;
+}
+
+button.kitchen-tick { cursor: pointer; }
+
+button.kitchen-tick:hover { background: rgba(242, 201, 76, .18); }
+
+button.kitchen-tick:focus-visible {
+    outline: 2px solid var(--copper-light);
+    outline-offset: 2px;
+}
+
+.kitchen-line--made .kitchen-tick {
+    background: var(--sage);
+    border-color: var(--sage);
+}
+
+/* A tick drawn inside it, so which dishes are done does not rest on
+   colour alone. */
+.kitchen-line--made .kitchen-tick::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 4px;
+    width: 6px;
+    height: 12px;
+    border: solid #15241A;
+    border-width: 0 2.5px 2.5px 0;
+    transform: rotate(45deg);
+}
+
+/* What is made recedes, so what is still to make is what stands out. */
+.kitchen-line--made .kitchen-line__text { color: var(--cream-faint); }
+
+.kitchen-line--off .kitchen-tick {
+    background: var(--berry);
+    border-color: var(--berry);
 }
 
 .kitchen-qty {
@@ -3194,12 +3250,6 @@ body.nav-locked {
 
 /* The dot and where the order came from, kept together so the head stays
    two things with the number on one side and these on the other. */
-.kitchen-ticket__meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
 /* Time on the left, buttons on the right, and allowed to stack rather
    than squeeze on a narrow screen - these get pressed with a thumb. */
 .kitchen-ticket__foot { flex-wrap: wrap; }
@@ -3217,9 +3267,10 @@ body.nav-locked {
    the eye, and there is nothing left to catch it for.
 
    Faded piece by piece rather than as a whole card. Opacity on the
-   article would take the status dot down with it, and on a finished
-   ticket the dot is the one thing left that still has something to say -
-   which is the entire reason these stay on the board. */
+   article would take the marks beside each dish down with it, and on a
+   finished ticket those marks are the one thing left that still has
+   something to say - which is the entire reason these stay on the
+   board. */
 .kitchen-ticket--done,
 .kitchen-ticket--cancelled {
     --ticket-fade: .5;
@@ -3232,12 +3283,12 @@ body.nav-locked {
 
 .kitchen-ticket__id,
 .kitchen-ticket__from,
-.kitchen-ticket__items,
+.kitchen-line__text,
 .kitchen-ticket__foot {
     opacity: var(--ticket-fade, 1);
 }
 
-.kitchen-ticket--cancelled .kitchen-ticket__items li {
+.kitchen-ticket--cancelled .kitchen-line__text {
     text-decoration: line-through;
 }
 
