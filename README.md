@@ -169,9 +169,9 @@ python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
 python tests/print_test.py        # expect PASSED: 51   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 35   FAILED: 0
-python tests/auto_print_test.py   # expect PASSED: 25   FAILED: 0
+python tests/auto_print_test.py   # expect PASSED: 39   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 23   FAILED: 0
-python tests/auto_print_browser_test.py # expect PASSED: 9  FAILED: 0
+python tests/auto_print_browser_test.py # expect PASSED: 12  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
@@ -288,6 +288,18 @@ printing: that both switches start off, that the delay is validated, that
 anyone who works at the café can change them, and — in a real browser —
 that the kitchen ticket waits its configured delay while the receipt does
 not, and that nothing prints while a switch is off.
+
+Kitchen tickets are pulled rather than pushed, for counter orders as well
+as ones sent from a table. Whichever screen asks first claims the ticket
+and prints it, so two tills watching print one ticket between them. When a
+kitchen screen is on it takes them all, and the till stands down — the
+till is next to the customer and the food is made in the kitchen. The
+café's delay is applied to counter orders wherever they end up printing,
+because it exists to leave room to catch an order tapped in wrong; an
+order from a table is not held back, because there is no till to have
+slipped and a customer is waiting. An order taken while nothing was going
+to print it is marked dealt with there and then, so turning the setting on
+after lunch does not run off a ticket for every order already served.
 
 Note that a browser always shows its print dialog. To print silently, start
 Chrome or Edge with `--kiosk-printing` and set the till's receipt printer as

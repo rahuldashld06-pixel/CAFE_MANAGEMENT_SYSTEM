@@ -270,8 +270,40 @@ try:
                 .querySelector('button[type=submit]').click()
     """)
     time.sleep(4.0)
-    check("with the receipt switch off, paying prints nothing",
-          printed() == [], "printed anyway: %s" % printed())
+    receipts = [job for job in printed() if "/bill" in job["url"]]
+    check("with the receipt switch off, paying prints no receipt",
+          receipts == [], "printed a receipt anyway: %s" % receipts)
+
+    print("\n=== 5. With a kitchen screen on, the till leaves it alone ===")
+    # The till stands next to the customer and the kitchen screen stands
+    # next to the cook. Both printing would put two tickets out for one
+    # order; the till printing would put the only one in the wrong room.
+    set_printing(auto_kot="on", kot_delay="2")
+
+    # A kitchen screen checking in, without opening a second browser.
+    seed.post("/api/kitchen/heartbeat", data={"_csrf_token": csrf()},
+              headers={"X-Requested-With": "XMLHttpRequest"})
+
+    b.call("Page.navigate", url=BASE + "/orders/add")
+    wait("!!document.getElementById('orderForm')", "the menu")
+    watch_prints()
+    place_order()
+    time.sleep(6.0)
+
+    check("the till prints nothing while a kitchen screen is watching",
+          printed() == [],
+          "it printed at the counter anyway: %s" % printed())
+
+    # And the ticket is not lost - it is sitting waiting for that screen.
+    waiting = json.loads(seed.get("/api/kitchen/pending")
+                         .get_data(as_text=True))
+    check("the ticket is waiting for the kitchen instead",
+          waiting.get("orders"),
+          "nothing is waiting, so that order has no ticket coming: %s"
+          % waiting)
+    check("and the server agrees a kitchen screen is there",
+          waiting.get("kitchen_watching") is True,
+          "the till was told to stand down by something else entirely")
 
 finally:
     try:

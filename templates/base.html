@@ -762,10 +762,11 @@ window.CafeShell = {
             }).then(function (response) {
                 return response.json();
             }).then(function (data) {
-                // A kitchen screen is on and watching, so its printer is
-                // the right one for a customer's ticket. Leave it alone;
-                // if that screen goes away the server stops saying this
-                // and these screens take the job back.
+                // A kitchen screen is on and watching, so its printer
+                // is the right one for every ticket, whoever rang the
+                // order up. Leave it alone; if that screen goes away the
+                // server stops saying this and these screens take the job
+                // back.
                 if (data && data.kitchen_watching) return;
 
                 var waiting = (data && data.orders) || [];

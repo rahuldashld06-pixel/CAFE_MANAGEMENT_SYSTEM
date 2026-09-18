@@ -3507,11 +3507,16 @@ def add_order():
                 for row in cursor.fetchall()
             ]
 
-        def order_result(success, message, order_id=None, status_code=200):
+        def order_result(success, message, order_id=None, status_code=200,
+                         kitchen_watching=False):
             if wants_json_response():
                 payload = {"success": success, "message": message}
                 if order_id is not None:
                     payload["order_id"] = order_id
+                # Whether a kitchen screen is on. If one is, this till
+                # leaves the ticket to it rather than printing it here,
+                # next to a customer instead of next to the cook.
+                payload["kitchen_watching"] = kitchen_watching
                 payload["foods"] = fetch_food_stock_summary()
                 return jsonify(payload), status_code
 
@@ -3551,6 +3556,23 @@ def add_order():
             return order_result(False, str(error), status_code=400)
 
         order_id = written["order_id"]
+
+        # Is anything going to print this ticket? The cafe may not have
+        # asked for automatic tickets at all, and there may be no kitchen
+        # screen on to pull one.
+        #
+        # If nothing is, the ticket is marked dealt with here rather than
+        # left sitting in the queue. Otherwise every order taken with the
+        # setting off would still be waiting when somebody switched it on
+        # this afternoon, and the printer would run off a ticket for each
+        # one - for food served hours ago.
+        kitchen_watching = kitchen_is_watching(cursor, session.get("cafe_id"))
+        if not get_print_settings()["auto_kot"] and not kitchen_watching:
+            cursor.execute(
+                "UPDATE orders SET kot_printed = 1 "
+                "WHERE order_id = %s AND user_id = %s",
+                (order_id, scope_user_id()))
+
         subtotal = written["subtotal"]
         tax = written["tax"]
         discount = Decimal("0.00")
@@ -3603,7 +3625,8 @@ def add_order():
         return order_result(
             True,
             f"Order #{order_id} created successfully!",
-            order_id=order_id
+            order_id=order_id,
+            kitchen_watching=kitchen_watching,
         )
 
 
@@ -6455,6 +6478,12 @@ def kitchen_board():
         if close_yesterdays_orders(cursor, owner, today):
             connection.commit()
 
+        # Worked out here rather than in the browser, so this screen and
+        # the counter screens can never disagree about what is waiting to
+        # be printed and print it twice between them.
+        waiting = set(tickets_waiting(
+            cursor, owner, get_print_settings()["kot_delay"]))
+
         cursor.execute("""
             SELECT order_id, order_date, total_amount, source,
                    kot_printed, daily_no, order_status
@@ -6493,6 +6522,7 @@ def kitchen_board():
                     "source": row["source"] or "counter",
                     "status": row["order_status"],
                     "printed": bool(row["kot_printed"]),
+                    "printable": row["order_id"] in waiting,
                     "items": lines.get(row["order_id"], []),
                 }
                 for row in orders
@@ -6507,32 +6537,66 @@ def kitchen_board():
             connection.close()
 
 
+def tickets_waiting(cursor, owner_id, delay_seconds):
+    """
+    Orders whose kitchen ticket nobody has printed yet.
+
+    Counter orders as well as ones sent from a table. A ticket is a
+    ticket: the kitchen has to know to cook it, and whether a member of
+    staff tapped it in at the till or a customer sent it from their phone
+    makes no difference to that. Only phone orders used to be here, on the
+    reasoning that the till prints its own - but the till is at the
+    counter, and the food is made in the kitchen.
+
+    A counter order is held back until the cafe's chosen delay has passed,
+    so that delay means the same thing wherever the ticket ends up coming
+    out. It is there to leave room to catch an order tapped in wrong
+    before the kitchen starts on it, and a kitchen screen printing the
+    instant the order lands would take that room away.
+
+    An order from a table is not held back. The delay is there to catch a
+    slip at the till, and there is no till involved - there is a customer
+    sitting waiting for food instead.
+
+    The cutoff is worked out here rather than with DATE_SUB, the same way
+    the best-seller window is, so the statement stays plain SQL.
+
+    Ten at a time. More than ten tickets waiting means nothing has been
+    printing for a while, and the next poll takes the rest.
+    """
+    cutoff = datetime.now() - timedelta(seconds=max(0, int(delay_seconds)))
+    cursor.execute("""
+        SELECT order_id
+        FROM orders
+        WHERE user_id = %s
+          AND kot_printed = 0
+          AND order_status = 'Pending'
+          AND (source = 'qr' OR order_date <= %s)
+        ORDER BY order_id
+        LIMIT 10
+    """, (owner_id, cutoff))
+    return [row["order_id"] for row in cursor.fetchall()]
+
+
 @app.route("/api/kitchen/pending")
 def kitchen_pending():
     """
-    Orders a customer sent from their phone that no till has printed yet.
+    Orders whose kitchen ticket nobody has printed yet.
 
     Polled by whichever staff screens are open. Nobody is standing at the
-    counter when a QR order arrives, so the ticket has to be pulled rather
-    than pushed.
+    counter when an order arrives from a table, so the ticket has to be
+    pulled rather than pushed - and a counter order is pulled the same
+    way, so that it prints in the kitchen when there is a screen there
+    rather than on the till that happened to take it.
     """
     connection = None
     cursor = None
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT order_id
-            FROM orders
-            WHERE user_id = %s
-              AND source = 'qr'
-              AND kot_printed = 0
-              AND order_status = 'Pending'
-            ORDER BY order_id
-            LIMIT 10
-        """, (scope_user_id(),))
         return jsonify({
-            "orders": [row["order_id"] for row in cursor.fetchall()],
+            "orders": tickets_waiting(
+                cursor, scope_user_id(), get_print_settings()["kot_delay"]),
             # A counter screen reads this and leaves the printing to the
             # kitchen while one is watching.
             "kitchen_watching": kitchen_is_watching(

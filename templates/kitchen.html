@@ -220,13 +220,13 @@ function startKitchenScreen() {
 
             if (!printing) return;
 
-            // Only what a customer sent and nobody has dealt with: an
-            // order rung up at the counter already printed its own ticket
-            // there, and one already done or called off must not print now
-            // that finished orders stay on this board.
+            // The server decides what is waiting to be printed -
+            // pending, unprinted, and past the delay this cafe asked for -
+            // so this screen and the counter screens cannot disagree and
+            // print one ticket twice between them. Counter orders are in
+            // that list too now: the food is made here, not at the till.
             return orders.filter(function (order) {
-                return order.status === "Pending"
-                    && order.source === "qr" && !order.printed;
+                return order.printable;
             }).reduce(function (chain, order) {
                 return chain.then(function () {
                     return claimAndPrint(order.order_id);

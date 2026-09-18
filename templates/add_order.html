@@ -1308,6 +1308,30 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
             syncHotMirrors();
         }
 
+        // Take the ticket before printing it. Whichever screen flips the
+        // row first is the one that prints; everybody else is told no and
+        // does nothing. Without this, a kitchen screen coming on during
+        // the delay would print a second copy of the same ticket.
+        function claimThenPrint(orderId) {
+            const shell = window.CafeShell || {};
+            if (!shell.autoPrint) return;
+
+            fetch("/api/kitchen/claim/" + orderId, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRFToken": shell.csrfToken || ""
+                }
+            }).then(function (response) {
+                return response.json();
+            }).then(function (data) {
+                if (data && data.claimed) {
+                    shell.autoPrint("/orders/" + orderId + "/kot");
+                }
+            }).catch(function () { });
+        }
+
         if (orderForm) {
 
             orderForm.addEventListener("submit", function (event) {
@@ -1352,15 +1376,20 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
                             closeSummary();
                             showPageToast(data.message || "Order has been placed.");
 
-                            // Kitchen ticket, if the café has asked for it.
-                            // The delay is its own setting: a few seconds
-                            // leaves room to catch a mistaken order before
-                            // the kitchen starts on it.
+                            // Kitchen ticket, if the café has asked for
+                            // it. The delay is its own setting: a few
+                            // seconds leaves room to catch a mistaken order
+                            // before the kitchen starts on it.
+                            //
+                            // Not printed from here when a kitchen screen
+                            // is on. That screen stands next to the cook
+                            // and this one stands next to the customer, and
+                            // it pulls the ticket by itself.
                             const printing = (window.CafeShell || {}).printing || {};
-                            if (printing.auto_kot && data.order_id) {
+                            if (printing.auto_kot && data.order_id
+                                    && !data.kitchen_watching) {
                                 window.setTimeout(function () {
-                                    window.CafeShell.autoPrint(
-                                        "/orders/" + data.order_id + "/kot");
+                                    claimThenPrint(data.order_id);
                                 }, Math.max(0, Number(printing.kot_delay) || 0) * 1000);
                             }
 

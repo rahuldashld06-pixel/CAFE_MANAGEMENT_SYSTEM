@@ -207,6 +207,143 @@ check("and is unaffected by the first café's settings",
       "settings leaked between tenants")
 
 
+print("\n=== 8. The counter's tickets print in the kitchen too ===")
+# Only a phone order used to be pulled by the kitchen screen. An order
+# rung up at the till printed on the till - which is at the counter, next
+# to the customer, while the food is made in the kitchen.
+import datetime as _dt  # noqa: E402
+
+
+def place(client, quantity="1"):
+    """Ring one up at the counter, the way the page does."""
+    answer = client.post(
+        "/orders/add",
+        data={"quantity_%s" % FOOD: quantity, "_csrf_token": csrf(client)},
+        headers={"X-Requested-With": "XMLHttpRequest"})
+    return answer.get_json() or {}
+
+
+def feed(client):
+    return (client.get("/api/kitchen/pending").get_json() or {}).get(
+        "orders", [])
+
+
+def age(order_id, seconds):
+    """Make an order look as though it was placed a while ago."""
+    when = _dt.datetime.now() - _dt.timedelta(seconds=seconds)
+    mysql_shim._DB.execute(
+        "UPDATE orders SET order_date = ? WHERE order_id = ?",
+        (when.strftime("%Y-%m-%d %H:%M:%S"), order_id))
+    mysql_shim._DB.commit()
+
+
+save(admin, auto_kot="on", kot_delay="0")
+counter = place(admin)
+
+check("the till is told whether a kitchen screen is on",
+      "kitchen_watching" in counter,
+      "it cannot know whether to print or leave it: %s" % sorted(counter))
+check("and with none open it is told there is none",
+      counter.get("kitchen_watching") is False,
+      "it says %r" % counter.get("kitchen_watching"))
+
+check("a counter order is waiting for a ticket like any other",
+      counter.get("order_id") in feed(admin),
+      "the feed lists %s, the order is #%s"
+      % (feed(admin), counter.get("order_id")))
+
+board = admin.get("/api/kitchen/board").get_json()["orders"]
+row = next((r for r in board if r["order_id"] == counter["order_id"]), None)
+check("and the kitchen board marks it as one to print",
+      bool(row) and row.get("printable") is True,
+      "the board says %s" % row)
+
+# Exactly one ticket, however many screens are looking.
+first = admin.post("/api/kitchen/claim/%d" % counter["order_id"],
+                   data={"_csrf_token": csrf(admin)})
+second = admin.post("/api/kitchen/claim/%d" % counter["order_id"],
+                    data={"_csrf_token": csrf(admin)})
+check("only the screen that asks first prints it",
+      (first.get_json() or {}).get("claimed") is True
+      and (second.get_json() or {}).get("claimed") is False,
+      "both were told %s / %s" % (first.get_json(), second.get_json()))
+
+check("and once it is claimed it stops being offered",
+      counter["order_id"] not in feed(admin),
+      "the feed still lists %s" % feed(admin))
+
+print("\n=== 9. The delay still means something, wherever it prints ===")
+# It is there to leave room to catch an order tapped in wrong before the
+# kitchen starts on it. A kitchen screen printing the moment the order
+# lands would take that room away.
+save(admin, auto_kot="on", kot_delay="60")
+held = place(admin)
+
+check("a counter order is held back while the cafe's delay runs",
+      held["order_id"] not in feed(admin),
+      "it was offered straight away: %s" % feed(admin))
+
+age(held["order_id"], 120)
+check("and is offered once that delay has passed",
+      held["order_id"] in feed(admin),
+      "it is still being held: %s" % feed(admin))
+
+# The other side of it: a customer sitting at a table is not a slip at
+# the till, and there is nobody to catch anything.
+token = application.get_public_token(
+    mysql_shim._DB.execute(
+        "SELECT cafe_id FROM cafes ORDER BY cafe_id LIMIT 1").fetchone()[0])
+guest = app.test_client()
+menu = guest.get("/m/%s" % token).get_data(as_text=True)
+menu_ids = re.findall(r'name="quantity_(\d+)"', menu)
+sent = guest.post("/m/%s/order" % token,
+                  data={"quantity_%s" % menu_ids[0]: "1"},
+                  follow_redirects=False)
+from_table = int(sent.headers["Location"].rstrip("/").split("/")[-1])
+
+check("but an order from a table is not held back at all",
+      from_table in feed(admin),
+      "a customer is waiting while a delay meant for the till runs down")
+
+print("\n=== 10. Switching it on does not print the morning's tickets ===")
+# Counter orders queue for a printer now, which means they can also pile
+# up. An order taken while nothing was going to print it must not be
+# waiting in that queue when somebody turns the setting on after lunch -
+# the printer would run off a ticket for every order already served.
+save(admin, kot_delay="0")                   # auto_kot omitted: off
+quiet = place(admin)
+
+check("an order taken with automatic printing off queues no ticket",
+      quiet["order_id"] not in feed(admin),
+      "it is waiting in the queue: %s" % feed(admin))
+
+save(admin, auto_kot="on", kot_delay="0")
+
+check("and switching the setting on does not print it after the fact",
+      quiet["order_id"] not in feed(admin),
+      "turning it on flushed an order taken while it was off: %s"
+      % feed(admin))
+
+check("while the next order taken does get one",
+      place(admin)["order_id"] in feed(admin),
+      "nothing is queued now, so nothing would print at all")
+
+# The exception, and the reason this is decided when the order is taken
+# rather than by the setting alone: a kitchen screen prints what it is
+# given whether or not the counter was asked to.
+save(admin, kot_delay="0")                   # off again
+admin.post("/api/kitchen/heartbeat", data={"_csrf_token": csrf(admin)},
+           headers={"X-Requested-With": "XMLHttpRequest"})
+watched = place(admin)
+
+check("but with a kitchen screen on, the ticket is queued for it anyway",
+      watched["order_id"] in feed(admin),
+      "the kitchen is open and watching, and would get nothing: %s"
+      % feed(admin))
+check("and the till is told to leave that one alone",
+      watched.get("kitchen_watching") is True,
+      "it says %r, so both would print it" % watched.get("kitchen_watching"))
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:
