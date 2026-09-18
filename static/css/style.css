@@ -3319,3 +3319,139 @@ button.kitchen-tick:focus-visible {
 @media (max-width: 560px) {
     .kitchen-board { grid-template-columns: 1fr; }
 }
+
+
+/* ---------- The tour ---------- */
+/* Shown once, on somebody's first sign-in, and after that only when they
+   ask. It replaced the paragraph that used to sit under every page's
+   heading explaining what that page was for - read once, by one person,
+   and then in everyone's way for ever.
+
+   display is set here rather than left to the hidden attribute, because a
+   flex rule would otherwise win against it and the tour would sit over
+   every page permanently. */
+.tour {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(10, 6, 4, .72);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+}
+
+.tour[hidden] { display: none !important; }
+
+body.tour-open { overflow: hidden; }
+
+.tour__box {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    padding: 30px 26px 20px;
+    background: var(--espresso-900);
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+}
+
+.tour__skip {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    padding: 4px 8px;
+    border: 0;
+    background: transparent;
+    color: var(--cream-faint);
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.tour__skip:hover { color: var(--cream); }
+
+.tour__step { text-align: center; }
+
+.tour__step[hidden] { display: none !important; }
+
+.tour__icon {
+    display: grid;
+    place-items: center;
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: rgba(var(--copper-rgb), .15);
+    color: var(--copper-light);
+    font-size: 26px;
+}
+
+.tour__title {
+    margin: 0 0 10px;
+    font-family: var(--font-display);
+    font-size: 23px;
+    color: var(--cream);
+}
+
+.tour__body {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--cream-dim, var(--cream-faint));
+}
+
+.tour__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 26px;
+    padding-top: 16px;
+    border-top: 1px solid var(--espresso-800);
+}
+
+.tour__dots {
+    display: flex;
+    gap: 6px;
+}
+
+.tour__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--espresso-700);
+}
+
+.tour__dot--done { background: rgba(var(--copper-rgb), .55); }
+
+.tour__dot--here {
+    background: var(--copper-light);
+    transform: scale(1.35);
+}
+
+.tour__buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.tour__buttons .btn:disabled {
+    opacity: .4;
+    cursor: default;
+}
+
+/* On a phone it is the whole screen, and the buttons are thumbed. */
+@media (max-width: 560px) {
+    .tour { padding: 14px; align-items: flex-end; }
+
+    .tour__box { padding: 26px 18px 16px; }
+
+    .tour__title { font-size: 20px; }
+
+    .tour__body { font-size: 14.5px; }
+
+    .tour__foot { flex-wrap: wrap; }
+
+    .tour__buttons { margin-left: auto; }
+}

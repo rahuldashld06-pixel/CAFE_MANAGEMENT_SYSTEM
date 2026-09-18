@@ -324,6 +324,23 @@ class _Pooling:
             raise Error("pooling disabled in test shim")
 
 
+def skip_tour():
+    """
+    Mark every account as already shown round.
+
+    Every browser suite registers a brand-new account and signs straight
+    in, which is precisely the case the first-sign-in tour exists for - so
+    without this it opens over the app and swallows the clicks the suite
+    is trying to make. A suite that is not about the tour should not have
+    to close one.
+
+    tests/tour_browser_test.py deliberately does not call this, and
+    tests/tutorial_test.py needs the flag left alone to test it.
+    """
+    _DB.execute("UPDATE users SET tutorial_seen = 1")
+    _DB.commit()
+
+
 def install():
     """Register this shim as `mysql.connector` before app.py is imported."""
     mysql = types.ModuleType("mysql")

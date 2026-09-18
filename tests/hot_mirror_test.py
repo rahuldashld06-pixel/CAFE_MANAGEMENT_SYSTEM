@@ -108,10 +108,23 @@ for _ in range(80):
     except Exception:
         time.sleep(0.25)
 
+# Every account this suite made has been shown round already, so the
+
+# first-sign-in tour does not open over the top of what is being
+
+# tested here.
+
+mysql_shim.skip_tour()
+
+
 browser_path = cdp.find_browser()
 if not browser_path:
     print("SKIPPED: no browser")
     sys.exit(0)
+
+# Every account this suite made has been shown round already, so
+# the first-sign-in tour does not open over what is being tested.
+mysql_shim.skip_tour()
 
 b = cdp.Browser(browser_path)
 

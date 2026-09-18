@@ -27,6 +27,21 @@ branding, fully isolated from the others.
 - **Categories and menu.** Categories, food items with photos, prices.
 - **Inventory.** Stock levels drive availability automatically — an item
   at zero stock disappears from the order screen.
+- **A tour, once.** The first time somebody signs in they are shown
+  round: what each screen is for, in a handful of steps. An owner and
+  somebody on the till get different ones, because somebody on the till
+  never opens Reports and never adds staff. It is remembered against the
+  person rather than the browser, so it does not start again on the
+  tablet in the kitchen, and skipping counts as having seen it. "How this
+  works", under your name, opens it again.
+
+  This is why the screens no longer explain themselves. A paragraph under
+  every heading is read once, by one person, on their first day, and is
+  in everybody's way after that. What stayed is what a tour cannot hand
+  back at the moment it matters: the help on individual settings fields,
+  and any warning that an effect is shared or cannot be undone - that a
+  tax change is not retrospective, that the café's name is everyone's,
+  that a new QR code stops the printed ones working.
 - **Orders.** Multi-item orders, with a live order-status feed. The
   day's orders are worked from the Kitchen screen. Every dish on a ticket
   has its own circle: tap it as that dish is made, and when the last one
@@ -153,6 +168,8 @@ tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
 tests/mobile_nav_test.py Real-browser mobile drawer test suite
+tests/tutorial_test.py First-sign-in tour test suite
+tests/tour_browser_test.py Real-browser first-sign-in tour suite
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
@@ -185,11 +202,13 @@ python tests/qr_order_test.py     # expect PASSED: 112  FAILED: 0
 python tests/kitchen_screen_test.py # expect PASSED: 23  FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
+python tests/tutorial_test.py     # expect PASSED: 24   FAILED: 0
+python tests/tour_browser_test.py # expect PASSED: 18  FAILED: 0
 ```
 
-All eighteen run in memory against a SQLite stand-in — no database or
-network needed. The seven suites that drive a browser use a headless Edge
-or Chrome when one is installed, and skip themselves when none is.
+All twenty-eight run in memory against a SQLite stand-in — no database or
+network needed. The thirteen that drive a browser use a headless Edge or
+Chrome when one is installed, and skip themselves when none is.
 
 `smoke_test.py` takes two cafes through the full lifecycle and asserts
 that neither can read or modify the other's data.

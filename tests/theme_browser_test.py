@@ -128,6 +128,10 @@ print("  server up on %s" % BASE)
 
 
 # --------------------------------------------------------------- driver -----
+# Every account this suite made has been shown round already, so
+# the first-sign-in tour does not open over what is being tested.
+mysql_shim.skip_tour()
+
 browser = cdp.Browser(BROWSER)
 
 

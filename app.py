@@ -1057,6 +1057,9 @@ _CORE_TABLES = [
             photo_mime VARCHAR(80) NULL,
             photo_blob MEDIUMBLOB NULL,
             photo_version INT NOT NULL DEFAULT 1,
+            -- Set once somebody has been shown round, so the tour does
+            -- not start again on the next screen they sign in on.
+            tutorial_seen TINYINT(1) NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_users_cafe_id (cafe_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -1201,6 +1204,10 @@ _CORE_TABLES = [
 _COLUMN_MIGRATIONS = [
     ("users", "phone_number", "VARCHAR(20) NULL"),
     ("users", "cafe_id", "INT NULL"),
+    # Whether this person has been shown round. Everyone who already had
+    # an account reads as not yet shown, which is right: they have never
+    # been offered it.
+    ("users", "tutorial_seen", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("categories", "user_id", "INT NULL"),
     ("categories", "cafe_id", "INT NULL"),
     ("categories", "description", "TEXT NULL"),
@@ -1869,6 +1876,7 @@ def get_current_user():
         # every page, for one integer.
         cursor.execute("""
             SELECT u.user_id, u.username, u.full_name, u.role, u.is_active,
+                   u.tutorial_seen,
                    (u.photo_blob IS NOT NULL) AS has_photo, u.photo_version,
                    c.owner_user_id, c.is_active AS cafe_active,
                    c.auto_kot_enabled, c.auto_kot_delay, c.auto_bill_enabled,
@@ -1978,6 +1986,8 @@ STAFF_ALLOWED_ENDPOINTS = {
     "verify_online_payment", "edit_bill",
     "order_status_feed",
     "change_password", "logout",
+    # Everybody gets shown round, and everybody gets to say they have been.
+    "tutorial_seen",
     "account_photo", "user_media",
     # Whoever is on the till is the one who notices the tickets are wrong.
     "print_settings",
@@ -6689,6 +6699,134 @@ def kitchen_claim(order_id):
         if connection:
             connection.rollback()
         return jsonify({"claimed": False, "error": str(error)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+# ==========================================
+# THE FIRST TIME SOMEBODY SIGNS IN
+# ==========================================
+#
+# All of this used to be written on the pages themselves - a paragraph
+# under each heading explaining what the page was for. That is read once,
+# by one person, on their first day, and then sits there for ever getting
+# between everybody else and the work. So it is said once, properly, when
+# somebody first signs in, and the pages are left to be used.
+#
+# Two versions, because the two jobs are different. Somebody on the till
+# never opens Reports and never adds a member of staff, and walking them
+# through those is the surest way to have the whole thing skipped.
+
+TUTORIAL_ADMIN = [
+    ("bi-cup-hot", "Welcome",
+     "This runs your counter, your kitchen and your till. Here is the "
+     "short tour - a minute, and you can open it again any time from your "
+     "name in the top corner."),
+    ("bi-tags", "Build the menu",
+     "Categories first, for the groups you sell in. Then Food Management "
+     "for the dishes themselves, each with a price and a photo."),
+    ("bi-boxes", "Stock looks after itself",
+     "Inventory holds what you have. When something reaches zero it "
+     "leaves the order screen on its own, so nobody can sell what you "
+     "have run out of."),
+    ("bi-cart-plus", "Take an order",
+     "New Order is the counter screen. Tap the food, set how many, send "
+     "it. The kitchen has it straight away."),
+    ("bi-fire", "The kitchen screen",
+     "Leave this one open where the food is made. Every dish has a "
+     "circle beside it - tap it as that dish is done, and the last one "
+     "closes the order. Done finishes a whole ticket at once; Cancel "
+     "puts the food back on the shelf."),
+    ("bi-credit-card-2-front", "Take the money",
+     "Billing opens on today. Press Paid when they pay, and the printer "
+     "beside it if they ask for a receipt."),
+    ("bi-qr-code", "Let the table order",
+     "Table QR Code, under your name, prints a code for your tables. A "
+     "customer scans it, orders from their own phone, and their ticket "
+     "prints in the kitchen like any other."),
+    ("bi-bar-chart-line", "And the rest",
+     "Reports shows how the days are going. User Management adds the "
+     "people who work here. Everything else - your cafe's name, colour, "
+     "tax rate and printing - is under your name, top right."),
+]
+
+TUTORIAL_STAFF = [
+    ("bi-cup-hot", "Welcome",
+     "Here is the short tour of the screens you will use. A minute, and "
+     "you can open it again any time from your name in the top corner."),
+    ("bi-cart-plus", "Take an order",
+     "New Order is the counter screen. Tap the food, set how many, send "
+     "it. The kitchen has it straight away."),
+    ("bi-fire", "The kitchen screen",
+     "Leave this one open where the food is made. Every dish has a "
+     "circle beside it - tap it as that dish is done, and the last one "
+     "closes the order. Done finishes a whole ticket at once; Cancel "
+     "puts the food back on the shelf."),
+    ("bi-credit-card-2-front", "Take the money",
+     "Billing opens on today. Press Paid when they pay, and the printer "
+     "beside it if they ask for a receipt."),
+    ("bi-boxes", "Keep the menu straight",
+     "Food Management and Inventory are yours too. An item that runs out "
+     "of stock leaves the order screen by itself, and comes back when you "
+     "put stock in."),
+]
+
+
+def tutorial_for(role):
+    """The tour this person should be given."""
+    return TUTORIAL_ADMIN if role == "admin" else TUTORIAL_STAFF
+
+
+@app.context_processor
+def inject_tutorial():
+    """
+    The tour, and whether this person is owed it.
+
+    Read off the user row the request already has, so being able to show
+    it costs nothing on the pages that will not.
+    """
+    user = get_current_user()
+    if not user:
+        return {"tutorial_steps": [], "tutorial_due": False}
+
+    return {
+        "tutorial_steps": tutorial_for(user["role"]),
+        "tutorial_due": not user.get("tutorial_seen"),
+    }
+
+
+@app.route("/api/tutorial/seen", methods=["POST"])
+def tutorial_seen():
+    """
+    Remember that somebody has been shown round.
+
+    Kept against the person rather than the browser, so it does not start
+    again on the tablet in the kitchen, and does not vanish when a browser
+    is cleared. Reaching the end and skipping both count: somebody who
+    skipped it decided they did not need it, and asking again tomorrow is
+    not respecting that.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False}), 403
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "UPDATE users SET tutorial_seen = 1 WHERE user_id = %s",
+            (user_id,))
+        connection.commit()
+        return jsonify({"ok": True})
+    except mysql.connector.Error as error:
+        if connection:
+            connection.rollback()
+        return jsonify({"ok": False, "reason": str(error)}), 500
     finally:
         if cursor:
             cursor.close()

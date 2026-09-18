@@ -376,7 +376,7 @@
     <div class="page-header">
         <div>
             <h1><i class="bi bi-credit-card-2-front"></i> Billing Management</h1>
-            <p class="page-subtitle">Manage bills, payments and saved billing history</p>
+            <p class="page-subtitle">Bills and payments</p>
         </div>
 
         <div class="page-header__actions">
@@ -402,15 +402,9 @@
             <div>
                 <h2><i class="bi bi-calendar3"></i> Billing History Period</h2>
                 <p class="panel-subtitle">
-                    {% if showing_today %}
-                    Showing today. Choose a period, or All History, to see
-                    earlier bills &mdash; nothing is ever deleted.
-                    {% elif show_all %}
-                    Showing every bill ever saved.
-                    {% else %}
-                    Showing the period below. Filtering does not delete any
-                    saved bills.
-                    {% endif %}
+                    {% if showing_today %}Showing today.
+                    {% elif show_all %}Showing every bill ever saved.
+                    {% else %}Showing the period below.{% endif %}
                 </p>
             </div>
         </div>
@@ -667,17 +661,6 @@
         </div>
     </div>
 
-    <div class="panel">
-        <div class="panel-header">
-            <h2><i class="bi bi-shield-check"></i> Billing History</h2>
-        </div>
-
-        <div class="order-meta">
-            <span><i class="bi bi-database-check"></i> Bills are retained in the database.</span>
-            <span><i class="bi bi-calendar-range"></i> Use the date filter to view any period.</span>
-            <span><i class="bi bi-x-circle"></i> Cancelled orders remain linked to their bills.</span>
-        </div>
-    </div>
 
 </div>
 

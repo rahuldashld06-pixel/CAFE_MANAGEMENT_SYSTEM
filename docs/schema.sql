@@ -67,6 +67,13 @@ CREATE TABLE IF NOT EXISTS users (
     is_active      TINYINT(1) NOT NULL DEFAULT 1,
     phone_number   VARCHAR(20) NULL,
     cafe_id        INT NULL,
+    -- This person's own photo, shown beside their name in the corner.
+    photo_mime     VARCHAR(80) NULL,
+    photo_blob     MEDIUMBLOB NULL,
+    photo_version  INT NOT NULL DEFAULT 1,
+    -- Set once they have been shown round on their first sign-in, so the
+    -- tour does not start again on the next screen they sign in on.
+    tutorial_seen  TINYINT(1) NOT NULL DEFAULT 0,
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_users_cafe_id (cafe_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
