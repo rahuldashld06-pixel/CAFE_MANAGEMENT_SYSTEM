@@ -388,22 +388,43 @@ check("pressing it prints rather than leaving the page",
       "the cashier loses their place in the list every time somebody "
       "asks for a receipt")
 
-# The row grew a column. If the message shown when a filter finds nothing
-# still spans the old number, the table comes apart on that day only -
-# which is exactly the sort of thing nobody sees until a customer does.
-billing_template = io.open(os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))), "templates", "billing.html"),
-    encoding="utf-8").read()
+# If the message shown when a filter finds nothing spans the wrong number
+# of columns, the table comes apart on that day only - which is exactly
+# the sort of thing nobody sees until a customer does.
+#
+# Read off the rendered page rather than the template, because the count
+# is no longer a number written in the file: the discount column appears
+# only when some bill on the page has one, so the table has two shapes
+# and both of them have to line up.
+def billing_shape(client):
+    """(columns in the header, what the empty row spans)."""
+    html = client.get("/billing?from_date=1990-01-01&to_date=1990-01-02").get_data(
+        as_text=True)
+    head = re.search(
+        r'<table class="data-table billing-table">.*?<thead>(.*?)</thead>',
+        html, re.S)
+    spans = sorted({int(n) for n in re.findall(
+        r'<td colspan="(\d+)" class="empty-row"', html)})
+    return len(re.findall(r"<th>", head.group(1))) if head else 0, spans
 
-thead = re.search(
-    r'<table class="data-table billing-table">\s*<thead>(.*?)</thead>',
-    billing_template, re.S)
-columns = len(re.findall(r"<th>", thead.group(1))) if thead else 0
-spans = sorted(set(re.findall(r'colspan="(\d+)"', billing_template)))
 
-check("and the empty-day message still spans every column",
-      columns > 0 and spans == [str(columns)],
-      "%d columns, but colspan says %s" % (columns, spans))
+columns, spans = billing_shape(a)
+check("the empty-day message spans every column",
+      columns > 0 and spans == [columns],
+      "%d columns, but the empty row spans %s" % (columns, spans))
+
+# And again with a discount on the books, which adds a column.
+a.post("/settings/tax", data={"tax_percent": "5", "discount_percent": "10",
+                              "_csrf_token": csrf(a)},
+       follow_redirects=True)
+place(a, {foods[0]: 1})
+a.get("/billing")          # raises the bill
+
+columns, spans = billing_shape(a)
+check("and still does once a discount adds one",
+      columns > 0 and spans == [columns],
+      "%d columns with the discount column in, but the empty row spans %s"
+      % (columns, spans))
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))

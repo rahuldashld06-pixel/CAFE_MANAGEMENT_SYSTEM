@@ -17,6 +17,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 import io
 import os
+import re
 import mysql.connector
 from decimal import Decimal, InvalidOperation
 try:
@@ -907,7 +908,8 @@ def collect_order_items(foods, wanted):
     return lines
 
 
-def write_order(cursor, owner_id, cafe_id, lines, tax_mult, source="counter"):
+def write_order(cursor, owner_id, cafe_id, lines, tax_mult,
+                source="counter", discount_mult=None):
     """
     Write one order, its lines, and take the stock off the shelf.
 
@@ -919,8 +921,8 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult, source="counter"):
     half way leaves no order behind.
     """
     subtotal = sum((line["subtotal"] for line in lines), Decimal("0.00"))
-    tax = (subtotal * tax_mult).quantize(Decimal("0.01"))
-    total = subtotal + tax
+    totals = bill_totals(subtotal, tax_mult, discount_mult)
+    total = totals["total"]
 
     # The number people say out loud. Counted within this cafe's own day,
     # so two cafes both have a number 1 this morning and neither sees the
@@ -1003,13 +1005,7 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult, source="counter"):
             WHERE f.food_id = %s AND f.user_id = %s
         """, (line["food_id"], owner_id))
 
-    return {
-        "order_id": order_id,
-        "daily_no": daily_no,
-        "subtotal": subtotal,
-        "tax": tax,
-        "total": total,
-    }
+    return dict(totals, order_id=order_id, daily_no=daily_no)
 
 
 
@@ -1039,7 +1035,13 @@ _CORE_TABLES = [
             public_token VARCHAR(40) NULL,
             kitchen_seen_at DATETIME NULL,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+            discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
             theme VARCHAR(20) NOT NULL DEFAULT 'copper',
+            -- Any accent and any background at all, beyond the six
+            -- named themes. Empty means the theme decides, which is
+            -- what every cafe had before these were a choice.
+            accent_hex VARCHAR(7) NULL,
+            surface_hex VARCHAR(7) NULL,
             -- Which clock this cafe keeps. Times are stored in UTC and
             -- read back on this one.
             timezone VARCHAR(64) NULL,
@@ -1267,9 +1269,17 @@ _COLUMN_MIGRATIONS = [
     # Per-café tax rate. 5.00 is what every bill was hard-coded to before
     # this was configurable, so existing cafés keep their current totals.
     ("cafes", "tax_percent", "DECIMAL(5,2) NOT NULL DEFAULT 5.00"),
+    # A standing discount off every new bill. Zero by default, which is
+    # what every bill charged before this was a choice.
+    ("cafes", "discount_percent", "DECIMAL(5,2) NOT NULL DEFAULT 0.00"),
     # The accent colour. 'copper' is the look every café had before this
     # was a choice, so nothing changes appearance on upgrade.
     ("cafes", "theme", "VARCHAR(20) NOT NULL DEFAULT 'copper'"),
+    # Any accent and any background at all, for a cafe that wants one the
+    # six themes do not offer. Empty means the theme decides, so nothing
+    # changes appearance on upgrade until somebody picks.
+    ("cafes", "accent_hex", "VARCHAR(7) NULL"),
+    ("cafes", "surface_hex", "VARCHAR(7) NULL"),
     # Which clock the cafe keeps. Empty means the deployment's own
     # setting, and UTC beyond that - the same reading every cafe got
     # before this was a choice, so nothing moves on upgrade until
@@ -1891,7 +1901,8 @@ def get_current_user():
                    (u.photo_blob IS NOT NULL) AS has_photo, u.photo_version,
                    c.owner_user_id, c.is_active AS cafe_active,
                    c.auto_kot_enabled, c.auto_kot_delay, c.auto_bill_enabled,
-                   c.theme, c.timezone,
+                   c.theme, c.accent_hex, c.surface_hex, c.timezone,
+                   c.tax_percent, c.discount_percent,
                    c.cafe_name, c.branding_version,
                    c.brand_name, c.brand_tagline,
                    (c.logo_blob IS NOT NULL) AS has_logo,
@@ -1911,6 +1922,8 @@ def get_current_user():
     # out of the user dict so nothing mistakes a café's name for a person's.
     PRINTING_KEYS = ("auto_kot_enabled", "auto_kot_delay",
                      "auto_bill_enabled", "theme",
+                     "accent_hex", "surface_hex",
+                     "tax_percent", "discount_percent",
                      "cafe_name", "branding_version",
                      "brand_name", "brand_tagline",
                      "has_logo", "has_login_photo")
@@ -1932,6 +1945,14 @@ def get_current_user():
             # Same idea for the accent colour: every page is painted in
             # it, so it must not cost a query of its own.
             g.cafe_theme = normalize_theme(row["theme"])
+            # And what this café adds and takes off, for the same
+            # reason: the New Order screen and every bill want them.
+            g.cafe_rates = rates_from_row(row)
+
+            g.cafe_colours = {
+                "accent": parse_colour(row["accent_hex"]),
+                "surface": parse_colour(row["surface_hex"]),
+            }
 
             # And the café's own name and logo, which the sidebar and the
             # mobile top bar show on every page. Reading them here rather
@@ -2042,6 +2063,308 @@ def normalize_theme(value):
     return value if value in THEME_IDS else DEFAULT_THEME
 
 
+# ---------------------------------------------------------------------
+# A cafe's own colours
+#
+# The six themes above move the accent and nothing else. An admin can
+# also hand the app any accent and any background at all, and the
+# background is much the harder half: the app is written for dark
+# surfaces with cream text on them, so a cafe that picked a pale
+# background would otherwise get cream text on cream and be unusable.
+#
+# So a chosen background brings the whole set with it - six surface
+# levels and the three weights of text that sit on them - all derived
+# from the one colour that was picked.
+#
+# Derived in HSL, holding hue and saturation and moving only lightness,
+# because that is exactly what the built-in ramp is: #170F0B through
+# #6B4B34 is one hue at one saturation climbing from 7% lightness to
+# 31%. Blending towards white instead would wash the colour out to grey
+# on the way up, and a cafe that asked for a warm background would get a
+# grey one.
+#
+# Nothing is emitted at all while a cafe has chosen neither, so the
+# default look is not a derivation of itself - it is the stylesheet,
+# untouched, exactly as it has always been.
+# ---------------------------------------------------------------------
+
+_HEX_COLOUR = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def parse_colour(value):
+    """
+    A colour we are willing to put in a style attribute, or None.
+
+    The value is written straight into the page's style attribute, so it
+    is never allowed to be arbitrary text: anything that is not three or
+    six hex digits is not a colour, and is dropped rather than echoed
+    back into the page.
+    """
+    match = _HEX_COLOUR.match((value or "").strip())
+    if not match:
+        return None
+
+    digits = match.group(1).lower()
+    if len(digits) == 3:
+        digits = "".join(digit + digit for digit in digits)
+    return "#" + digits
+
+
+def _to_hsl(colour):
+    """#rrggbb -> (hue 0-360, saturation 0-1, lightness 0-1)."""
+    red, green, blue = (int(colour[at:at + 2], 16) / 255.0
+                        for at in (1, 3, 5))
+    high, low = max(red, green, blue), min(red, green, blue)
+    light = (high + low) / 2
+    spread = high - low
+
+    if spread == 0:
+        return 0.0, 0.0, light
+
+    saturation = spread / (2 - high - low if light > 0.5 else high + low)
+    if high == red:
+        hue = ((green - blue) / spread) % 6
+    elif high == green:
+        hue = (blue - red) / spread + 2
+    else:
+        hue = (red - green) / spread + 4
+    return hue * 60, saturation, light
+
+
+def _from_hsl(hue, saturation, light):
+    """(hue, saturation, lightness) -> #rrggbb."""
+    light = min(1.0, max(0.0, light))
+    saturation = min(1.0, max(0.0, saturation))
+
+    chroma = (1 - abs(2 * light - 1)) * saturation
+    second = chroma * (1 - abs((hue / 60.0) % 2 - 1))
+    floor = light - chroma / 2
+
+    red, green, blue = [
+        (chroma, second, 0), (second, chroma, 0), (0, chroma, second),
+        (0, second, chroma), (second, 0, chroma), (chroma, 0, second),
+    ][int(hue // 60) % 6]
+
+    return "#%02x%02x%02x" % tuple(
+        int(round((channel + floor) * 255))
+        for channel in (red, green, blue))
+
+
+def _luminance(colour):
+    """How bright a colour reads, on the scale contrast is measured on."""
+    channels = []
+    for at in (1, 3, 5):
+        value = int(colour[at:at + 2], 16) / 255.0
+        channels.append(value / 12.92 if value <= 0.03928
+                        else ((value + 0.055) / 1.055) ** 2.4)
+    return (0.2126 * channels[0] + 0.7152 * channels[1]
+            + 0.0722 * channels[2])
+
+
+def _contrast(one, other):
+    """The ratio between two colours, 1 for identical and 21 for ink on
+    paper."""
+    high, low = sorted((_luminance(one), _luminance(other)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def _place(hue, saturation, level, against, floor, away):
+    """
+    A colour at roughly this lightness, but never closer than the floor.
+
+    Fixed lightnesses are fine while the background sits near one end of
+    the scale. Against a mid-toned background there is little room
+    either side, and a level that reads as a quiet hint on espresso
+    lands two points off a mid blue and cannot be seen at all. So the
+    ideal position is only a starting point: it is pushed away from the
+    background, a step at a time, until it clears the floor or runs out
+    of scale.
+    """
+    for step in range(0, 101):
+        candidate = _from_hsl(hue, saturation,
+                              min(1.0, max(0.0, level + away * step * 0.01)))
+        if _contrast(candidate, against) >= floor:
+            return candidate
+    return candidate
+
+
+def accent_variables(colour):
+    """
+    One accent colour, as the three things the stylesheet asks for.
+
+    A lighter one for hover, a darker one for pressed, and the same
+    colour again as three numbers - because rgba() cannot be handed a
+    hex variable, and half the tints in the stylesheet are rgba().
+
+    The two steps are the ones the built-in themes already use: copper
+    is #E08A3E, and its light and dark are that colour nine lightness
+    points up and twelve down.
+    """
+    hue, saturation, light = _to_hsl(colour)
+    red, green, blue = (int(colour[at:at + 2], 16) for at in (1, 3, 5))
+
+    return {
+        "--copper": colour,
+        "--copper-light": _from_hsl(hue, saturation, min(0.96, light + 0.09)),
+        "--copper-dark": _from_hsl(hue, saturation, max(0.08, light - 0.12)),
+        "--copper-rgb": "%d, %d, %d" % (red, green, blue),
+    }
+
+
+# Where each surface sits along the ramp, as a fraction of its length.
+# Taken from the built-in ramp, which climbs 0, 2.7, 4.7, 8.3, 14.9 and
+# 24.5 lightness points above its darkest level.
+_SURFACE_STOPS = (0.0, 0.11, 0.19, 0.34, 0.61, 1.0)
+_SURFACE_NAMES = ("--espresso-950", "--espresso-900", "--espresso-850",
+                  "--espresso-800", "--espresso-700", "--espresso-600")
+
+# How far the ramp travels. 24.5 points is the built-in ramp's own
+# length; the headroom term shortens it when the chosen colour is
+# already near one end of the scale, rather than letting the top of the
+# ramp flatten against black or white and every surface come out alike.
+_RAMP_POINTS = 0.245
+
+
+def surface_variables(colour):
+    """
+    One background colour, as the whole palette the app is painted in.
+
+    Six surfaces and the three weights of text that sit on them. A dark
+    background lightens as it goes up - panels sit above the page,
+    borders above those - and carries pale text. A pale background does
+    the opposite in both respects, so an admin who asks for a white cafe
+    gets a white one that can still be read, rather than cream on cream.
+    """
+    hue, saturation, light = _to_hsl(colour)
+
+    # Which way is up. A pale background wants its panels darker than
+    # the page rather than lighter, or the ramp would run off the top of
+    # the scale and every surface would be the same white.
+    #
+    # Decided on how bright the colour actually looks, not on its
+    # lightness in HSL, because the two disagree badly on saturated
+    # colours: #7FFF00 is a lightness of exactly 0.5 and one of the
+    # brightest colours a screen can make. Treated as a dark background
+    # it was given white text at 1.3:1, which is nothing anybody could
+    # read. Half of perceived brightness is around 0.18, not 0.5.
+    pale = _luminance(colour) > 0.18
+    headroom = light if pale else 1.0 - light
+    span = min(_RAMP_POINTS, headroom * 0.45)
+    direction = -1 if pale else 1
+
+    variables = {}
+    for name, stop in zip(_SURFACE_NAMES, _SURFACE_STOPS):
+        variables[name] = _from_hsl(
+            hue, saturation, light + direction * span * stop)
+
+    # Text, at the three weights the stylesheet uses: body, secondary,
+    # and the muted hints. Kept in the background's own hue, so a cool
+    # cafe is not given warm cream, but with the saturation dropping
+    # away as the text darkens: a hint at half lightness carrying the
+    # background's full saturation stops reading as grey text and starts
+    # reading as coloured text, which is not what a hint is for.
+    #
+    # The floors are what make an awkward background survivable. Body
+    # text has to be readable outright; the quieter weights have to stay
+    # visibly there. Against espresso these never bind - the ideal
+    # positions already clear them by a distance - so the app's own look
+    # is unchanged and the floors only do anything for the backgrounds
+    # that need them.
+    tint = min(0.45, saturation)
+    away = -1 if pale else 1
+    for name, weight, level, floor in (
+            ("--cream", 1.00, 0.14 if pale else 0.91, 7.0),
+            ("--cream-dim", 0.62, 0.30 if pale else 0.73, 4.5),
+            ("--cream-faint", 0.38, 0.46 if pale else 0.52, 3.0)):
+        variables[name] = _place(hue, tint * weight, level,
+                                 variables["--espresso-950"], floor, away)
+
+    # The product's own mark. Painted in the accent normally, but the
+    # accent is free too, and a pale accent on a pale background at 12%
+    # opacity is not a mark anybody can see. So a cafe that chooses a
+    # background gets an ink derived from that background instead, at
+    # the far end of the scale from it.
+    #
+    # The far end rather than merely a contrasting tone, because the
+    # mark is drawn at 12%: what reaches the eye is a tenth of the
+    # distance between the ink and the page, so that distance is worth
+    # all the room there is.
+    #
+    # The mark itself is not affected. It is not the cafe's to move -
+    # only whether it can be seen.
+    variables["--watermark-ink"] = _from_hsl(
+        hue, tint * 0.5, 0.05 if pale else 0.96)
+
+    return variables
+
+
+def get_cafe_colours():
+    """
+    The accent and background this cafe has chosen, either one possibly
+    None.
+
+    None is the ordinary case and means "whatever the theme says", so a
+    cafe that has never opened the page is painted by the stylesheet
+    alone. Normally free: get_current_user() reads both off the cafe row
+    it already joins.
+    """
+    if has_request_context() and "cafe_colours" in g:
+        return g.cafe_colours
+
+    cafe_id = session.get("cafe_id")
+    if not cafe_id:
+        return {"accent": None, "surface": None}
+
+    connection = None
+    cursor = None
+    row = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT accent_hex, surface_hex FROM cafes WHERE cafe_id = %s",
+            (cafe_id,))
+        row = cursor.fetchone()
+    except mysql.connector.Error:
+        # A cafe that predates the columns must still be able to open a
+        # page. It gets the theme's own colours, which is what it had.
+        row = None
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+    colours = {
+        "accent": parse_colour(row["accent_hex"]) if row else None,
+        "surface": parse_colour(row["surface_hex"]) if row else None,
+    }
+    if has_request_context():
+        g.cafe_colours = colours
+    return colours
+
+
+def colour_style(colours):
+    """
+    A cafe's colours as a style attribute for the page's root element.
+
+    An attribute rather than a stylesheet rule, because it has to beat
+    :root[data-theme="..."] in theme.css - and an inline style beats
+    every selector there is, so there is no specificity arithmetic here
+    for somebody to get wrong later.
+
+    Empty when a cafe has chosen nothing, and the attribute is then left
+    off the element altogether.
+    """
+    variables = {}
+    if colours.get("surface"):
+        variables.update(surface_variables(colours["surface"]))
+    if colours.get("accent"):
+        variables.update(accent_variables(colours["accent"]))
+
+    return "".join("%s:%s;" % pair for pair in sorted(variables.items()))
+
+
 def get_cafe_theme():
     """
     The café's accent colour.
@@ -2078,7 +2401,13 @@ def get_cafe_theme():
 
 @app.context_processor
 def inject_theme():
-    return {"cafe_theme": get_cafe_theme(), "themes": THEMES}
+    colours = get_cafe_colours()
+    return {
+        "cafe_theme": get_cafe_theme(),
+        "themes": THEMES,
+        "cafe_colours": colours,
+        "cafe_colour_style": colour_style(colours),
+    }
 
 
 # A kitchen screen checks in every 20 seconds; three missed and the
@@ -2148,47 +2477,143 @@ def user_photo_url(user_id, version=None):
 DEFAULT_TAX_PERCENT = Decimal("5.00")
 MAX_TAX_PERCENT = Decimal("100.00")
 
+# No discount at all is what every bill carried before this was a choice,
+# so a café that never opens the page keeps the totals it already had.
+DEFAULT_DISCOUNT_PERCENT = Decimal("0.00")
+MAX_DISCOUNT_PERCENT = Decimal("100.00")
 
-def get_tax_percent(cafe_id=None):
-    """
-    The café's tax rate, as a percentage.
 
-    Cached for the request: order creation and the billing page both need it,
-    and it is read again to render the New Order screen. Falls back to the
-    5% every bill used before the rate was configurable, so a café that has
-    never opened the settings page keeps the totals it already had.
+def get_cafe_rates(cafe_id=None):
     """
-    if cafe_id is None and has_request_context() and "cafe_tax_percent" in g:
-        return g.cafe_tax_percent
+    What this café adds and what it takes off, in one read.
+
+    Both together rather than a column each: every page that wants the
+    tax wants the discount as well, and one round trip to the database
+    costs about as much as two do. Cached for the request, and normally
+    free - get_current_user() reads both off the café row it joins.
+
+    Falls back to the 5% and the nothing that every bill was hard-coded
+    to before these were configurable.
+    """
+    if cafe_id is None and has_request_context() and "cafe_rates" in g:
+        return g.cafe_rates
+
+    fallback = {"tax": DEFAULT_TAX_PERCENT,
+                "discount": DEFAULT_DISCOUNT_PERCENT}
 
     target = cafe_id if cafe_id is not None else session.get("cafe_id")
     if not target:
-        return DEFAULT_TAX_PERCENT
+        return fallback
 
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT tax_percent FROM cafes WHERE cafe_id = %s", (target,)
+            "SELECT tax_percent, discount_percent FROM cafes "
+            "WHERE cafe_id = %s", (target,)
         )
         row = cursor.fetchone()
-        rate = row["tax_percent"] if row and row["tax_percent"] is not None             else DEFAULT_TAX_PERCENT
-        rate = Decimal(str(rate))
+        rates = rates_from_row(row)
     except mysql.connector.Error:
-        # A café that predates the column must still be able to take orders.
-        rate = DEFAULT_TAX_PERCENT
+        # A café that predates the columns must still be able to take
+        # orders.
+        rates = fallback
     finally:
         cursor.close()
         connection.close()
 
     if cafe_id is None and has_request_context():
-        g.cafe_tax_percent = rate
-    return rate
+        g.cafe_rates = rates
+    return rates
+
+
+def rates_from_row(row):
+    """The two rates off a café row, whoever happened to read it."""
+    def rate(key, fallback):
+        value = row.get(key) if row else None
+        return Decimal(str(value)) if value is not None else fallback
+
+    return {
+        "tax": rate("tax_percent", DEFAULT_TAX_PERCENT),
+        "discount": rate("discount_percent", DEFAULT_DISCOUNT_PERCENT),
+    }
+
+
+def get_tax_percent(cafe_id=None):
+    """The café's tax rate, as a percentage."""
+    return get_cafe_rates(cafe_id)["tax"]
+
+
+def get_discount_percent(cafe_id=None):
+    """
+    The café's standing discount, as a percentage.
+
+    Taken off every new bill before the tax is worked out, which is the
+    order that matters: a customer is taxed on what they actually pay,
+    not on what they would have paid.
+    """
+    return get_cafe_rates(cafe_id)["discount"]
 
 
 def tax_multiplier(cafe_id=None):
     """The rate as a fraction, e.g. 5.00% -> Decimal('0.05')."""
     return get_tax_percent(cafe_id) / Decimal("100")
+
+
+def discount_multiplier(cafe_id=None):
+    """The discount as a fraction, e.g. 10.00% -> Decimal('0.10')."""
+    return get_discount_percent(cafe_id) / Decimal("100")
+
+
+def rates_on_bill(bill):
+    """
+    The rates a bill was actually raised at, from its own figures.
+
+    Not the café's current settings. A café that moved from 5% to 12%
+    would otherwise have every old receipt reprint as "Tax (12%)" beside
+    an amount charged at 5% - the number right and the label wrong,
+    which is worse than either.
+
+    Worked back out rather than stored, because the figures that matter
+    are the amounts and those have been on the bill all along.
+    """
+    def percent(part, whole):
+        part = Decimal(str(part or 0))
+        whole = Decimal(str(whole or 0))
+        if whole <= 0 or part <= 0:
+            return Decimal("0")
+        return (part / whole * 100).quantize(Decimal("0.01"))
+
+    subtotal = Decimal(str((bill or {}).get("subtotal") or 0))
+    discount = Decimal(str((bill or {}).get("discount") or 0))
+
+    return {
+        "discount": percent(discount, subtotal),
+        # Tax is charged on what is left after the discount, so that is
+        # what it is a percentage of.
+        "tax": percent((bill or {}).get("tax"), subtotal - discount),
+    }
+
+
+def bill_totals(subtotal, tax_mult, discount_mult=None):
+    """
+    What a bill comes to: subtotal, discount off, tax on the rest.
+
+    The one place the arithmetic lives, because it is done in four -
+    the counter, a QR order, the bill written beside an order, and the
+    repair that fills in a missing one - and four copies of a sum is
+    four chances for a total to disagree with itself.
+    """
+    discount_mult = discount_mult or Decimal("0")
+    discount = (subtotal * discount_mult).quantize(Decimal("0.01"))
+    taxable = subtotal - discount
+    tax = (taxable * tax_mult).quantize(Decimal("0.01"))
+    return {
+        "subtotal": subtotal,
+        "discount": discount,
+        "tax": tax,
+        "total": taxable + tax,
+    }
 
 
 def get_cafe_owner_id():
@@ -3313,6 +3738,8 @@ def format_local_time(value):
 
 app.jinja_env.filters["receipt_time"] = format_receipt_time
 app.jinja_env.filters["local_time"] = format_local_time
+# A rate as people write it: 5.00 -> "5", 12.50 -> "12.5".
+app.jinja_env.filters["trim_zeros"] = format_percent
 
 
 @app.route("/api/order-status")
@@ -3623,7 +4050,9 @@ def add_order():
                 # The on-screen totals must agree with what the server will
                 # charge, so both read the same café rate.
                 tax_rate=float(tax_multiplier()),
+                discount_rate=float(discount_multiplier()),
                 tax_percent=get_tax_percent(),
+                discount_percent=get_discount_percent(),
                 # Every food, hot ones included, still appears under its
                 # own category heading.
                 food_groups=group_foods_by_category(foods)
@@ -3701,6 +4130,7 @@ def add_order():
                 require_cafe_session(),
                 selected_items,
                 tax_multiplier(),
+                discount_mult=discount_multiplier(),
                 source="counter",
             )
         except OrderError as error:
@@ -3727,7 +4157,7 @@ def add_order():
 
         subtotal = written["subtotal"]
         tax = written["tax"]
-        discount = Decimal("0.00")
+        discount = written["discount"]
         total_amount = written["total"]
 
         # ==================================================
@@ -3891,7 +4321,7 @@ def print_bill(order_id):
         return render_template(
             "print_bill.html",
             branding=get_cafe_branding(session.get("cafe_id")),
-            tax_percent=get_tax_percent(),
+            charged=rates_on_bill(data.get("bill")),
             quote=quote_for(order_id),
             printed_at=utc_now(),
             **data
@@ -4689,10 +5119,10 @@ def ensure_missing_bills_for_user(user_id):
                 (order["order_id"],),
             )
             row = cursor.fetchone()
-            subtotal = Decimal(str(row["subtotal"] or 0))
-            tax = (subtotal * tax_multiplier()).quantize(Decimal("0.01"))
-            discount = 0
-            total = subtotal + tax - discount
+            totals = bill_totals(Decimal(str(row["subtotal"] or 0)),
+                                 tax_multiplier(), discount_multiplier())
+            subtotal, tax = totals["subtotal"], totals["tax"]
+            discount, total = totals["discount"], totals["total"]
 
             cursor.execute(
                 """
@@ -6896,9 +7326,9 @@ _WELCOME = _step(
 _PROFILE = _step(
     "bi-person-circle", "Your name, top right", "[data-tour=profile]",
     "Everything about the cafe itself lives behind your name.",
-    "It opens your cafe's name and colour, the clock it keeps, the tax "
-    "rate, automatic printing, the QR code for your tables - and this "
-    "tour again, under How this works.")
+    "It opens your cafe's name, its colours, the clock it keeps, the tax "
+    "and discount, automatic printing, the QR code for your tables - and "
+    "this tour again, under How this works.")
 
 _COUNTER = [
     _step("bi-tags", "Categories", "[data-tour=categories]",
@@ -7179,12 +7609,16 @@ def kitchen_item_made(order_item_id):
 @app.route("/settings/tax", methods=["GET", "POST"])
 def tax_settings():
     """
-    The café's tax rate, in one place.
+    What the café adds to a bill and what it takes off, in one place.
 
-    Admin only: the rate decides what every future bill charges, so it is
-    not something a cashier should be able to move. Bills already issued
-    keep the tax they were raised with - changing the rate is not a way to
-    rewrite history.
+    The discount comes off the subtotal before the tax is worked out,
+    which is the order that matters: a customer is taxed on what they
+    actually pay, not on what they would have paid without the discount.
+
+    Admin only: between them these two decide what every future bill
+    charges, so they are not something a cashier should be able to move.
+    Bills already issued keep the rates they were raised with - changing
+    these is not a way to rewrite history.
     """
     denied = require_role("admin")
     if denied:
@@ -7198,31 +7632,53 @@ def tax_settings():
         cafe_id = require_cafe_session()
 
         if request.method == "POST":
-            raw = (request.form.get("tax_percent") or "").strip()
-            try:
-                rate = Decimal(raw)
-            except (InvalidOperation, ValueError):
-                flash("Enter the tax rate as a number, for example 5 or 12.5.")
-                return redirect(stay_on('tax_settings'))
+            # A field that was not sent leaves that rate alone. The page
+            # posts both together, but the two are separate settings and
+            # somebody sending one of them is asking to change one of
+            # them - not to have the other rejected or reset.
+            current = get_cafe_rates(cafe_id)
+            rates = {"tax_percent": current["tax"],
+                     "discount_percent": current["discount"]}
 
-            if rate < 0 or rate > MAX_TAX_PERCENT:
-                flash("The tax rate must be between 0 and 100 percent.")
-                return redirect(stay_on('tax_settings'))
+            for field, ceiling, label in (
+                    ("tax_percent", MAX_TAX_PERCENT, "tax rate"),
+                    ("discount_percent", MAX_DISCOUNT_PERCENT, "discount")):
+                raw = (request.form.get(field) or "").strip()
+                if not raw:
+                    continue
+                try:
+                    rate = Decimal(raw)
+                except (InvalidOperation, ValueError):
+                    flash("Enter the %s as a number, for example 5 or 12.5."
+                          % label)
+                    return redirect(stay_on('tax_settings'))
+
+                if rate < 0 or rate > ceiling:
+                    flash("The %s must be between 0 and %s percent."
+                          % (label, format_percent(ceiling)))
+                    return redirect(stay_on('tax_settings'))
+
+                rates[field] = rate.quantize(Decimal("0.01"))
 
             cursor.execute(
-                "UPDATE cafes SET tax_percent = %s WHERE cafe_id = %s",
-                (rate.quantize(Decimal("0.01")), cafe_id)
+                "UPDATE cafes SET tax_percent = %s, discount_percent = %s "
+                "WHERE cafe_id = %s",
+                (rates["tax_percent"], rates["discount_percent"], cafe_id)
             )
             connection.commit()
-            g.pop("cafe_tax_percent", None)
+            g.pop("cafe_rates", None)
+            g.pop("current_user_row", None)
 
-            flash("Tax rate saved. New orders will use %s%%."
-                  % format_percent(rate))
+            flash("Saved. New orders will use %s%% tax and %s%% discount."
+                  % (format_percent(rates["tax_percent"]),
+                     format_percent(rates["discount_percent"])))
             return redirect(came_from())
 
+        rates = get_cafe_rates(cafe_id)
         return render_template(
             "tax_settings.html",
-            tax_percent=get_tax_percent(cafe_id),
+            tax_percent=rates["tax"],
+            discount_percent=rates["discount"],
         )
     finally:
         if cursor:
@@ -7329,6 +7785,7 @@ def public_menu(token):
             food_count=len(foods),
             tax_percent=get_tax_percent(cafe["cafe_id"]),
             tax_rate=float(tax_multiplier(cafe["cafe_id"])),
+            discount_rate=float(discount_multiplier(cafe["cafe_id"])),
         )
     finally:
         if cursor:
@@ -7372,6 +7829,7 @@ def public_place_order(token):
                 lines,
                 tax_multiplier(cafe["cafe_id"]),
                 source="qr",
+                discount_mult=discount_multiplier(cafe["cafe_id"]),
             )
             connection.commit()
         except OrderError as error:
@@ -7590,15 +8048,26 @@ def web_manifest():
 @app.route("/settings/theme", methods=["GET", "POST"])
 def theme_settings():
     """
-    The café's accent colour.
+    The café's colours - the accent and the background, in one place.
+
+    One page rather than two, because they are one decision: an accent
+    is chosen against a background and a background against an accent,
+    and picking them on separate screens means choosing each one blind.
+
+    Six ready-made accents for anyone who just wants the app to look
+    different, and either colour can be set to anything at all for
+    anyone who has a cafe to match. A chosen background brings its own
+    surfaces and its own text with it - see surface_variables() - so a
+    pale one is a pale cafe that can still be read, rather than cream on
+    cream.
 
     Admin only, and café-wide. Everyone signed in to the same café works off
     the same screens, so this is a decision about the room rather than a
     personal preference - which is also why a cashier sees the admin's
     choice rather than being able to pick their own.
 
-    Leave it alone and it stays Copper, which is how the app has always
-    looked.
+    Leave it all alone and it stays Copper on espresso, which is how the
+    app has always looked.
     """
     denied = require_role("admin")
     if denied:
@@ -7617,15 +8086,39 @@ def theme_settings():
                 flash("Pick one of the colours shown.")
                 return redirect(stay_on('theme_settings'))
 
+            # A custom colour only counts while its own option is the one
+            # selected. Otherwise the picker's leftover value - it always
+            # holds some colour, there is no empty state for one - would
+            # quietly override the ready-made accent somebody just chose.
+            accent = None
+            if request.form.get("accent_mode") == "custom":
+                accent = parse_colour(request.form.get("accent_hex"))
+                if accent is None:
+                    flash("That is not a colour. Pick one from the picker.")
+                    return redirect(stay_on('theme_settings'))
+
+            surface = None
+            if request.form.get("surface_mode") == "custom":
+                surface = parse_colour(request.form.get("surface_hex"))
+                if surface is None:
+                    flash("That is not a colour. Pick one from the picker.")
+                    return redirect(stay_on('theme_settings'))
+
             cursor.execute(
-                "UPDATE cafes SET theme = %s WHERE cafe_id = %s",
-                (chosen, cafe_id)
+                "UPDATE cafes SET theme = %s, accent_hex = %s, "
+                "surface_hex = %s WHERE cafe_id = %s",
+                (chosen, accent, surface, cafe_id)
             )
             connection.commit()
             g.pop("cafe_theme", None)
+            g.pop("cafe_colours", None)
+            g.pop("current_user_row", None)
 
-            label = dict((t[0], t[1]) for t in THEMES)[chosen]
-            flash("Theme saved. Your cafe is now %s." % label)
+            if accent or surface:
+                flash("Colours saved.")
+            else:
+                label = dict((t[0], t[1]) for t in THEMES)[chosen]
+                flash("Colours saved. Your cafe is now %s." % label)
             return redirect(came_from())
 
         return render_template("theme_settings.html")

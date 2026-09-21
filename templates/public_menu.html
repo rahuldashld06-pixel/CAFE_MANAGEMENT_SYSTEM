@@ -124,6 +124,7 @@
     "use strict";
 
     var TAX_RATE = {{ tax_rate }};
+    var DISCOUNT_RATE = {{ discount_rate }};
     var form = document.getElementById("orderForm");
     if (!form) return;
 
@@ -150,7 +151,7 @@
         // Shown with tax, because that is what will be asked for at the
         // counter. The server works the same total out again from its own
         // prices - nothing here is trusted.
-        var total = subtotal * (1 + TAX_RATE);
+        var total = (subtotal - subtotal * DISCOUNT_RATE) * (1 + TAX_RATE);
 
         count.textContent = items === 0
             ? "Nothing chosen yet"

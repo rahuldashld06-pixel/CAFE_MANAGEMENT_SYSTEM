@@ -26,6 +26,14 @@
        a hex variable - so the channels are their own token. */
     --copper-rgb: 224, 138, 62;
 
+    /* The ink the product's own mark is drawn in. The accent by
+       default, which is how it has always looked. A cafe that chooses
+       its own background gets this replaced with a tone derived from
+       that background instead - the mark has to stay visible whatever
+       colour somebody picks, and a pale accent on a pale page is not
+       visible at all. */
+    --watermark-ink: var(--copper-light);
+
     --gold: #F2C94C;
 
     --sage: #8FBB99;
@@ -201,7 +209,7 @@ textarea:focus-visible {
     letter-spacing: .04em;
     white-space: nowrap;
     opacity: .1;
-    color: var(--copper-light);
+    color: var(--watermark-ink);
 }
 
 .app-watermark img,
@@ -216,7 +224,7 @@ textarea:focus-visible {
        that is dark ink on white paper, this is a pale line on a dark
        screen. At the receipt's 6% it was not there at all. */
     opacity: .12;
-    color: var(--copper-light);
+    color: var(--watermark-ink);
 }
 
 /* The page and the menu both sit in front of it. Stated rather than left
@@ -233,6 +241,170 @@ textarea:focus-visible {
    to lose a sidebar. */
 .sidebar {
     z-index: 1;
+}
+
+/* A worked example of the two rates, on the page that sets them. Two
+   percentages pulling in opposite directions is the sort of thing
+   people would rather see than be told. */
+.rate-example {
+    margin: 4px 0 18px;
+    padding: 14px 16px;
+    background: var(--espresso-850);
+    border: 1px solid var(--espresso-700);
+    border-left: 3px solid var(--copper);
+    border-radius: var(--radius-md);
+}
+
+.rate-example__title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--cream-faint);
+    margin-bottom: 10px;
+}
+
+.rate-example__lines {
+    margin: 0;
+}
+
+.rate-example__lines > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 3px 0;
+}
+
+.rate-example__lines dt {
+    margin: 0;
+    color: var(--cream-dim);
+}
+
+.rate-example__lines dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    color: var(--cream);
+}
+
+.rate-example__total {
+    margin-top: 6px;
+    padding-top: 8px !important;
+    border-top: 1px solid var(--espresso-700);
+    font-weight: 700;
+}
+
+.rate-example__total dd {
+    color: var(--copper);
+}
+
+/* ==========================================================
+   Picking a colour that is not one of the six
+
+   The ready-made themes above are swatches to choose between.
+   This is the other half of the same page: any colour at all,
+   for the accent and for the background the whole app sits on.
+
+   Painted in the accent like everything else here, so the page
+   that sets the cafe's colour is itself in the cafe's colour.
+   ========================================================== */
+
+.field-lead {
+    display: block;
+    margin: -2px 0 12px;
+    color: var(--cream-faint);
+}
+
+.colour-pick {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding: 12px 14px;
+    background: var(--espresso-850);
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-md);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.colour-pick.is-chosen {
+    border-color: var(--copper);
+    box-shadow: 0 0 0 1px var(--copper);
+}
+
+.colour-pick__toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--cream);
+}
+
+.colour-pick__toggle > span {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.colour-pick__toggle input {
+    accent-color: var(--copper);
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+}
+
+/* The well itself. Browsers draw a colour input as a bordered button
+   with an inset swatch, which looks nothing like anything else on
+   these pages - so the chrome is taken off and what is left is the
+   colour, which is the only part anybody wants. */
+.colour-pick__well {
+    width: 46px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--espresso-600);
+    border-radius: 8px;
+    background: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.colour-pick__well::-webkit-color-swatch-wrapper { padding: 2px; }
+.colour-pick__well::-webkit-color-swatch {
+    border: none;
+    border-radius: 6px;
+}
+.colour-pick__well::-moz-color-swatch {
+    border: none;
+    border-radius: 6px;
+}
+
+/* The fixed one beside "the original" is a sample, not a control. */
+.colour-pick__well--fixed {
+    display: inline-block;
+    width: 28px;
+    height: 20px;
+    cursor: inherit;
+}
+
+.colour-pick__value {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.85rem;
+    color: var(--cream-dim);
+    text-transform: uppercase;
+}
+
+.colour-pick .btn {
+    margin-left: auto;
+}
+
+@media (max-width: 560px) {
+    .colour-pick .btn {
+        margin-left: 0;
+    }
 }
 
 /* Nothing to print. The receipt and the kitchen ticket carry their own,

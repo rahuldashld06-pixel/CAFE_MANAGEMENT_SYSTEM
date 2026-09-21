@@ -242,7 +242,7 @@ print("\n=== 7. What a tour cannot hand back stays put ===")
 # moment of acting, by somebody who was shown round months ago.
 kept = {
     "that a rate change is not retrospective":
-        ("tax_settings.html", "keep the rate they were"),
+        ("tax_settings.html", "keep the rates they were"),
     "that the cafe's name is everybody's":
         ("branding.html", "whole cafe's name"),
     "that a new QR code breaks the printed ones":

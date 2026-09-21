@@ -34,6 +34,29 @@ branding, fully isolated from the others.
   name, faint, fixed, and ignoring both the uploaded symbol and the name
   they chose for their sidebar. Nothing appears on the sign-in, register
   or one-time-code screens, which stand outside the app shell entirely.
+- **The café's own colours.** Under Profile → Colours an admin sets the
+  accent and the background together, because they are one decision — an
+  accent is chosen against a background and a background against an
+  accent, and separate screens mean choosing each one blind. Six
+  ready-made accents, or any colour at all for either. A chosen
+  background brings the whole palette with it: six surface levels and
+  three weights of text, derived from it in HSL so the hue survives, and
+  placed by measured contrast rather than by fixed lightness. That last
+  part is what makes "any colour" safe — a pale background gets dark text
+  instead of cream on cream, and a mid-toned one, which has little
+  contrast room in either direction, still clears the readability
+  threshold. Which way the palette runs is decided on perceived
+  brightness, not on HSL lightness: #7FFF00 is a lightness of exactly 0.5
+  and one of the brightest colours a screen can make. A café that has
+  chosen nothing gets the stylesheet untouched, not a derivation that
+  comes close. Printed bills and kitchen tickets are unaffected — those
+  are black on white paper whatever the screens look like.
+- **A discount beside the tax.** Profile → Tax & Discount sets both, admin
+  only. The discount comes off the subtotal before the tax is worked out,
+  so a customer is taxed on what they actually pay rather than on what
+  they would have paid; the page shows the sum worked through on a ₹100
+  order rather than explaining it. Bills already raised keep the rates
+  they were charged at.
 - **The café's own clock.** Times are stored in UTC and read back on the
   zone the café picks under Profile → Time Zone — the kitchen board, the
   billing list, the printed receipt and the page a customer is holding all
@@ -208,6 +231,8 @@ tests/tour_browser_test.py Real-browser first-sign-in tour suite
 tests/nav_cache_test.py Real-browser page-cache and navigation-speed suite
 tests/timezone_test.py Café clock and stored-time test suite
 tests/clock_browser_test.py Real-browser suite for a café's clock settling itself
+tests/colours_test.py Café colours, palette contrast and the bill discount
+tests/colour_browser_test.py Real-browser colour-picker and page-swap suite
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
@@ -224,7 +249,7 @@ python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 104  FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
-python tests/print_test.py        # expect PASSED: 51   FAILED: 0
+python tests/print_test.py        # expect PASSED: 52   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 36   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 39   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 27   FAILED: 0
@@ -245,10 +270,12 @@ python tests/tour_browser_test.py # expect PASSED: 26  FAILED: 0
 python tests/nav_cache_test.py    # expect PASSED: 8    FAILED: 0
 python tests/timezone_test.py     # expect PASSED: 14   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
+python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
+python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
 ```
 
-All thirty-one run in memory against a SQLite stand-in — no database or
-network needed. The fifteen that drive a browser use a headless Edge or
+All thirty-three run in memory against a SQLite stand-in — no database or
+network needed. The sixteen that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
 `nav_cache_test.py` is the odd one out: it puts a deliberate delay on every

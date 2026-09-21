@@ -1,6 +1,6 @@
 {% from "_brand_mark.html" import coffee_mark %}
 <!DOCTYPE html>
-<html lang="en" data-theme="{{ cafe_theme }}">
+<html lang="en" data-theme="{{ cafe_theme }}"{% if cafe_colour_style %} style="{{ cafe_colour_style }}"{% endif %}>
 
 <head>
     <meta charset="UTF-8">
@@ -280,7 +280,7 @@
                         {# Admin only: the rate decides what every future bill
                            charges, so it is not a cashier's to move. #}
                         <a href="{{ url_for('tax_settings') }}" class="profile-dropdown__item">
-                            <i class="bi bi-percent"></i><span>Tax Percentage</span>
+                            <i class="bi bi-percent"></i><span>Tax &amp; Discount</span>
                         </a>
 
                         {# Admin only, and it changes the colour for the whole
@@ -290,7 +290,7 @@
                         </a>
 
                         <a href="{{ url_for('theme_settings') }}" class="profile-dropdown__item">
-                            <i class="bi bi-droplet-half"></i><span>Theme Colour</span>
+                            <i class="bi bi-palette"></i><span>Colours</span>
                         </a>
 
                         {# Admin only: replacing the code stops every one

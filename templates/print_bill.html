@@ -1,6 +1,10 @@
 {% from "_brand_mark.html" import coffee_mark %}
 <!DOCTYPE html>
-<html lang="en" data-theme="{{ cafe_theme }}">
+{# The accent only. print.css paints the paper itself in black
+   on white and uses none of the surface colours, so a cafe's
+   background never reaches a receipt - what this carries is the
+   Print button above it, which is on a screen like any other. #}
+<html lang="en" data-theme="{{ cafe_theme }}"{% if cafe_colour_style %} style="{{ cafe_colour_style }}"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -88,10 +92,22 @@
                 <span>Subtotal</span>
                 <span>{{ "%.2f"|format(bill.subtotal|float) }}</span>
             </div>
+            {# Only the lines there is something on. A receipt that
+               reads "Discount 0.00" for a cafe that gives no discount is
+               a line nobody needs and a strip of paper nobody wanted. #}
+            {% if bill.discount and bill.discount|float > 0 %}
             <div class="receipt__line">
-                <span>Tax ({{ tax_percent }}%)</span>
+                <span>Discount ({{ charged.discount | trim_zeros }}%)</span>
+                <span>&minus;{{ "%.2f"|format(bill.discount|float) }}</span>
+            </div>
+            {% endif %}
+
+            {% if bill.tax and bill.tax|float > 0 %}
+            <div class="receipt__line">
+                <span>Tax ({{ charged.tax | trim_zeros }}%)</span>
                 <span>{{ "%.2f"|format(bill.tax|float) }}</span>
             </div>
+            {% endif %}
             <div class="receipt__grand">
                 <span>Total</span>
                 <span>₹{{ "%.2f"|format(bill.total_amount|float) }}</span>

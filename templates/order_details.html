@@ -394,6 +394,7 @@
 
                         <!-- Tax -->
 
+                        {% if bill.tax and bill.tax|float > 0 %}
                         <tr>
 
                             <td class="cell-strong">
@@ -409,10 +410,12 @@
                             </td>
 
                         </tr>
+                        {% endif %}
 
 
-                        <!-- Discount -->
+                        <!-- Discount, when there was one -->
 
+                        {% if bill.discount and bill.discount|float > 0 %}
                         <tr>
 
                             <td class="cell-strong">
@@ -423,11 +426,12 @@
 
                             <td>
 
-                                ₹{{ bill.discount }}
+                                &minus;₹{{ bill.discount }}
 
                             </td>
 
                         </tr>
+                        {% endif %}
 
 
                         <!-- Total -->

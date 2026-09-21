@@ -151,10 +151,10 @@ check("a cashier sees the theme the admin chose",
 
 print("\n=== 6. Only an admin may change it ===")
 check("a cashier is not offered it in the profile menu",
-      "Theme Colour" not in cashier.get("/orders/add").get_data(as_text=True),
+      "<span>Colours</span>" not in cashier.get("/orders/add").get_data(as_text=True),
       "the menu entry is visible to a cashier")
 check("an admin is",
-      "Theme Colour" in admin.get("/orders/add").get_data(as_text=True),
+      "<span>Colours</span>" in admin.get("/orders/add").get_data(as_text=True),
       "the admin has no way to reach the page")
 
 blocked = cashier.get("/settings/theme", follow_redirects=False)

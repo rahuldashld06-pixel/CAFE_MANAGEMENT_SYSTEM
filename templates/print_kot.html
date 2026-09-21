@@ -1,5 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="{{ cafe_theme }}">
+{# The accent only. print.css paints the paper itself in black
+   on white and uses none of the surface colours, so a cafe's
+   background never reaches a receipt - what this carries is the
+   Print button above it, which is on a screen like any other. #}
+<html lang="en" data-theme="{{ cafe_theme }}"{% if cafe_colour_style %} style="{{ cafe_colour_style }}"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

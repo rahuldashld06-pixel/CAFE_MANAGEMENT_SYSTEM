@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Tax Percentage · Cafe Manager{% endblock %}
+{% block title %}Tax &amp; Discount · Cafe Manager{% endblock %}
 
 {% block content %}
 
 <div class="page-header">
     <div>
         <div class="eyebrow">Customize</div>
-        <h1><i class="bi bi-percent"></i> Tax Percentage</h1>
-        <p>The rate applied to every new order and bill.</p>
+        <h1><i class="bi bi-percent"></i> Tax &amp; Discount</h1>
+        <p>What is added to every new bill, and what comes off it.</p>
     </div>
     <a href="{{ back_url }}" class="btn btn--ghost" data-back>
         <i class="bi bi-arrow-left"></i> Back
@@ -17,7 +17,7 @@
 
 <div class="panel form-panel" style="max-width:620px;">
 
-    <form method="POST">
+    <form method="POST" id="ratesForm">
 
         <div class="form-group">
             <label for="tax_percent">Tax rate</label>
@@ -36,23 +36,59 @@
             </div>
 
             <small>
-                Applied to the subtotal of each new order. Enter 0 if you do
-                not charge tax.
+                Applied to each new order. Enter 0 if you do not charge tax.
             </small>
+        </div>
+
+        <div class="form-group">
+            <label for="discount_percent">Discount</label>
+
+            <div class="input-suffix">
+                <input type="number"
+                       id="discount_percent"
+                       name="discount_percent"
+                       value="{{ discount_percent }}"
+                       min="0"
+                       max="100"
+                       step="0.01"
+                       required
+                       autocomplete="off">
+                <span class="input-suffix__unit">%</span>
+            </div>
+
+            <small>
+                Taken off every new order before the tax is worked out, so a
+                customer is taxed on what they actually pay. Enter 0 for no
+                discount.
+            </small>
+        </div>
+
+        {# A worked example, because two percentages in opposite directions
+           is the sort of thing people would rather see than be told. #}
+        <div class="rate-example" id="rateExample" aria-live="polite">
+            <div class="rate-example__title">On a &#8377;100 order</div>
+            <dl class="rate-example__lines">
+                <div><dt>Subtotal</dt><dd>&#8377;100.00</dd></div>
+                <div><dt>Discount</dt><dd data-example="discount">&#8377;0.00</dd></div>
+                <div><dt>Tax</dt><dd data-example="tax">&#8377;0.00</dd></div>
+                <div class="rate-example__total">
+                    <dt>Total</dt><dd data-example="total">&#8377;100.00</dd>
+                </div>
+            </dl>
         </div>
 
         <div class="note-card">
             <i class="bi bi-info-circle"></i>
             <div>
-                Bills that have already been raised keep the rate they were
-                charged at. Changing this only affects orders taken from now
+                Bills that have already been raised keep the rates they were
+                charged at. Changing these only affects orders taken from now
                 on.
             </div>
         </div>
 
         <div class="form-actions">
             <button type="submit" class="btn btn--primary">
-                <i class="bi bi-check2"></i> Save tax rate
+                <i class="bi bi-check2"></i> Save rates
             </button>
             <a href="{{ back_url }}" class="btn btn--ghost" data-back>Cancel</a>
         </div>
@@ -60,5 +96,39 @@
     </form>
 
 </div>
+
+<script>
+    // The worked example, kept in step as the numbers are typed. It does
+    // the same sum the server does - discount off first, tax on what is
+    // left - so that the order the two are applied in is something an
+    // admin can see rather than something they have to be told.
+    (function () {
+        var form = document.getElementById("ratesForm");
+        if (!form) return;
+
+        function money(value) {
+            return "₹" + value.toFixed(2);
+        }
+
+        function show() {
+            var tax = parseFloat(form.tax_percent.value) || 0,
+                off = parseFloat(form.discount_percent.value) || 0,
+                subtotal = 100,
+                discount = subtotal * off / 100,
+                taxable = subtotal - discount,
+                charged = taxable * tax / 100;
+
+            form.querySelector("[data-example=discount]").textContent =
+                "−" + money(discount);
+            form.querySelector("[data-example=tax]").textContent =
+                money(charged);
+            form.querySelector("[data-example=total]").textContent =
+                money(taxable + charged);
+        }
+
+        form.addEventListener("input", show);
+        show();
+    }());
+</script>
 
 {% endblock %}

@@ -98,6 +98,14 @@
     var readyQueue = null;   // collects DOMContentLoaded handlers during a swap
 
     function beginPage() {
+        // Before anything is unhooked, so a page's own cleanup still has
+        // its listeners. A page that changed something outside itself -
+        // the colour picker paints the whole app while you drag it - puts
+        // it back here, or the preview would follow you to the next page.
+        try {
+            document.dispatchEvent(new CustomEvent("instant:teardown"));
+        } catch (error) { /* a page's cleanup is never worth a failed swap */ }
+
         for (var i = 0; i < timers.length; i++) {
             if (timers[i][0] === "i") {
                 rawClearInterval.call(window, timers[i][1]);
@@ -321,6 +329,63 @@
         return match ? match[1] : null;
     }
 
+    // A cafe that has chosen its own colours carries them as custom
+    // properties in an inline style on <html> - the same element the
+    // theme rides on, and outside the swapped region for the same
+    // reason. Without this an admin would save a new background and
+    // watch nothing happen.
+    //
+    // Only custom properties, and only ones whose value is a colour.
+    // This markup comes from our own server, but copying an entire style
+    // attribute across on trust is a wider door than the job needs.
+    var COLOUR_NAME = /^--[a-z0-9-]+$/;
+    var COLOUR_VALUE = /^(#[0-9a-f]{3,8}|[0-9]{1,3}(\s*,\s*[0-9]{1,3}){2})$/i;
+
+    function coloursOf(html) {
+        var found = {};
+        var tag = /<html[^>]*>/i.exec(html);
+        if (!tag) return found;
+
+        var style = /\sstyle="([^"]*)"/i.exec(tag[0]);
+        if (!style) return found;
+
+        var parts = style[1].split(";");
+        for (var i = 0; i < parts.length; i++) {
+            var at = parts[i].indexOf(":");
+            if (at < 0) continue;
+
+            var name = parts[i].slice(0, at).trim().toLowerCase();
+            var value = parts[i].slice(at + 1).trim();
+            if (COLOUR_NAME.test(name) && COLOUR_VALUE.test(value)) {
+                found[name] = value;
+            }
+        }
+        return found;
+    }
+
+    function applyColours(html) {
+        var wanted = coloursOf(html);
+        var root = document.documentElement;
+
+        // Anything the new page does not ask for comes off. Otherwise a
+        // cafe going back to one of the six presets would keep the
+        // background it had chosen, with no way to be rid of it.
+        var had = (root.getAttribute("style") || "").split(";");
+        for (var i = 0; i < had.length; i++) {
+            var name = had[i].split(":")[0].trim().toLowerCase();
+            if (name && COLOUR_NAME.test(name)
+                    && !Object.prototype.hasOwnProperty.call(wanted, name)) {
+                root.style.removeProperty(name);
+            }
+        }
+
+        for (var key in wanted) {
+            if (Object.prototype.hasOwnProperty.call(wanted, key)) {
+                root.style.setProperty(key, wanted[key]);
+            }
+        }
+    }
+
     // Copies one marked region of a fetched page over the live one. Used
     // for the parts of the shell that can change without the page region
     // changing - the cafe's name and its symbol.
@@ -357,6 +422,8 @@
 
         var theme = themeOf(html);
         if (theme) document.documentElement.setAttribute("data-theme", theme);
+
+        applyColours(html);
 
         // On the first, fully parsed load an early-closed #page-view leaves
         // the rest of that page as siblings. Clear them, or they would sit

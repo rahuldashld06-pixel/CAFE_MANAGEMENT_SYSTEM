@@ -895,8 +895,18 @@
                     <strong>₹<span id="popupSubtotal">0.00</span></strong>
                 </div>
 
+                {# Only when there is one. A line reading "Discount 0.00"
+                   on every order of a cafe that gives no discount is a line
+                   that says nothing. #}
+                {% if discount_percent > 0 %}
                 <div class="order-summary-row">
-                    <span>Tax (5%)</span>
+                    <span>Discount ({{ discount_percent | trim_zeros }}%)</span>
+                    <strong>&minus;₹<span id="popupDiscount">0.00</span></strong>
+                </div>
+                {% endif %}
+
+                <div class="order-summary-row">
+                    <span>Tax ({{ tax_percent | trim_zeros }}%)</span>
                     <strong>₹<span id="popupTax">0.00</span></strong>
                 </div>
 
@@ -936,10 +946,11 @@
 </div>
 
 <script>
-// The café's own tax rate, set under Profile -> Tax Percentage. `var`, not
+// The café's own rates, set under Profile -> Tax & Discount. `var`, not
 // `const`: instant.js re-runs this script whenever the page is swapped back
 // in, and a repeated const would throw on the second visit.
 var TAX_RATE = {{ tax_rate }};
+var DISCOUNT_RATE = {{ discount_rate }};
 
 // A best seller appears twice: on the Hot Selling shelf and under its own
 // category. Only the card under the category carries the form field, so
@@ -1037,8 +1048,12 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
             }
         });
 
-        const tax = subtotal * TAX_RATE;
-        const total = subtotal + tax;
+        // Discount off first, then tax on what is left - the same
+        // order the server works it out in, so the number on the button
+        // is the number that gets charged.
+        const discount = subtotal * DISCOUNT_RATE;
+        const tax = (subtotal - discount) * TAX_RATE;
+        const total = subtotal - discount + tax;
 
         const countEl = document.getElementById("selectedItemCount");
         const floatingTotalEl = document.getElementById("floatingTotal");
@@ -1052,6 +1067,9 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
         if (floatingTotalEl) floatingTotalEl.textContent = total.toFixed(2);
         if (subtotalEl) subtotalEl.textContent = subtotal.toFixed(2);
         if (taxEl) taxEl.textContent = tax.toFixed(2);
+
+        const discountEl = document.getElementById("popupDiscount");
+        if (discountEl) discountEl.textContent = discount.toFixed(2);
         if (totalEl) totalEl.textContent = total.toFixed(2);
 
         if (createButton) {

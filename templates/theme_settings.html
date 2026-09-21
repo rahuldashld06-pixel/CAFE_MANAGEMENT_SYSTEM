@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Theme Colour · Cafe Manager{% endblock %}
+{% block title %}Colours · Cafe Manager{% endblock %}
 
 {% block content %}
 
 <div class="page-header">
     <div>
         <div class="eyebrow">Customize</div>
-        <h1><i class="bi bi-droplet-half"></i> Theme Colour</h1>
-        <p>The accent colour used across your cafe's screens.</p>
+        <h1><i class="bi bi-palette"></i> Colours</h1>
+        <p>The accent and the background used across your cafe's screens.</p>
     </div>
     <a href="{{ back_url }}" class="btn btn--ghost" data-back>
         <i class="bi bi-arrow-left"></i> Back
@@ -17,19 +17,24 @@
 
 <div class="panel form-panel" style="max-width:760px;">
 
-    <form method="POST">
+    <form method="POST" id="colourForm">
 
+        {# ============ ACCENT ============ #}
         <div class="form-group">
-            <label>Pick a colour</label>
+            <label>Accent colour</label>
+            <small class="field-lead">
+                Buttons, the active menu item, highlights and focus rings.
+            </small>
 
             {# Each swatch is painted by the very same CSS block that paints
                the app, so what is shown here is what gets applied. #}
             <div class="theme-grid">
                 {% for theme_id, label, hint in themes %}
-                <label class="theme-option{% if theme_id == cafe_theme %} is-chosen{% endif %}">
+                <label class="theme-option{% if theme_id == cafe_theme and not cafe_colours.accent %} is-chosen{% endif %}">
                     <input type="radio"
                            name="theme"
                            value="{{ theme_id }}"
+                           data-accent-preset
                            {% if theme_id == cafe_theme %}checked{% endif %}>
 
                     <span class="theme-option__swatch theme-{{ theme_id }}">
@@ -44,11 +49,74 @@
                 {% endfor %}
             </div>
 
-            <small>
-                Copper is the default. Only the accent changes &mdash; buttons,
-                the active menu item and highlights. The dark background stays
-                the same.
+            {# The free choice sits under the ready-made ones rather than
+               beside them: most cafes want one of the six, and the ones
+               that want their own colour will go looking for it. #}
+            <div class="colour-pick{% if cafe_colours.accent %} is-chosen{% endif %}"
+                 data-pick="accent">
+                <label class="colour-pick__toggle">
+                    <input type="radio" name="accent_mode" value="custom"
+                           {% if cafe_colours.accent %}checked{% endif %}>
+                    <span>Or pick your own</span>
+                </label>
+
+                <input type="color"
+                       class="colour-pick__well"
+                       id="accentHex"
+                       name="accent_hex"
+                       value="{{ cafe_colours.accent or '#e08a3e' }}"
+                       aria-label="Custom accent colour">
+
+                <code class="colour-pick__value" data-value-for="accentHex">
+                    {{ cafe_colours.accent or '#e08a3e' }}
+                </code>
+
+                <button type="button" class="btn btn--ghost btn--sm"
+                        data-clear="accent">Use a preset</button>
+            </div>
+        </div>
+
+        {# ============ BACKGROUND ============ #}
+        <div class="form-group">
+            <label>Background colour</label>
+            <small class="field-lead">
+                The colour the whole app sits on. Panels, borders and the
+                text are worked out from it, so a pale background gives a
+                pale cafe that can still be read.
             </small>
+
+            <div class="colour-pick{% if not cafe_colours.surface %} is-chosen{% endif %}"
+                 data-pick="surface-default">
+                <label class="colour-pick__toggle">
+                    <input type="radio" name="surface_mode" value="default"
+                           {% if not cafe_colours.surface %}checked{% endif %}>
+                    <span>
+                        <span class="colour-pick__well colour-pick__well--fixed"
+                              style="background:#170F0B"></span>
+                        Dark espresso &mdash; the original
+                    </span>
+                </label>
+            </div>
+
+            <div class="colour-pick{% if cafe_colours.surface %} is-chosen{% endif %}"
+                 data-pick="surface">
+                <label class="colour-pick__toggle">
+                    <input type="radio" name="surface_mode" value="custom"
+                           {% if cafe_colours.surface %}checked{% endif %}>
+                    <span>Or pick your own</span>
+                </label>
+
+                <input type="color"
+                       class="colour-pick__well"
+                       id="surfaceHex"
+                       name="surface_hex"
+                       value="{{ cafe_colours.surface or '#170f0b' }}"
+                       aria-label="Custom background colour">
+
+                <code class="colour-pick__value" data-value-for="surfaceHex">
+                    {{ cafe_colours.surface or '#170f0b' }}
+                </code>
+            </div>
         </div>
 
         <div class="note-card">
@@ -56,12 +124,14 @@
             <div>
                 This is your whole cafe's colour, not just yours. Everyone
                 signed in here sees it the next time their screen loads.
+                Printed bills and kitchen tickets are not affected &mdash;
+                those are black on white paper whatever you choose here.
             </div>
         </div>
 
         <div class="form-actions">
             <button type="submit" class="btn btn--primary">
-                <i class="bi bi-check2"></i> Save theme
+                <i class="bi bi-check2"></i> Save colours
             </button>
             <a href="{{ back_url }}" class="btn btn--ghost" data-back>Cancel</a>
         </div>
@@ -71,20 +141,173 @@
 </div>
 
 <script>
-    // Move the chosen ring as soon as a swatch is picked, so the choice is
-    // visible before the form is saved.
+    // Show the choice on the page itself as it is made.
+    //
+    // A colour is not a thing anybody can judge from a swatch the size of
+    // a postage stamp - what matters is what a whole screen of it looks
+    // like. So the picker paints the real page as you drag, and saving is
+    // only the part that makes it stick. Nothing here is trusted: the
+    // server derives the palette again from the colour it is sent.
     (function () {
-        var grid = document.querySelector(".theme-grid");
-        if (!grid) return;
+        var form = document.getElementById("colourForm");
+        if (!form) return;
 
-        grid.addEventListener("change", function (event) {
-            if (event.target.name !== "theme") return;
-            var options = grid.querySelectorAll(".theme-option");
-            for (var i = 0; i < options.length; i++) {
-                options[i].classList.toggle(
-                    "is-chosen", options[i].contains(event.target));
+        var root = document.documentElement;
+
+        // What the page looked like on arrival, so Cancel really cancels.
+        var asFound = root.getAttribute("style") || "";
+
+        // Everything the preview is allowed to touch. Taken off before
+        // each repaint rather than restoring what the page arrived with:
+        // a cafe that already has a colour saved arrives wearing it, and
+        // unpicking the custom option has to be able to take it off
+        // again - otherwise switching back to a preset would look like
+        // it had done nothing at all.
+        var MANAGED = ["--copper", "--copper-light", "--copper-dark",
+                       "--copper-rgb", "--cream", "--cream-dim",
+                       "--cream-faint", "--watermark-ink",
+                       "--espresso-950", "--espresso-900", "--espresso-850",
+                       "--espresso-800", "--espresso-700", "--espresso-600"];
+
+        function hsl(hex) {
+            var r = parseInt(hex.substr(1, 2), 16) / 255,
+                g = parseInt(hex.substr(3, 2), 16) / 255,
+                b = parseInt(hex.substr(5, 2), 16) / 255,
+                hi = Math.max(r, g, b), lo = Math.min(r, g, b),
+                l = (hi + lo) / 2, d = hi - lo, h = 0, s = 0;
+
+            if (d) {
+                s = d / (l > 0.5 ? 2 - hi - lo : hi + lo);
+                if (hi === r) { h = ((g - b) / d) % 6; }
+                else if (hi === g) { h = (b - r) / d + 2; }
+                else { h = (r - g) / d + 4; }
             }
+            return [h * 60, s, l];
+        }
+
+        function rgb(h, s, l) {
+            l = Math.min(1, Math.max(0, l));
+            s = Math.min(1, Math.max(0, s));
+            var c = (1 - Math.abs(2 * l - 1)) * s,
+                x = c * (1 - Math.abs((h / 60) % 2 - 1)),
+                m = l - c / 2,
+                sets = [[c, x, 0], [x, c, 0], [0, c, x],
+                        [0, x, c], [x, 0, c], [c, 0, x]],
+                set = sets[Math.floor(h / 60) % 6 || 0];
+
+            return "#" + set.map(function (v) {
+                return ("0" + Math.round((v + m) * 255).toString(16)).slice(-2);
+            }).join("");
+        }
+
+        // The same ramp the server uses. Kept deliberately rough: this is
+        // a preview, and the page is painted properly by the server the
+        // moment it is saved.
+        var STOPS = [0, 0.11, 0.19, 0.34, 0.61, 1],
+            LEVELS = ["950", "900", "850", "800", "700", "600"];
+
+        function paint() {
+            for (var i = 0; i < MANAGED.length; i++) {
+                root.style.removeProperty(MANAGED[i]);
+            }
+
+            var mode = form.querySelector("[name=surface_mode]:checked");
+            if (mode && mode.value === "custom") {
+                var parts = hsl(form.querySelector("#surfaceHex").value),
+                    h = parts[0], s = parts[1], l = parts[2],
+                    pale = l > 0.5,
+                    span = Math.min(0.245, (pale ? l : 1 - l) * 0.45),
+                    way = pale ? -1 : 1;
+
+                STOPS.forEach(function (stop, i) {
+                    root.style.setProperty("--espresso-" + LEVELS[i],
+                                           rgb(h, s, l + way * span * stop));
+                });
+
+                var tint = Math.min(0.45, s);
+                root.style.setProperty("--cream",
+                    rgb(h, tint, pale ? 0.14 : 0.91));
+                root.style.setProperty("--cream-dim",
+                    rgb(h, tint * 0.62, pale ? 0.30 : 0.73));
+                root.style.setProperty("--cream-faint",
+                    rgb(h, tint * 0.38, pale ? 0.46 : 0.52));
+                root.style.setProperty("--watermark-ink",
+                    rgb(h, tint * 0.5, pale ? 0.05 : 0.96));
+            }
+
+            var accent = form.querySelector("[name=accent_mode]:checked");
+            if (accent && accent.value === "custom") {
+                var hex = form.querySelector("#accentHex").value,
+                    a = hsl(hex);
+
+                root.style.setProperty("--copper", hex);
+                root.style.setProperty("--copper-light",
+                    rgb(a[0], a[1], Math.min(0.96, a[2] + 0.09)));
+                root.style.setProperty("--copper-dark",
+                    rgb(a[0], a[1], Math.max(0.08, a[2] - 0.12)));
+                root.style.setProperty("--copper-rgb", [1, 3, 5].map(
+                    function (at) {
+                        return parseInt(hex.substr(at, 2), 16);
+                    }).join(", "));
+            } else {
+                // Back to whichever ready-made accent is selected, which
+                // theme.css paints off the attribute on the root element.
+                var preset = form.querySelector("[name=theme]:checked");
+                if (preset) { root.setAttribute("data-theme", preset.value); }
+            }
+        }
+
+        function mark() {
+            form.querySelectorAll(".theme-option").forEach(function (option) {
+                var input = option.querySelector("input");
+                var custom = form.querySelector("[name=accent_mode]:checked");
+                option.classList.toggle(
+                    "is-chosen",
+                    input.checked && !(custom && custom.value === "custom"));
+            });
+
+            form.querySelectorAll(".colour-pick").forEach(function (pick) {
+                var input = pick.querySelector("input[type=radio]");
+                if (input) { pick.classList.toggle("is-chosen", input.checked); }
+            });
+
+            form.querySelectorAll("[data-value-for]").forEach(function (tag) {
+                var well = document.getElementById(
+                    tag.getAttribute("data-value-for"));
+                if (well) { tag.textContent = well.value; }
+            });
+        }
+
+        form.addEventListener("input", function () { mark(); paint(); });
+        form.addEventListener("change", function (event) {
+            // Touching a picker is what choosing that option means. Making
+            // somebody tick the radio as well, having just dragged a
+            // colour, is a step that exists only because the form has one.
+            if (event.target.type === "color") {
+                var pick = event.target.closest(".colour-pick");
+                var radio = pick && pick.querySelector("input[type=radio]");
+                if (radio) { radio.checked = true; }
+            }
+            mark();
+            paint();
         });
+
+        form.querySelectorAll("[data-clear]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                var preset = form.querySelector("[name=accent_mode]:checked");
+                if (preset) { preset.checked = false; }
+                mark();
+                paint();
+            });
+        });
+
+        // Leaving without saving puts the page back as it was found.
+        window.addEventListener("instant:teardown", function () {
+            root.setAttribute("style", asFound);
+        }, {once: true});
+
+        mark();
+        paint();
     }());
 </script>
 
