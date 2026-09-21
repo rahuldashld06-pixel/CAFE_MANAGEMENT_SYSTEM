@@ -132,7 +132,7 @@
                 Served by <strong>{{ branding.cafe_name }}</strong>
             </p>
             <p class="receipt__printed">
-                Printed {{ printed_at.strftime("%d %b %Y, %I:%M %p") }}
+                Printed {{ printed_at|receipt_time }}
             </p>
             <p class="receipt__system">
                 Orders, stock and billing run on {{ platform_name }}

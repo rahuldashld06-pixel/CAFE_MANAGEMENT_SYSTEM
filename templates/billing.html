@@ -535,7 +535,7 @@
                             </a>
                         </td>
 
-                        <td>{{ bill.bill_date }}</td>
+                        <td>{{ bill.bill_date|local_time }}</td>
                         <td class="amount">₹{{ bill.subtotal }}</td>
                         <td>₹{{ bill.tax }}</td>
                         <td>₹{{ bill.discount }}</td>

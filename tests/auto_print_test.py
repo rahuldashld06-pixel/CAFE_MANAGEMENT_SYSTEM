@@ -229,8 +229,15 @@ def feed(client):
 
 
 def age(order_id, seconds):
-    """Make an order look as though it was placed a while ago."""
-    when = _dt.datetime.now() - _dt.timedelta(seconds=seconds)
+    """
+    Make an order look as though it was placed a while ago.
+
+    In UTC, because that is what order_date holds and what the app
+    compares against. Backdating on the local clock moved an order five
+    and a half hours into the future here, and it stayed held for ever.
+    """
+    when = (_dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
+            - _dt.timedelta(seconds=seconds))
     mysql_shim._DB.execute(
         "UPDATE orders SET order_date = ? WHERE order_id = ?",
         (when.strftime("%Y-%m-%d %H:%M:%S"), order_id))

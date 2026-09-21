@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Time Zone · Cafe Manager{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Customize</div>
+        <h1><i class="bi bi-clock"></i> Time Zone</h1>
+        <p>The clock every screen and every printed bill reads.</p>
+    </div>
+    <a href="{{ back_url }}" class="btn btn--ghost" data-back>
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="panel form-panel" style="max-width:620px;">
+
+    <form method="POST">
+
+        <div class="form-group">
+            <label for="timezone">Where this cafe is</label>
+
+            <select id="timezone" name="timezone" required>
+                {% for zone in zones %}
+                <option value="{{ zone }}"
+                        {% if zone == current %}selected{% endif %}>{{ zone }}</option>
+                {% endfor %}
+            </select>
+
+            <small>
+                Pick the city nearest you that keeps the same clock. Right
+                now it is <strong>{{ now_there }}</strong> in
+                {{ current }}.
+            </small>
+        </div>
+
+        {# Not a how-to. It is the thing somebody will otherwise expect
+           this setting to have done, and finding out by looking at
+           yesterday's takings is a bad way to learn it. #}
+        <div class="note-card">
+            <i class="bi bi-info-circle"></i>
+            <div>
+                This changes what the time <em>reads</em> as, everywhere at
+                once, including on bills already printed. It does not move
+                any order to a different day: an order keeps the day it was
+                counted under when it was taken.
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-check2"></i> Save time zone
+            </button>
+            <a href="{{ back_url }}" class="btn btn--ghost" data-back>Cancel</a>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

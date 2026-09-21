@@ -292,6 +292,13 @@ provider — not an IP address.
 Lower `DB_POOL_SIZE`, or reduce gunicorn workers. Workers x pool size
 must stay under your plan's connection limit.
 
+**Every time on every screen is hours out.**
+Each café picks its own clock under Profile → Time Zone, and until one is
+picked it reads UTC. `APP_TIMEZONE` sets what a café that has never chosen
+falls back to — handy if every café on your deployment is in one country.
+Times are stored in UTC either way, so changing this is safe at any point
+and rewrites nothing.
+
 **Every page feels slow, everywhere, by about the same amount.**
 `/healthz` returns two numbers that separate the app from the database.
 `connect_ms` is what it costs to get hold of a connection and should be

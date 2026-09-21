@@ -6,7 +6,8 @@ import hashlib
 import hmac
 import threading
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 from flask import (
     Flask, render_template, request, redirect, url_for, flash, session, g,
     jsonify, abort, has_request_context, send_file
@@ -943,8 +944,10 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult, source="counter"):
 
     cursor.execute(
         "INSERT INTO orders (total_amount, order_status, user_id, cafe_id, "
-        "source, order_day, daily_no) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-        (total, "Pending", owner_id, cafe_id, source, today, daily_no)
+        "source, order_day, daily_no, order_date) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (total, "Pending", owner_id, cafe_id, source, today, daily_no,
+         utc_now())
     )
     order_id = cursor.lastrowid
 
@@ -1037,6 +1040,9 @@ _CORE_TABLES = [
             kitchen_seen_at DATETIME NULL,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 5.00,
             theme VARCHAR(20) NOT NULL DEFAULT 'copper',
+            -- Which clock this cafe keeps. Times are stored in UTC and
+            -- read back on this one.
+            timezone VARCHAR(64) NULL,
             auto_kot_enabled TINYINT(1) NOT NULL DEFAULT 0,
             auto_kot_delay INT NOT NULL DEFAULT 5,
             auto_bill_enabled TINYINT(1) NOT NULL DEFAULT 0,
@@ -1264,6 +1270,11 @@ _COLUMN_MIGRATIONS = [
     # The accent colour. 'copper' is the look every café had before this
     # was a choice, so nothing changes appearance on upgrade.
     ("cafes", "theme", "VARCHAR(20) NOT NULL DEFAULT 'copper'"),
+    # Which clock the cafe keeps. Empty means the deployment's own
+    # setting, and UTC beyond that - the same reading every cafe got
+    # before this was a choice, so nothing moves on upgrade until
+    # somebody picks.
+    ("cafes", "timezone", "VARCHAR(64) NULL"),
     # Automatic printing. Off by default: a café that has not asked for it
     # should never have a print dialog appear on its own.
     ("cafes", "auto_kot_enabled", "TINYINT(1) NOT NULL DEFAULT 0"),
@@ -1880,7 +1891,7 @@ def get_current_user():
                    (u.photo_blob IS NOT NULL) AS has_photo, u.photo_version,
                    c.owner_user_id, c.is_active AS cafe_active,
                    c.auto_kot_enabled, c.auto_kot_delay, c.auto_bill_enabled,
-                   c.theme,
+                   c.theme, c.timezone,
                    c.cafe_name, c.branding_version,
                    c.brand_name, c.brand_tagline,
                    (c.logo_blob IS NOT NULL) AS has_logo,
@@ -3145,6 +3156,122 @@ def update_stock(food_id):
 
 #ORDER MANAGEMENT SYSTEM
 
+# ==========================================
+# WHAT TIME IT IS WHERE THE CAFE IS
+# ==========================================
+#
+# Times are stored in UTC and shown on the cafe's own clock.
+#
+# They were stored in UTC before this too - the app runs on a machine set
+# to UTC and so does the database - but nothing converted them on the way
+# out, so a cafe in India read every time five and a half hours early. The
+# date looked right for most of the day, which is what made it easy to
+# miss: UTC and India only disagree about the date between midnight and
+# half past five in the morning.
+#
+# Stored naive, because that is what a MySQL TIMESTAMP is: a wall clock
+# with no zone of its own, where what goes in is what comes out. The zone
+# is therefore a promise the app has to keep on both sides, which is why
+# order_date and bill_date are written from here now rather than left to
+# the column default - the app decides what "now" means, not whichever
+# machine the database happens to be running on.
+
+DEFAULT_TIMEZONE = (os.environ.get("APP_TIMEZONE", "") or "UTC").strip()
+
+
+def known_timezone(name):
+    """The zone if it is a real one, otherwise None."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
+
+
+def utc_now():
+    """
+    This instant in UTC, with no zone attached.
+
+    Naive on purpose: it is going into a column that holds a wall clock
+    and nothing else, so the zone lives in this file rather than in the
+    row.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def cafe_timezone_name(cafe_id=None):
+    """
+    Which clock this cafe keeps, by name.
+
+    Read off the row the request already has where possible. Falls back to
+    whatever the deployment was configured with, and to UTC beyond that -
+    never to the clock of the machine serving the page, which is a
+    different thing in every region and none of them the cafe's.
+    """
+    if has_request_context() and "cafe_timezone" in g:
+        return g.cafe_timezone
+
+    name = DEFAULT_TIMEZONE
+    user = get_current_user() if has_request_context() else None
+    if user and user.get("timezone"):
+        name = user["timezone"]
+    elif cafe_id:
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT timezone FROM cafes WHERE cafe_id = %s", (cafe_id,))
+            row = cursor.fetchone()
+            if row and row.get("timezone"):
+                name = row["timezone"]
+        except mysql.connector.Error:
+            pass                       # a clock must never take a page down
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    if has_request_context():
+        g.cafe_timezone = name
+    return name
+
+
+def cafe_now(cafe_id=None):
+    """This instant on the cafe's clock."""
+    return datetime.now(timezone.utc).astimezone(
+        known_timezone(cafe_timezone_name(cafe_id)) or timezone.utc)
+
+
+def as_cafe_time(value, cafe_id=None):
+    """
+    A stored time, read on the cafe's clock.
+
+    Takes whatever the driver handed over - MySQL gives a datetime, the
+    SQLite stand-in the offline tests use gives the same instant as text -
+    and returns None if it is neither, so a bad row cannot take a page
+    down over a timestamp.
+    """
+    if not value:
+        return None
+    if isinstance(value, str):
+        try:
+            value = datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(
+        known_timezone(cafe_timezone_name(cafe_id)) or timezone.utc)
+
+
 def format_order_time(value):
     """
     An order's time as "13 Sep, 07:45 PM", whatever shape it arrives in.
@@ -3154,14 +3281,10 @@ def format_order_time(value):
     and the popup used to crash on it rather than render. A feed that every
     page polls should not be the one place that trusts the driver.
     """
-    if not value:
-        return ""
-    if isinstance(value, str):
-        try:
-            value = datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            return value
-    return value.strftime("%d %b, %I:%M %p")
+    local = as_cafe_time(value)
+    if local is None:
+        return "" if not value else str(value)
+    return local.strftime("%d %b, %I:%M %p")
 
 
 def format_receipt_time(value):
@@ -3172,17 +3295,22 @@ def format_receipt_time(value):
     enough on something a customer keeps. Handles the same two shapes
     format_order_time does, for the same reason.
     """
-    if not value:
-        return ""
-    if isinstance(value, str):
-        try:
-            value = datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            return value
-    return value.strftime("%d %b %Y, %I:%M %p")
+    local = as_cafe_time(value)
+    if local is None:
+        return "" if not value else str(value)
+    return local.strftime("%d %b %Y, %I:%M %p")
+
+
+def format_local_time(value):
+    """A stored time on the cafe's clock, for a table that lists them."""
+    local = as_cafe_time(value)
+    if local is None:
+        return "" if not value else str(value)
+    return local.strftime("%d %b %Y, %I:%M %p")
 
 
 app.jinja_env.filters["receipt_time"] = format_receipt_time
+app.jinja_env.filters["local_time"] = format_local_time
 
 
 @app.route("/api/order-status")
@@ -3352,7 +3480,10 @@ def top_selling_food_ids(cursor, owner_id):
     cutoff is computed here rather than with DATE_SUB so the statement is
     plain SQL that any backend can run.
     """
-    cutoff = datetime.now() - timedelta(days=HOT_SELLER_DAYS)
+    # UTC, because that is what order_date holds. The machine serving
+    # this may be on any clock at all, and comparing one against the
+    # other silently counts the wrong days.
+    cutoff = utc_now() - timedelta(days=HOT_SELLER_DAYS)
     cursor.execute("""
         SELECT oi.food_id, SUM(oi.quantity) AS sold
         FROM order_items oi
@@ -3610,11 +3741,13 @@ def add_order():
                 discount,
                 total_amount,
                 payment_method,
-                payment_status
+                payment_status,
+                bill_date
             )
 
             VALUES
             (
+                %s,
                 %s,
                 %s,
                 %s,
@@ -3630,7 +3763,8 @@ def add_order():
             discount,
             total_amount,
             "Cash",
-            "Pending"
+            "Pending",
+            utc_now()
         ))
 
 
@@ -3757,7 +3891,7 @@ def print_bill(order_id):
             branding=get_cafe_branding(session.get("cafe_id")),
             tax_percent=get_tax_percent(),
             quote=quote_for(order_id),
-            printed_at=datetime.now(),
+            printed_at=utc_now(),
             **data
         )
     except mysql.connector.Error as error:
@@ -4562,8 +4696,8 @@ def ensure_missing_bills_for_user(user_id):
                 """
                 INSERT INTO bills
                     (order_id, subtotal, tax, discount, total_amount,
-                     payment_method, payment_status)
-                VALUES (%s, %s, %s, %s, %s, 'Cash', 'Pending')
+                     payment_method, payment_status, bill_date)
+                VALUES (%s, %s, %s, %s, %s, 'Cash', 'Pending', %s)
                 """,
                 (
                     order["order_id"],
@@ -4571,6 +4705,7 @@ def ensure_missing_bills_for_user(user_id):
                     tax,
                     discount,
                     total,
+                    utc_now(),
                 ),
             )
 
@@ -6191,8 +6326,8 @@ def today_weekday():
     everyone, for ever.
     """
     return {
-        "short": datetime.now().strftime("%a"),
-        "full": datetime.now().strftime("%A"),
+        "short": cafe_now().strftime("%a"),
+        "full": cafe_now().strftime("%A"),
     }
 
 
@@ -6421,7 +6556,7 @@ def kitchen_heartbeat():
         cursor = connection.cursor(dictionary=True)
         cursor.execute(
             "UPDATE cafes SET kitchen_seen_at = %s WHERE cafe_id = %s",
-            (datetime.now(), require_cafe_session()))
+            (utc_now(), require_cafe_session()))
         connection.commit()
         return jsonify({"ok": True})
     except mysql.connector.Error as error:
@@ -6459,7 +6594,7 @@ def kitchen_is_watching(cursor, cafe_id):
         except ValueError:
             return False
 
-    return (datetime.now() - seen).total_seconds() <= KITCHEN_STALE_SECONDS
+    return (utc_now() - seen).total_seconds() <= KITCHEN_STALE_SECONDS
 
 
 # Which day each cafe was last tidied up for, per worker process. The
@@ -6625,7 +6760,10 @@ def tickets_waiting(cursor, owner_id, delay_seconds):
     Ten at a time. More than ten tickets waiting means nothing has been
     printing for a while, and the next poll takes the rest.
     """
-    cutoff = datetime.now() - timedelta(seconds=max(0, int(delay_seconds)))
+    # UTC, to match order_date. On a machine an hour ahead of the
+    # database this read every order as long past its delay and printed
+    # the lot the moment they were taken.
+    cutoff = utc_now() - timedelta(seconds=max(0, int(delay_seconds)))
     cursor.execute("""
         SELECT order_id
         FROM orders
@@ -6741,9 +6879,9 @@ _WELCOME = _step(
 _PROFILE = _step(
     "bi-person-circle", "Your name, top right", "[data-tour=profile]",
     "Everything about the cafe itself lives behind your name.",
-    "It opens your cafe's name and colour, the tax rate, automatic "
-    "printing, the QR code for your tables - and this tour again, under "
-    "How this works.")
+    "It opens your cafe's name and colour, the clock it keeps, the tax "
+    "rate, automatic printing, the QR code for your tables - and this "
+    "tour again, under How this works.")
 
 _COUNTER = [
     _step("bi-tags", "Categories", "[data-tour=categories]",
@@ -6979,6 +7117,61 @@ def tax_settings():
         return render_template(
             "tax_settings.html",
             tax_percent=get_tax_percent(cafe_id),
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/settings/timezone", methods=["GET", "POST"])
+def timezone_settings():
+    """
+    Which clock the cafe keeps.
+
+    Times are stored in UTC and read back on this one, so this decides
+    what every screen and every printed bill says the time is. Admin only
+    for that reason: it is the whole cafe's clock, not one person's.
+    """
+    denied = require_role("admin")
+    if denied:
+        return denied
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cafe_id = require_cafe_session()
+
+        if request.method == "POST":
+            wanted = (request.form.get("timezone") or "").strip()
+
+            if known_timezone(wanted) is None:
+                flash("That is not a time zone this server knows about.")
+                return redirect(stay_on("timezone_settings"))
+
+            cursor.execute(
+                "UPDATE cafes SET timezone = %s WHERE cafe_id = %s",
+                (wanted, cafe_id))
+            connection.commit()
+
+            # Both of these carry the old zone for the rest of this
+            # request, and the message below is about to read the clock.
+            g.pop("cafe_timezone", None)
+            g.pop("current_user_row", None)
+
+            flash("Clock set to %s. It is %s there now."
+                  % (wanted, cafe_now(cafe_id).strftime("%I:%M %p")))
+            return redirect(came_from())
+
+        current = cafe_timezone_name(cafe_id)
+        return render_template(
+            "timezone_settings.html",
+            zones=sorted(available_timezones()),
+            current=current,
+            now_there=cafe_now(cafe_id).strftime("%d %b %Y, %I:%M %p"),
         )
     finally:
         if cursor:

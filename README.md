@@ -27,6 +27,16 @@ branding, fully isolated from the others.
 - **Categories and menu.** Categories, food items with photos, prices.
 - **Inventory.** Stock levels drive availability automatically — an item
   at zero stock disappears from the order screen.
+- **The café's own clock.** Times are stored in UTC and read back on the
+  zone the café picks under Profile → Time Zone — the kitchen board, the
+  billing list, the printed receipt and the page a customer is holding all
+  agree. Every stored time is written by the app rather than left to a
+  column default, because a default is filled by whichever machine the
+  database happens to be on: that is how an order and its own bill ended
+  up stamped by two different clocks. Left unset a café reads UTC, which
+  is what every café read before this was a choice. Note that this changes
+  what a time *reads* as and nothing else — an order keeps the day it was
+  counted under and the number it was given.
 - **Switching pages costs nothing.** Every sidebar page is fetched in the
   background after sign-in and kept, so going to one you have already
   opened paints immediately and then refreshes underneath. A save empties
@@ -185,6 +195,7 @@ tests/mobile_nav_test.py Real-browser mobile drawer test suite
 tests/tutorial_test.py First-sign-in tour test suite
 tests/tour_browser_test.py Real-browser first-sign-in tour suite
 tests/nav_cache_test.py Real-browser page-cache and navigation-speed suite
+tests/timezone_test.py Café clock and stored-time test suite
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
@@ -220,9 +231,10 @@ python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
 python tests/tutorial_test.py     # expect PASSED: 41   FAILED: 0
 python tests/tour_browser_test.py # expect PASSED: 26  FAILED: 0
 python tests/nav_cache_test.py    # expect PASSED: 8    FAILED: 0
+python tests/timezone_test.py     # expect PASSED: 14   FAILED: 0
 ```
 
-All twenty-nine run in memory against a SQLite stand-in — no database or
+All thirty run in memory against a SQLite stand-in — no database or
 network needed. The fourteen that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 

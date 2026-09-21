@@ -270,6 +270,10 @@
 
                         {# Admin only, and it changes the colour for the whole
                            cafe - so it is not a personal setting to hand out. #}
+                        <a href="{{ url_for('timezone_settings') }}" class="profile-dropdown__item">
+                            <i class="bi bi-clock"></i><span>Time Zone</span>
+                        </a>
+
                         <a href="{{ url_for('theme_settings') }}" class="profile-dropdown__item">
                             <i class="bi bi-droplet-half"></i><span>Theme Colour</span>
                         </a>

@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS cafes (
     kitchen_seen_at    DATETIME NULL,
     tax_percent        DECIMAL(5,2) NOT NULL DEFAULT 5.00,
     theme              VARCHAR(20) NOT NULL DEFAULT 'copper',
+    -- Which clock this cafe keeps. Times are stored in UTC and read back
+    -- on this one. NULL means the deployment's APP_TIMEZONE, and UTC
+    -- beyond that.
+    timezone           VARCHAR(64) NULL,
     auto_kot_enabled   TINYINT(1) NOT NULL DEFAULT 0,
     auto_kot_delay     INT NOT NULL DEFAULT 5,
     auto_bill_enabled  TINYINT(1) NOT NULL DEFAULT 0,
