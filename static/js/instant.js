@@ -161,6 +161,30 @@
     // A write invalidates every cached read. Native form posts reload the
     // page and take the cache with them; the in-page fetch() posts (creating
     // an order, marking a bill paid) have to say so themselves.
+    //
+    // But only a write somebody made. The app talks to itself all day: the
+    // kitchen screen says it is still switched on every twenty seconds, a
+    // till claims a ticket nobody has printed, the tour records that it has
+    // been seen. Not one of those changes anything a page shows, and
+    // throwing every cached page away for them is why switching pages went
+    // back to costing a round trip within seconds of the warm-up finishing.
+    // Measured: a page that painted in 1ms took 258ms after one of them,
+    // and that was with the database next door.
+    var HOUSEKEEPING = new RegExp(
+        "^/api/(kitchen/(heartbeat|claim)|tutorial/seen)(/|$)"
+    );
+
+    function pathOf(input) {
+        var href = typeof input === "string"
+            ? input
+            : (input && input.url) || "";
+        try {
+            return new URL(href, location.href).pathname;
+        } catch (error) {
+            return "";
+        }
+    }
+
     window.fetch = function (input, init) {
         var method = "GET";
         if (init && init.method) method = init.method;
@@ -169,8 +193,12 @@
 
         var result = rawFetch.apply(window, arguments);
 
-        if (method !== "GET" && method !== "HEAD") {
-            result.then(function () { cache.clear(); }, function () {});
+        if (method !== "GET" && method !== "HEAD"
+                && !HOUSEKEEPING.test(pathOf(input))) {
+            result.then(function () {
+                cache.clear();
+                rewarmSoon();
+            }, function () {});
         }
         return result;
     };
@@ -640,8 +668,11 @@
                 };
             });
         }).then(function (result) {
-            // A write makes every cached read stale.
+            // A write makes every cached read stale, and the refill
+            // starts straight away so the next screen opened is not back
+            // to paying full price for itself.
             cache.clear();
+            rewarmSoon();
             release();
             if (token !== navToken) return;
 
@@ -719,14 +750,22 @@
 
     // Walk the sidebar the server rendered for this user, so a cashier never
     // warms (or is even offered) the admin-only screens.
-    function warmSidebar() {
+    // includeCurrent: normally there is no point fetching the page already
+    // on screen. After a write there is - the cache was just emptied, and
+    // the page the write happened on is the one somebody is most likely to
+    // come straight back to. Leaving it out meant New Order, of all
+    // screens, was the one that still cost a round trip after every order.
+    function warmSidebar(includeCurrent) {
         var links = document.querySelectorAll(".sidebar-nav a[href]");
         var urls = [];
 
         for (var i = 0; i < links.length; i++) {
             var link = links[i];
             if (!instantLink(link)) continue;
-            if (stripHash(link.href) === stripHash(location.href)) continue;
+            if (!includeCurrent
+                    && stripHash(link.href) === stripHash(location.href)) {
+                continue;
+            }
             if (urls.indexOf(link.href) === -1) urls.push(link.href);
         }
 
@@ -760,9 +799,28 @@
     });
 
     // Deliberately not re-warmed after every navigation. Cached pages stay
-    // put, hovering or touching a link fetches whatever is missing, and a
-    // write clears the cache so the next visit reads fresh - re-warming on
-    // each swap only added server load for pages already in hand.
+    // put, hovering or touching a link fetches whatever is missing - and
+    // re-warming on each swap only added server load for pages already in
+    // hand.
+    //
+    // After a write is the one time it is worth doing, because the cache
+    // was just emptied on purpose. Without this, saving one thing meant
+    // every other screen went back to costing its full round trips until
+    // somebody happened to visit it - which is the complaint that "if
+    // anything changes on one page, why should the others suffer".
+    //
+    // Debounced, so a burst of saves refills once rather than nine times,
+    // and idle-scheduled like the first warm-up, so it never competes with
+    // the page in front of the user.
+    var rewarmTimer = null;
+
+    function rewarmSoon() {
+        if (rewarmTimer) rawClearTimeout.call(window, rewarmTimer);
+        rewarmTimer = rawSetTimeout.call(window, function () {
+            rewarmTimer = null;
+            warmSidebar(true);
+        }, 500);
+    }
 
     // Registers shell code - sidebar, topbar, order-status popup - that must
     // outlive every navigation. Both the registration and the callback run
@@ -779,6 +837,6 @@
         shell: shell,
         prefetch: prefetch,
         visit: visit,
-        invalidate: function () { cache.clear(); }
+        invalidate: function () { cache.clear(); rewarmSoon(); }
     };
 })();

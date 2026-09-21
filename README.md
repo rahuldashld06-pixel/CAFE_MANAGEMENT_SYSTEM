@@ -27,6 +27,17 @@ branding, fully isolated from the others.
 - **Categories and menu.** Categories, food items with photos, prices.
 - **Inventory.** Stock levels drive availability automatically — an item
   at zero stock disappears from the order screen.
+- **Switching pages costs nothing.** Every sidebar page is fetched in the
+  background after sign-in and kept, so going to one you have already
+  opened paints immediately and then refreshes underneath. A save empties
+  that store — it has to, or a screen would go on showing what was true
+  before — and the store refills itself straight afterwards, including the
+  page the save happened on. What does *not* empty it is the app talking
+  to itself: the kitchen screen saying it is still switched on every
+  twenty seconds, a till claiming a ticket, the tour recording that it was
+  seen. Those used to, and that alone was most of why moving around felt
+  slow: measured with the database next door, one heartbeat turned a page
+  that painted in 1ms into 258ms.
 - **A tour, once.** The first time somebody signs in they are shown
   round. Each step puts a ring round the thing it is describing and says
   what pressing it does - and pressing that thing is how the tour moves
@@ -173,6 +184,7 @@ tests/stale_banner_test.py Real-browser stale-flash regression suite
 tests/mobile_nav_test.py Real-browser mobile drawer test suite
 tests/tutorial_test.py First-sign-in tour test suite
 tests/tour_browser_test.py Real-browser first-sign-in tour suite
+tests/nav_cache_test.py Real-browser page-cache and navigation-speed suite
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
@@ -207,11 +219,18 @@ python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
 python tests/tutorial_test.py     # expect PASSED: 41   FAILED: 0
 python tests/tour_browser_test.py # expect PASSED: 26  FAILED: 0
+python tests/nav_cache_test.py    # expect PASSED: 8    FAILED: 0
 ```
 
-All twenty-eight run in memory against a SQLite stand-in — no database or
-network needed. The thirteen that drive a browser use a headless Edge or
+All twenty-nine run in memory against a SQLite stand-in — no database or
+network needed. The fourteen that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
+
+`nav_cache_test.py` is the odd one out: it puts a deliberate delay on every
+query, because the stand-in database answers instantly and the difference
+between a page served from cache and one fetched from the server would
+otherwise be a millisecond either way. With the delay in, a cache hit and a
+round trip are unmistakable.
 
 `smoke_test.py` takes two cafes through the full lifecycle and asserts
 that neither can read or modify the other's data.
