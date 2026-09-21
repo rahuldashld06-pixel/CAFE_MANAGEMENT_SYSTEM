@@ -27,6 +27,13 @@ branding, fully isolated from the others.
 - **Categories and menu.** Categories, food items with photos, prices.
 - **Inventory.** Stock levels drive availability automatically — an item
   at zero stock disappears from the order screen.
+- **Whose name is on it.** A café brands its own sidebar, its own
+  printed receipt and the page its customers hold — their name, their
+  symbol, their colour. Behind every page inside the app sits one mark
+  that is not theirs to change: the coffee cup and the product's own
+  name, faint, fixed, and ignoring both the uploaded symbol and the name
+  they chose for their sidebar. Nothing appears on the sign-in, register
+  or one-time-code screens, which stand outside the app shell entirely.
 - **The café's own clock.** Times are stored in UTC and read back on the
   zone the café picks under Profile → Time Zone — the kitchen board, the
   billing list, the printed receipt and the page a customer is holding all
@@ -209,7 +216,7 @@ python tests/instant_post_test.py # expect PASSED: 16   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
-python tests/settings_test.py     # expect PASSED: 95   FAILED: 0
+python tests/settings_test.py     # expect PASSED: 104  FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
 python tests/print_test.py        # expect PASSED: 51   FAILED: 0

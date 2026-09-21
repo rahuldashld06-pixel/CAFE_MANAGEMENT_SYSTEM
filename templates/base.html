@@ -57,6 +57,21 @@
 
     <div class="app-shell">
 
+        {# Behind every page, for everyone, and deliberately not the
+           cafe's own mark or the name they chose for their sidebar.
+           This one says what the software is, which is not a thing a
+           cafe using it gets to rewrite - the sidebar, the receipt and
+           the customer's page are all theirs to brand, and this is not.
+
+           Out of the accessibility tree and out of the way of every
+           click: it is decoration, and nothing on it can be read aloud
+           or pressed. #}
+        <div class="app-watermark" aria-hidden="true">
+            {{ coffee_mark() }}
+            <span class="app-watermark__name">{{ platform_name }}</span>
+        </div>
+
+
         <!-- Sidebar. On phones this slides in from the left as a drawer;
              see .nav-toggle below and the drawer block in style.css. -->
         <aside class="sidebar" id="appSidebar">

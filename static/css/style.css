@@ -169,6 +169,78 @@ textarea:focus-visible {
     animation: rise-in 0.5s ease both;
 }
 
+/* ---------- The mark behind every page ---------- */
+/* Fixed rather than scrolled with the page: a watermark that slides up
+   and down reads as a stray picture, where one that stays put reads as
+   something the page is printed on.
+
+   It starts where the sidebar ends, so it sits behind the work and not
+   behind the menu. Faint enough to be missed on a first look, which is
+   the point - a table of prices has to stay easier to read than the
+   thing behind it. */
+.app-watermark {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 260px;
+    z-index: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2vh;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.app-watermark__name {
+    font-family: var(--font-display);
+    font-size: min(7vh, 5vw);
+    font-weight: 700;
+    letter-spacing: .04em;
+    white-space: nowrap;
+    opacity: .1;
+    color: var(--copper-light);
+}
+
+.app-watermark img,
+.app-watermark svg {
+    /* Large enough to reach past the panels. Every card and table on
+       these pages is opaque, so a mark that fits between them is a mark
+       nobody ever sees - what shows is whatever spills into the margins
+       and the empty space below the content. */
+    width: min(58vh, 42vw);
+    height: auto;
+    /* Higher than the printed receipt's, and for the opposite reason:
+       that is dark ink on white paper, this is a pale line on a dark
+       screen. At the receipt's 6% it was not there at all. */
+    opacity: .12;
+    color: var(--copper-light);
+}
+
+/* The page and the menu both sit in front of it. Stated rather than left
+   to source order, because either of them gaining a background of its
+   own would otherwise paint the mark out. */
+.main {
+    position: relative;
+    z-index: 1;
+}
+
+/* The sidebar is already positioned - it is sticky - so it needs the
+   layer and nothing else. Giving it "position: relative" here would win
+   on source order and quietly stop it sticking, which is a strange way
+   to lose a sidebar. */
+.sidebar {
+    z-index: 1;
+}
+
+/* Nothing to print. The receipt and the kitchen ticket carry their own,
+   sized for paper. */
+@media print {
+    .app-watermark { display: none !important; }
+}
+
 /* ---------- Topbar / profile menu ---------- */
 .topbar {
     display: flex;
@@ -1073,6 +1145,9 @@ button.profile-dropdown__item {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 880px) {
+    /* No column to sit beside any more. */
+    .app-watermark { left: 0; }
+
     .app-shell {
         grid-template-columns: 1fr;
     }

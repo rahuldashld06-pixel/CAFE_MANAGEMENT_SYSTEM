@@ -328,9 +328,17 @@ check("and it is on the small-screen bar too",
       re.search(r'topbar-brand__mark">\s*<img src="/media/cafe/', shell)
       is not None,
       "the phone bar still shows the stand-in rather than the symbol")
+# Only where the cafe's own mark goes. The drawn cup also sits behind
+# every page as the software's own watermark, which is a different thing
+# and deliberately not the cafe's to replace - so looking for it across
+# the whole page would catch that instead.
+corners = "".join(
+    re.findall(r"<!--brand:start-->(.*?)<!--brand:end-->", shell, re.S)
+    + re.findall(r"<!--tbrand:start-->(.*?)<!--tbrand:end-->", shell, re.S))
 check("the stand-in steps aside once a symbol is set",
-      "brand-glyph" not in shell,
-      "the cup is drawn alongside the uploaded symbol")
+      "brand-glyph" not in corners,
+      "the cup is drawn alongside the uploaded symbol in the cafe's own "
+      "corner")
 
 a.post("/settings/branding", data={
     "action": "remove_logo", "_csrf_token": csrf(a)}, follow_redirects=True)
@@ -762,6 +770,62 @@ check("and the connector's own pool is not used after all this",
       "MySQLConnectionPool" not in source,
       "it pings on every checkout behind a process-wide lock, which is "
       "the whole thing this section exists to prevent")
+
+print("\n=== 22. The mark behind every page is the software's, not the cafe's ===")
+# A cafe brands its own sidebar, its own receipt and the page its
+# customers hold. This one says what the software is, and a cafe using it
+# does not get to rewrite that - otherwise anybody could put their name on
+# it and call the whole thing theirs.
+#
+# By this point in this suite cafe A has both: a brand name of its own
+# ("Spice Garden") and an uploaded symbol. So it is the case that matters.
+inside = a.get("/orders/add").get_data(as_text=True)
+
+check("every page behind the sign-in carries it",
+      'class="app-watermark"' in inside,
+      "there is nothing behind the page at all")
+
+check("and it names the software",
+      application.DEFAULT_BRAND_NAME in inside,
+      "the platform's own name is nowhere on the page")
+
+mark = re.search(r'<div class="app-watermark"[^>]*>(.*?)</div>',
+                 inside, re.S)
+mark = mark.group(1) if mark else ""
+
+check("not the name the cafe chose for its sidebar",
+      "Spice Garden" not in mark,
+      "the cafe's own name is standing in for the software's: %r"
+      % mark[:120])
+
+check("and not the symbol the cafe uploaded either",
+      "<img" not in mark and "<svg" in mark,
+      "an uploaded logo has replaced the drawn one: %r" % mark[:120])
+
+opening = re.search(r'<div class="app-watermark"[^>]*>', inside)
+check("it is decoration, so it is not read out",
+      bool(opening) and 'aria-hidden="true"' in opening.group(0),
+      "a screen reader announces a background picture")
+
+# The cafe's own branding is untouched everywhere it belongs.
+check("the sidebar still shows what the cafe called itself",
+      "Spice Garden" in inside,
+      "the cafe lost its own name from its own sidebar")
+
+receipt = io.open(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "templates", "print_bill.html"),
+    encoding="utf-8").read()
+check("and the printed receipt still carries the cafe's own symbol",
+      "branding.logo" in receipt,
+      "the receipt was changed to the software's mark - that one is the "
+      "cafe's, and it goes to their customers")
+
+# Before anybody has signed in there is nothing to brand.
+stranger = app.test_client()
+for page in ("/login", "/register"):
+    check("%s carries no watermark" % page,
+          "app-watermark" not in stranger.get(page).get_data(as_text=True),
+          "the mark is on a page nobody has signed in to yet")
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
