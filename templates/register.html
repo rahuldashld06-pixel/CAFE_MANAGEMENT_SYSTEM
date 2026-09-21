@@ -326,7 +326,11 @@
             {% endif %}
         {% endwith %}
 
-        <form method="POST">
+        {# The browser knows what clock this screen is on, and the cafe
+       may not have been asked yet. Carried with the sign-in so the very
+       first page already reads the right time - settling it afterwards
+       meant reloading the page under whoever had just arrived. #}
+    <form method="POST">
 
             <div class="field">
                 <label for="cafe_name">Café Name</label>
@@ -404,7 +408,19 @@
 
             </button>
 
-        </form>
+            <input type="hidden" name="timezone" id="signUpClock">
+    </form>
+
+    <script>
+        (function () {
+            var box = document.getElementById("signUpClock");
+            if (!box) return;
+            try {
+                box.value =
+                    Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+            } catch (error) { /* older browser: the setting still works */ }
+        }());
+    </script>
 
         <div class="signin-link">
             Already have an account? <a href="{{ url_for('login') }}">Sign in</a>

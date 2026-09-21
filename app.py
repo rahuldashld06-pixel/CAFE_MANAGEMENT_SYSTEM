@@ -1999,6 +1999,8 @@ STAFF_ALLOWED_ENDPOINTS = {
     "change_password", "logout",
     # Everybody gets shown round, and everybody gets to say they have been.
     "tutorial_seen",
+    # The browser saying what clock it is on, for a cafe that has none.
+    "timezone_guess",
     "account_photo", "user_media",
     # Whoever is on the till is the one who notices the tickets are wrong.
     "print_settings",
@@ -5412,6 +5414,10 @@ def login():
                     session.clear()
                     session["otp_user_id"] = user["user_id"]
                     session["otp_last_sent"] = time.time()
+                    # Kept across the code screen, which has no idea what
+                    # clock anybody is on.
+                    session["otp_timezone"] = (
+                        request.form.get("timezone") or "")
                     if next_is_safe:
                         session["otp_next"] = next_page
 
@@ -5434,6 +5440,12 @@ def login():
                 session["username"] = user["username"]
                 session["role"] = user["role"]
                 session["cafe_id"] = user.get("cafe_id")
+
+                # The form carried what clock this screen is on. Settled
+                # here so the first page after signing in already reads
+                # right, rather than being corrected underneath somebody.
+                settle_cafe_clock(user.get("cafe_id"),
+                                  request.form.get("timezone"))
 
                 if user["role"] == "admin" and not user["phone_number"]:
                     flash(
@@ -5537,12 +5549,17 @@ def login_verify_otp():
                 connection.commit()
 
                 next_page = session.get("otp_next", "")
+                clock = session.get("otp_timezone", "")
                 session.clear()
                 session.permanent = True
                 session["user_id"] = user["user_id"]
                 session["username"] = user["username"]
                 session["role"] = user["role"]
                 session["cafe_id"] = user.get("cafe_id")
+
+                # Carried across from the sign-in form, because the code
+                # screen has no idea where anybody is.
+                settle_cafe_clock(user.get("cafe_id"), clock)
 
                 if next_page.startswith("/") and not next_page.startswith("//"):
                     return redirect(next_page)
@@ -6956,6 +6973,95 @@ def inject_tutorial():
         "tutorial_steps": tutorial_for(user["role"]),
         "tutorial_due": not user.get("tutorial_seen"),
     }
+
+
+def settle_cafe_clock(cafe_id, wanted):
+    """
+    Give a cafe the clock its own screens are on, if it has none.
+
+    Only if it has none: the WHERE clause is what guarantees that, not
+    whoever calls this, so a laptop signing in from another country can
+    never move a cafe that has already settled.
+
+    Never worth failing a sign-in over. Somebody who cannot get in
+    because of a timestamp has a worse problem than a timestamp.
+    """
+    wanted = (wanted or "").strip()
+    if not cafe_id or known_timezone(wanted) is None:
+        return False
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "UPDATE cafes SET timezone = %s "
+            "WHERE cafe_id = %s AND (timezone IS NULL OR timezone = '')",
+            (wanted, cafe_id))
+        settled = cursor.rowcount == 1
+        connection.commit()
+        return settled
+    except mysql.connector.Error:
+        if connection:
+            connection.rollback()
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/api/timezone/guess", methods=["POST"])
+def timezone_guess():
+    """
+    The browser saying which clock it is on, for a cafe that has none.
+
+    Asking somebody to go and find a settings page before their own
+    screens tell the right time is a poor way to run a till, and the
+    browser already knows the answer. So the first person to sign in
+    settles it, and the setting stays there for anyone who wants to
+    change it deliberately.
+
+    Only when the cafe has not got one. This never overrules a choice
+    somebody made - the WHERE clause is what guarantees that, not the
+    caller - so it is safe to leave open to whoever signs in first,
+    whether that is the owner or whoever opened the till.
+    """
+    if not session.get("user_id"):
+        return jsonify({"ok": False}), 403
+
+    wanted = (request.form.get("timezone") or "").strip()
+    if known_timezone(wanted) is None:
+        return jsonify({"ok": False, "reason": "not a zone"}), 400
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "UPDATE cafes SET timezone = %s "
+            "WHERE cafe_id = %s AND (timezone IS NULL OR timezone = '')",
+            (wanted, require_cafe_session()))
+        settled = cursor.rowcount == 1
+        connection.commit()
+
+        if settled:
+            g.pop("cafe_timezone", None)
+            g.pop("current_user_row", None)
+
+        return jsonify({"ok": True, "settled": settled})
+    except mysql.connector.Error as error:
+        if connection:
+            connection.rollback()
+        return jsonify({"ok": False, "reason": str(error)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 
 @app.route("/api/tutorial/seen", methods=["POST"])

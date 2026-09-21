@@ -53,7 +53,7 @@
     <script src="{{ url_for('static', filename='js/fullscreen.js', v=asset_version) }}" defer></script>
 </head>
 
-<body>
+<body data-clock-unset="{{ 1 if (current_user and not current_user.timezone) else 0 }}">
 
     <div class="app-shell">
 
@@ -1258,6 +1258,40 @@ window.CafeShell = {
         });
 
         if (tour.dataset.due === "1") { open(); }
+    }
+
+    // ---- What clock this cafe is on ---------------------------------
+    //
+    // Only when nobody has said. The browser already knows, and making
+    // somebody find a settings page before their own screens tell the
+    // right time is a poor way to run a till. The server ignores this
+    // outright if a zone is already set, so it can never overrule a
+    // choice somebody made on purpose.
+    if (document.body.dataset.clockUnset === "1") {
+        var here = "";
+        try {
+            here = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+        } catch (error) { /* older browser: leave it to the setting */ }
+
+        if (here) {
+            var said = new FormData();
+            said.append("timezone", here);
+            said.append("_csrf_token", window.CafeShell.csrfToken);
+
+            fetch("/api/timezone/guess", {
+                method: "POST",
+                body: said,
+                credentials: "same-origin",
+                headers: {"X-Requested-With": "XMLHttpRequest"}
+            }).catch(function () { });
+            // Nothing reloads. The sign-in form settles this for anybody
+            // arriving now, so this is only for a session that was
+            // already open when the clock became a thing at all - and
+            // yanking the page out from under somebody mid-shift to fix
+            // a timestamp is a worse trade than the next page being the
+            // first one that reads right. The cache is cleared by the
+            // write itself, so that next page is fetched fresh.
+        }
     }
 
 
