@@ -361,7 +361,7 @@ python tests/timezone_test.py     # expect PASSED: 41   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
-python tests/list_search_test.py  # expect PASSED: 78   FAILED: 0
+python tests/list_search_test.py  # expect PASSED: 79   FAILED: 0
 python tests/security_test.py     # expect PASSED: 44   FAILED: 0
 ```
 
