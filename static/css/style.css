@@ -2842,13 +2842,33 @@ body.nav-locked {
    controls clear of it rather than tucked underneath. */
 @supports (padding: env(safe-area-inset-bottom)) {
     @media (pointer: coarse) {
-        .order-summary-trigger,
-        .order-status-fab {
+        .order-summary-trigger {
             bottom: calc(12px + env(safe-area-inset-bottom));
         }
 
         .main {
             padding-bottom: calc(40px + env(safe-area-inset-bottom));
+        }
+    }
+
+    /* The Order Status button, only while it is at the bottom.
+
+       On a short landscape screen it is not: it has been moved up into
+       the top bar, where it is held by `top` with `bottom: auto`. Giving
+       it a bottom here does not move it down, it stretches it - a box
+       with both a top and a bottom is a box pulled between the two, and
+       this one came out a finger wide and most of the screen tall.
+
+       That is the second time this button has been stretched by a rule
+       that looked unrelated, so the condition is written to be the exact
+       complement of the one that moves it: every coarse screen except a
+       landscape one under 520px tall. Expressed as two queries rather
+       than one `not`, which is newer than some of the phones this runs
+       on. */
+    @media (pointer: coarse) and (min-height: 521px),
+           (pointer: coarse) and (orientation: portrait) {
+        .order-status-fab {
+            bottom: calc(12px + env(safe-area-inset-bottom));
         }
     }
 }
@@ -3368,6 +3388,46 @@ body.nav-locked {
                     var(--espresso-900) 88%, transparent);
         -webkit-backdrop-filter: blur(22px) saturate(150%);
         backdrop-filter: blur(22px) saturate(150%);
+    }
+}
+
+/* ============================================================
+   The masthead starts where it ends up
+
+   Both bars are sticky, so on a wide screen they are flush with
+   the top of the window the moment anything is scrolled: the 34px
+   of page padding above the top bar and the 22px between the two
+   collapse, and the whole top of the app tightens by 56px.
+
+   That tightened state is the one worth looking at, and it was
+   only ever reachable by scrolling. A page opened and left alone
+   showed a band of bare background above the bar and a gap between
+   the bars that closed the instant you touched the wheel - the
+   same shell looking like two different designs depending on
+   whether anybody had moved yet.
+
+   Starting them where they are going to end up means the top of
+   the app never moves at all here. Nothing shifts under the
+   pointer on the first scroll, and every page is the shape it is
+   going to keep from the moment it opens.
+
+   Wide screens only, and this is exactly the set of screens the
+   slide-away leaves alone. On a phone and on a tablet the bar gets
+   out of the way on the way down the page and comes back on the
+   way up, and the room above it is part of how that reads.
+   ============================================================ */
+@media (min-width: 1401px),
+       (min-width: 1025px) and (pointer: fine) {
+
+    .main {
+        padding-top: 0;
+    }
+
+    /* The page title bar sticks at the top bar's lower edge, so any
+       gap here is space that exists until the first scroll and never
+       comes back. */
+    .topbar {
+        margin-bottom: 0;
     }
 }
 

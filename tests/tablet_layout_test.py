@@ -334,6 +334,138 @@ try:
           not state["hamburger"] and state["sidebarVisible"] and state["mainLeft"] > 100,
           "%s" % state)
 
+
+    # =================================================================
+    print("\n=== The top of the app does not move on a big screen ===")
+    # =================================================================
+    # Both bars are sticky, so on a wide screen they end up flush with
+    # the top of the window as soon as anything is scrolled. That left
+    # the same shell looking like two different designs: opened and left
+    # alone it carried a band of bare background above the top bar and a
+    # gap between the two, and both closed the moment you touched the
+    # wheel.
+    #
+    # Reported as one page looking right and another looking wrong -
+    # which they did, because the two screenshots were of the same shell
+    # at different scroll positions.
+
+    def make_scrollable():
+        """Give the page room to scroll, whatever is on it.
+
+        Without this the check below is asserting that a page which
+        cannot move has not moved.
+
+        The spacer goes inside the title bar's own parent, because that
+        box is what bounds a sticky element's travel. Hung on .main
+        instead - outside it - the container ran out underneath the bar
+        and carried it up the screen, which looked exactly like the bar
+        failing to stick and was the test's own doing.
+        """
+        return b.evaluate("""
+            (function () {
+                var old = document.getElementById('__tall');
+                if (old) old.remove();
+                var pad = document.createElement('div');
+                pad.id = '__tall';
+                pad.style.height = '2000px';
+                document.querySelector('.page-header')
+                        .parentElement.appendChild(pad);
+                return document.documentElement.scrollHeight >
+                       window.innerHeight + 200;
+            })()
+        """)
+
+    def masthead():
+        return json.loads(b.evaluate("""
+            (function () {
+                var bar = document.querySelector('.topbar');
+                var head = document.querySelector('.page-header');
+                var b1 = bar.getBoundingClientRect();
+                var h1 = head.getBoundingClientRect();
+                var root = document.documentElement;
+                return JSON.stringify({
+                    barTop: Math.round(b1.top),
+                    barBottom: Math.round(b1.bottom),
+                    headTop: Math.round(h1.top),
+                    barH: Math.round(b1.height),
+                    away: root.classList.contains('bar-away'),
+                    titleTop: getComputedStyle(root)
+                                .getPropertyValue('--title-top').trim(),
+                    topbarH: getComputedStyle(root)
+                                .getPropertyValue('--topbar-h').trim(),
+                    y: Math.round(window.scrollY),
+                    scrollable: document.documentElement.scrollHeight >
+                                window.innerHeight + 200
+                });
+            })()
+        """))
+
+    for width, height in ((1440, 900), (1280, 800), (1920, 1080)):
+        viewport(width, height, touch=False)
+        b.call("Page.navigate", url=BASE + "/foods")
+        wait("!!document.querySelector('.page-header')", "foods header")
+        time.sleep(0.8)
+
+        check("%dx%d: the page can be scrolled at all" % (width, height),
+              make_scrollable(),
+              "nothing below is a test of what happens on a scroll")
+
+        b.evaluate("window.scrollTo(0, 0)")
+        time.sleep(0.3)
+        rest = masthead()
+        check("%dx%d: the bar starts at the top of the window"
+              % (width, height),
+              rest["barTop"] == 0,
+              "it rests %dpx down, on a band of bare background that "
+              "disappears on the first scroll" % rest["barTop"])
+
+        check("%dx%d: the page title sits on the bar above it"
+              % (width, height),
+              abs(rest["headTop"] - rest["barBottom"]) <= 1,
+              "a %dpx gap between the two bars, which closes as soon as "
+              "anything is scrolled"
+              % (rest["headTop"] - rest["barBottom"]))
+
+        if rest["scrollable"]:
+            b.evaluate("window.scrollTo(0, 400)")
+            time.sleep(0.5)
+            moved = masthead()
+            check("%dx%d: and neither moves when the page is scrolled"
+                  % (width, height),
+                  moved["barTop"] == rest["barTop"] and
+                  moved["headTop"] == rest["headTop"],
+                  "at rest %s; scrolled to %d it is %s - the top of "
+                  "the app shifts under the pointer" % (rest, moved["y"],
+                                                        moved))
+            b.evaluate("window.scrollTo(0, 0)")
+            time.sleep(0.3)
+
+    # The other half: a touch device still gets its own spacing, and
+    # still slides the bar away on the way down the page. That behaviour
+    # is the reason the change above is scoped to wide mouse-driven
+    # screens rather than applied to every size.
+    viewport(834, 1112, touch=True)
+    b.call("Page.navigate", url=BASE + "/foods")
+    wait("!!document.querySelector('.page-header')", "tablet foods header")
+    time.sleep(0.8)
+
+    check("the tablet page can be scrolled at all", make_scrollable(),
+          "a page that cannot move cannot show the bar moving")
+
+    b.evaluate("window.scrollTo(0, 0)")
+    time.sleep(0.3)
+    for _ in range(10):
+        b.call("Input.dispatchMouseEvent", type="mouseWheel",
+               x=400, y=500, deltaX=0, deltaY=120)
+        time.sleep(0.05)
+    time.sleep(0.6)
+
+    check("a tablet still gets its bar out of the way on the way down",
+          b.evaluate(
+              "document.documentElement.classList.contains('bar-away')"),
+          "the bar stayed put on a touch screen, so the wide-screen rule "
+          "has leaked onto the devices that need the room back")
+
 finally:
     try:
         b.close()

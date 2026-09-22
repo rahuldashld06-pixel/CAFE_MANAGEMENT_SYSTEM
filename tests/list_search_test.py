@@ -697,6 +697,151 @@ try:
           % fab)
 
 
+    # -----------------------------------------------------------------
+    # The same button, turned sideways.
+    #
+    # Twice now it has come out as a tall orange column down the middle
+    # of a landscape phone, and both times for the same reason: the
+    # landscape rule moves it up into the top bar with `top` set and
+    # `bottom: auto`, and some later rule - a different one each time -
+    # gives it a bottom again. A box with a top and a bottom is a box
+    # stretched between them.
+    #
+    # The width check above cannot see this. It was passing the whole
+    # time the button was six hundred pixels tall, because a column is
+    # narrow. So the check here is the height, and underneath it the
+    # thing that actually has to hold: only one edge pinned.
+    #
+    # A coarse pointer is the half that was missing. The metrics
+    # override alone leaves `(pointer: coarse)` false, and the rule that
+    # broke it is inside a coarse-pointer query - so on a mouse-driven
+    # emulated phone the bug is simply not there to find.
+    b.call("Emulation.setTouchEmulationEnabled", enabled=True,
+           maxTouchPoints=5)
+    b.call("Emulation.setDeviceMetricsOverride", width=844, height=390,
+           deviceScaleFactor=1, mobile=True)
+    b.call("Page.navigate", url=BASE + "/billing")
+    wait("!!document.getElementById('orderStatusFab')")
+    time.sleep(1.0)
+
+    sideways = json.loads(b.evaluate("""
+        (function () {
+            var el = document.getElementById('orderStatusFab');
+            if (!el) return JSON.stringify({missing: true});
+            var box = el.getBoundingClientRect();
+            var style = getComputedStyle(el);
+            var mid = document.elementsFromPoint(
+                box.left + box.width / 2, box.top + box.height / 2);
+
+            // Whether it is stretched between two edges, asked
+            // directly. getComputedStyle resolves `bottom: auto` on a
+            // positioned box to the pixel gap it works out to, so it
+            // says "351px" either way and can never answer this.
+            // Releasing the bottom edge can: if the box shrinks, it was
+            // being held open by it.
+            var had = el.style.bottom;
+            el.style.bottom = 'auto';
+            var natural = el.getBoundingClientRect().height;
+            el.style.bottom = had;
+
+            return JSON.stringify({
+                coarse: matchMedia('(pointer: coarse)').matches,
+                width: Math.round(box.width),
+                height: Math.round(box.height),
+                natural: Math.round(natural),
+                top: Math.round(box.top),
+                cssTop: style.top,
+                cssBottom: style.bottom,
+                tallShare: Math.round(box.height /
+                                      window.innerHeight * 100),
+                onScreen: box.top >= 0 &&
+                          box.bottom <= window.innerHeight + 1,
+                hittable: mid.indexOf(el) > -1 ||
+                          (mid[0] ? el.contains(mid[0]) : false)
+            });
+        }())
+    """))
+
+    check("the sideways screen really is a touch screen",
+          sideways.get("coarse"),
+          "the pointer reads as fine, so the rule that breaks this "
+          "button is not even being applied - nothing below is a test")
+
+    check("the order status button is a button, not a column",
+          sideways["height"] <= 60,
+          "it is %spx tall on a %spx screen - %d%% of the height, which "
+          "is the orange bar down the middle of the screen that was "
+          "reported" % (sideways["height"], 390, sideways["tallShare"]))
+
+    check("it is held by one edge rather than stretched between two",
+          sideways["height"] <= sideways["natural"] + 1,
+          "letting go of the bottom edge shrinks it from %spx to %spx, "
+          "so it was not that tall because of what is in it - it was "
+          "being pulled open between top:%s and bottom:%s"
+          % (sideways["height"], sideways["natural"],
+             sideways["cssTop"], sideways["cssBottom"]))
+
+    check("it sits on the screen in landscape",
+          sideways["onScreen"],
+          "it runs from %spx to %spx on a 390px screen"
+          % (sideways["top"], sideways["top"] + sideways["height"]))
+
+    check("and nothing is sitting on top of it",
+          sideways["hittable"],
+          "a tap in the middle of the button lands on something else")
+
+    # And the guard against fixing the stretch by dropping the offset
+    # that keeps it clear of a phone's home indicator, which is what the
+    # rule was there for in the first place.
+    b.call("Emulation.setDeviceMetricsOverride", width=390, height=780,
+           deviceScaleFactor=1, mobile=True)
+    b.call("Page.navigate", url=BASE + "/billing")
+    wait("!!document.getElementById('orderStatusFab')")
+    time.sleep(0.8)
+
+    upright = json.loads(b.evaluate("""
+        (function () {
+            var el = document.getElementById('orderStatusFab');
+            var box = el.getBoundingClientRect();
+            var had = el.style.top;
+            el.style.top = 'auto';
+            var natural = el.getBoundingClientRect().height;
+            el.style.top = had;
+            return JSON.stringify({
+                height: Math.round(box.height),
+                natural: Math.round(natural),
+                gapBelow: Math.round(window.innerHeight - box.bottom)
+            });
+        }())
+    """))
+
+    check("upright, it still sits above the bottom of the phone",
+          upright["gapBelow"] >= 12 and
+          upright["height"] <= upright["natural"] + 1,
+          "in portrait it leaves %spx below it and measures %spx tall "
+          "against a natural %spx"
+          % (upright["gapBelow"], upright["height"], upright["natural"]))
+
+    # env(safe-area-inset-bottom) is zero in a browser with no notch, so
+    # no measurement here can tell `12px` from `calc(12px + 0px)`. The
+    # clearance is real on a phone with a home indicator and nowhere
+    # else, so what is checked is that the rule still names this button
+    # - the guard against fixing the stretch by dropping it from the
+    # rule, rather than by scoping the rule.
+    _css = urllib.request.urlopen(
+        BASE + "/static/css/style.css", timeout=10).read().decode("utf-8")
+    _clearance = re.search(
+        r"\.order-status-fab\s*\{[^}]*env\(safe-area-inset-bottom\)",
+        _css)
+
+    check("the home-indicator clearance still names the button",
+          bool(_clearance),
+          "no rule gives .order-status-fab a safe-area bottom any more, "
+          "so on a phone with a home indicator it sits under it")
+
+    b.call("Emulation.setTouchEmulationEnabled", enabled=False)
+
+
     # =================================================================
     print("\n=== 7. The bar does not flap at the foot of a page ===")
     # =================================================================
