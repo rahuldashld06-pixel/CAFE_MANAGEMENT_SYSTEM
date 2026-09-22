@@ -526,24 +526,59 @@
         .date-long { display: none; }
         .date-short { display: inline; }
 
-        .billing-table th.col-id { width: 48px; }
-        .billing-table th.col-date { width: 106px; }
-        .billing-table th.col-items { width: 156px; }
-        .billing-table th.col-total { width: 64px; }
-        .billing-table th.col-mode { width: 92px; }
-        .billing-table th.col-return { width: 94px; }
-        .billing-table th.col-status { width: 94px; }
-        .billing-table th.col-print { width: 44px; }
+        /* Measured, not guessed. Order Items had 162px for "Veg
+           Burger x 2" while the mode select had 67 for a word and an
+           arrow, and the print button had rendered 18px wide. The item
+           column gives thirty of those back and the rest share them. */
+        .billing-table th.col-id { width: 56px; }
+        .billing-table th.col-date { width: 100px; }
+        .billing-table th.col-items { width: 130px; }
+        .billing-table th.col-total { width: 58px; }
+        .billing-table th.col-mode { width: 104px; }
+        .billing-table th.col-return { width: 96px; }
+        .billing-table th.col-status { width: 92px; }
+        .billing-table th.col-print { width: 54px; }
+
+        /* A bill number is one word and never wraps. It was the first
+           thing on the row and the first thing to look broken. */
+        .billing-table td.bill-id,
+        .billing-table td[data-label="Order ID"] {
+            white-space: nowrap;
+        }
+
+        /* The select fills its column now there is a column to fill,
+           with just enough room kept for the arrow. */
+        .payment-method-select {
+            padding: 5px 20px 5px 7px;
+        }
+
+        /* Shorter, so what is owed or owing sits clear underneath it
+           rather than against the bottom edge of the cell. */
+        .cash-received-input {
+            height: 22px;
+            padding: 2px 6px;
+            font-size: 10.5px;
+        }
+
+        .return-cell { min-height: 22px; }
+
+        .return-cell .return-amount,
+        .return-cell .return-not-applicable {
+            top: calc(50% + 11px);
+            font-size: 9.5px;
+        }
+
+        /* A button around the icon, not an icon on its own. It had
+           rendered 18px wide, which is smaller than the thing it is
+           meant to be pressed with. */
+        .print-bill-btn {
+            padding: 5px 9px;
+            min-width: 34px;
+            justify-content: center;
+        }
 
 
         .payment-method-select {
-            padding: 5px 18px 5px 6px;
-            font-size: 11px;
-        }
-
-        .cash-received-input {
-            height: 26px;
-            padding: 3px 6px;
             font-size: 11px;
         }
 
@@ -553,13 +588,6 @@
             font-size: 10px;
             gap: 3px;
             padding: 4px 6px;
-        }
-
-        .return-cell { min-height: 26px; }
-        .return-cell .return-amount,
-        .return-cell .return-not-applicable {
-            top: calc(50% + 13px);
-            font-size: 10px;
         }
 
         .print-bill-btn {
@@ -987,7 +1015,10 @@
             '<i class="bi ' + (isError ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill') + '"></i> ' +
             message;
         stack.appendChild(toast);
-        setTimeout(() => toast.remove(), 4000);
+        // Swept up by the shell's own timer now, on the same
+        // clock as every other notice. This is only a backstop for a
+        // browser with no MutationObserver.
+        setTimeout(() => toast.remove(), 1400);
     }
 
     async function submitBillingForm(form) {

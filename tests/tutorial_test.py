@@ -243,8 +243,11 @@ print("\n=== 7. What a tour cannot hand back stays put ===")
 kept = {
     "that a rate change is not retrospective":
         ("tax_settings.html", "keep the rates they were"),
+    # Reworded, and widened: it now says where the name actually
+    # reaches - the customer's page and the printed receipt, not just
+    # the corner of the admin's own screen.
     "that the cafe's name is everybody's":
-        ("branding.html", "whole cafe's name"),
+        ("branding.html", "everywhere it is named"),
     "that a new QR code breaks the printed ones":
         ("qr_settings.html", "already printed"),
     "how to make a printer stop asking":

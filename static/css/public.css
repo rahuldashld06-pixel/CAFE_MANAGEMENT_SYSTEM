@@ -515,3 +515,133 @@ body {
     .p-step button { width: 31px; height: 31px; }
     .p-send { padding: 12px 17px; font-size: 14px; }
 }
+
+
+/* ==========================================================
+   Finding something on a long menu
+
+   A search box and a row of sections. Both work on the menu
+   already on the phone - see the script at the foot of
+   public_menu.html - so tapping a section is instant and
+   costs the cafe's wifi nothing.
+   ========================================================== */
+
+.p-find {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 0 0 12px;
+}
+
+.p-find__icon {
+    position: absolute;
+    left: 13px;
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: var(--p-faint);
+    stroke-width: 2;
+    stroke-linecap: round;
+    pointer-events: none;
+}
+
+.p-find__input {
+    width: 100%;
+    /* 16px, or iOS zooms the whole page when it is focused - which on a
+       menu somebody is holding at a table is a small disaster. */
+    font-size: 16px;
+    font-family: inherit;
+    padding: 12px 40px 12px 38px;
+    border-radius: 999px;
+    border: 1px solid var(--p-line);
+    background: var(--p-card);
+    color: var(--p-text);
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.p-find__input::placeholder { color: var(--p-faint); }
+
+.p-find__input:focus {
+    outline: none;
+    border-color: var(--copper);
+    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .2);
+}
+
+.p-find__input::-webkit-search-cancel-button { display: none; }
+
+.p-find__clear {
+    position: absolute;
+    right: 10px;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--p-line);
+    color: var(--p-text);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+/* The sections, across the top. It scrolls sideways on purpose: a cafe
+   may have eight of these and they are not going to fit a phone, and a
+   row that scrolls is easier to use than a block that wraps to four
+   lines and pushes the menu off the screen. */
+.p-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding-bottom: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.p-tabs::-webkit-scrollbar { display: none; }
+
+.p-tab {
+    flex: 0 0 auto;
+    padding: 9px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--p-line);
+    background: var(--p-card);
+    color: var(--p-dim);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease,
+                border-color .15s ease;
+}
+
+.p-tab.is-on {
+    background: var(--copper);
+    border-color: var(--copper);
+    color: #2a1a10;
+}
+
+/* Nothing matched. */
+.p-none {
+    margin: 26px 4px;
+    text-align: center;
+    color: var(--p-faint);
+}
+
+/* A section appearing is a change of content, not a slide - somebody
+   is looking for a dish, not watching an animation. This is just
+   enough to say the list changed. */
+.p-group {
+    animation: p-appear .16s ease-out;
+}
+
+@keyframes p-appear {
+    from { opacity: .35; }
+    to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .p-group { animation: none; }
+    .p-tab { transition: none; }
+}

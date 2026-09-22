@@ -454,31 +454,6 @@ textarea:focus-visible {
     }
 }
 
-/* The Order Status button, on any screen too narrow to spare the room.
-   It keeps the thing that tells you what it is and the thing you
-   actually read off it - the icon and the count - and drops the words.
-   A cup with a number on it, in the corner of a till, is not a puzzle. */
-@media (max-width: 560px), (orientation: landscape) and (max-height: 520px) {
-    .order-status-fab {
-        left: 12px;
-        bottom: 12px;
-        gap: 6px;
-        padding: 10px 12px;
-    }
-
-    .order-status-fab__label {
-        display: none;
-    }
-
-    /* Without the label the pill is nearly round, so the count sits
-       against the icon rather than out on its own. */
-    .order-status-fab__badge {
-        min-width: 18px;
-        height: 18px;
-        font-size: 10px;
-    }
-}
-
 /* Nothing to print. The receipt and the kitchen ticket carry their own,
    sized for paper. */
 @media print {
@@ -1821,6 +1796,51 @@ button, input, select, textarea {
     justify-content: flex-start;
     padding: 0 24px 96px;
 }
+
+/* On a screen held sideways it is stood down.
+   
+   At 390px tall every page is content to its bottom edge, so a button
+   fixed to a corner is a button sitting on top of something. Measured
+   on Billing it covered the first bill number outright - which is what
+   somebody reading that page came for - and on the kitchen board it sat
+   over a ticket's order number.
+   
+   There is no free corner to move it to at that height: the opposite
+   corner holds the order summary on the New Order page, and everything
+   between is table. So in landscape it stands down, and returns the
+   moment the device is turned back upright. */
+@media (orientation: landscape) and (max-height: 520px) {
+    .order-status-fab,
+    .order-status-overlay {
+        display: none;
+    }
+}
+
+/* The Order Status button, on any screen too narrow to spare the room.
+   It keeps the thing that tells you what it is and the thing you
+   actually read off it - the icon and the count - and drops the words.
+   A cup with a number on it, in the corner of a till, is not a puzzle. */
+@media (max-width: 560px), (orientation: landscape) and (max-height: 520px) {
+    .order-status-fab {
+        left: 12px;
+        bottom: 12px;
+        gap: 6px;
+        padding: 10px 12px;
+    }
+
+    .order-status-fab__label {
+        display: none;
+    }
+
+    /* Without the label the pill is nearly round, so the count sits
+       against the icon rather than out on its own. */
+    .order-status-fab__badge {
+        min-width: 18px;
+        height: 18px;
+        font-size: 10px;
+    }
+}
+
 
 .order-status-overlay.open {
     display: flex;
@@ -3857,6 +3877,95 @@ button.kitchen-tick:focus-visible {
 /* Time on the left, buttons on the right, and allowed to stack rather
    than squeeze on a narrow screen - these get pressed with a thumb. */
 .kitchen-ticket__foot { flex-wrap: wrap; }
+
+/* ==========================================================
+   The kitchen board on a screen held sideways
+
+   Roughly 844 across and under 400 tall. The board is drawn
+   for a screen with room, and at that height barely a row of
+   tickets was above the fold.
+
+   Everything gives up space except the tick. It is pressed
+   with a thumb by somebody holding a pan, and trading the
+   size of the one control on the page for a few pixels is
+   not a trade worth making.
+   ========================================================== */
+
+@media (orientation: landscape) and (max-height: 520px) {
+    .kitchen-board {
+        /* Narrower columns, so four tickets fit across 844px where
+           three did - and a ticket holds a number and a short list, not
+           a paragraph. */
+        grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+        gap: 9px;
+        margin-top: 9px;
+    }
+
+    .kitchen-ticket__head {
+        padding: 7px 10px;
+    }
+
+    /* Still the biggest thing on the ticket, because it is the thing
+       called across a kitchen - just no longer the size it is on a
+       screen three times as tall. */
+    .kitchen-ticket__id {
+        font-size: 18px;
+    }
+
+    .kitchen-ticket__from {
+        font-size: 9.5px;
+        letter-spacing: .06em;
+    }
+
+    .kitchen-ticket__items {
+        padding: 7px 10px;
+    }
+
+    .kitchen-line {
+        gap: 9px;
+        padding: 3px 0;
+        font-size: 13.5px;
+        line-height: 1.25;
+    }
+
+    .kitchen-line__text {
+        gap: 7px;
+    }
+
+    .kitchen-qty {
+        min-width: 24px;
+    }
+
+    /* Untouched on purpose. See the note above. */
+    .kitchen-tick {
+        width: 28px;
+        height: 28px;
+    }
+
+    .kitchen-ticket__foot {
+        padding: 6px 10px;
+        gap: 7px;
+        font-size: 10px;
+    }
+
+    .kitchen-ticket__foot .btn {
+        padding: 4px 9px;
+        font-size: 10.5px;
+        min-height: 26px;
+    }
+
+    .kitchen-empty {
+        padding: 22px 16px;
+    }
+
+    /* Room at the foot for the floating Order Status button, which is
+       fixed to the bottom-left corner. Without it the last row of
+       tickets scrolls underneath the button and a ticket ends up with
+       a pill sitting on its order number. */
+    .kitchen-board {
+        padding-bottom: 58px;
+    }
+}
 
 .kitchen-ticket__actions {
     display: flex;

@@ -7362,28 +7362,46 @@ def branding():
                 flash(str(error))
                 return redirect(stay_on('branding'))
 
+            # The cafe's own name moves with it. There were two
+            # names on this row - cafe_name from the sign-up form and
+            # brand_name from this page - and only this one was
+            # editable, so renaming the cafe changed the sidebar while
+            # the customer's page, the receipt and the browser tab
+            # carried on saying whatever was typed on the first day.
+            #
+            # COALESCE rather than a plain assignment: clearing the
+            # field means "use the product's default in the sidebar",
+            # and it should not also rename somebody's business to
+            # "Cafe Manager".
             if data is not None:
                 cursor.execute("""
                     UPDATE cafes
                     SET brand_name = %s,
                         brand_tagline = %s,
+                        cafe_name = COALESCE(%s, cafe_name),
                         logo_blob = %s,
                         logo_mime = %s,
                         branding_version = branding_version + 1
                     WHERE cafe_id = %s
-                """, (name or None, tagline or None, data, mime, cafe_id))
+                """, (name or None, tagline or None, name or None,
+                      data, mime, cafe_id))
             else:
                 cursor.execute("""
                     UPDATE cafes
                     SET brand_name = %s,
-                        brand_tagline = %s
+                        brand_tagline = %s,
+                        cafe_name = COALESCE(%s, cafe_name)
                     WHERE cafe_id = %s
-                """, (name or None, tagline or None, cafe_id))
+                """, (name or None, tagline or None, name or None,
+                      cafe_id))
 
             connection.commit()
             g.pop("cafe_branding", None)
+            g.pop("current_user_row", None)
 
-            flash("Saved. Every page now reads %s."
+            flash("Saved. Every page now reads %s — including the "
+                  "page your customers open from the QR code, and the "
+                  "bottom of every printed receipt."
                   % (name or DEFAULT_BRAND_NAME))
             return redirect(came_from())
 

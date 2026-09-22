@@ -304,6 +304,15 @@
     max-height: 82vh;
     margin-bottom: 18px;
     overflow: hidden;
+    /* A column, so the list in the middle is the part that gives way
+       when there is not enough room. It was a plain block: the list
+       took whatever height it wanted, pushed the footer past the
+       popup's own bottom edge, and overflow:hidden cut it off - so on
+       a short screen Continue Selecting and Create Order were simply
+       not there. Measured at 137px below the popup on a phone held
+       sideways. */
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--espresso-700);
     border-radius: 16px;
     background: var(--espresso-900);
@@ -334,9 +343,21 @@
     cursor: pointer;
 }
 
+.order-summary-popup__header,
+.order-summary-popup__footer {
+    flex: 0 0 auto;
+}
+
 .order-summary-popup__body {
-    padding: 18px 20px;
+    /* min-height:0 because a flex child will not shrink below its
+       content without it, which is the whole reason this scrolls. */
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
+    padding: 18px 20px;
+    /* A ceiling for when there is height to spare, so the list does not
+       fill a tall screen on its own. The flex rules above are what
+       shrink it when there is not. */
     max-height: 48vh;
 }
 
@@ -427,6 +448,44 @@
     display: flex;
     gap: 10px;
     justify-content: flex-end;
+}
+
+/* A phone or small tablet turned sideways. The sheet has about 390px
+   of height to work with, so it gives up what it can and the two
+   choices sit where a thumb already is - at the left, nearest the hand
+   holding the device, rather than out at the far corner. */
+@media (orientation: landscape) and (max-height: 520px) {
+    .order-summary-popup {
+        /* Not 92vh: the sheet is anchored to the bottom, so anything
+           taller than this slid its own heading up behind the top bar.
+           This leaves the heading and its close button in the clear. */
+        max-height: 80vh;
+        margin-bottom: 8px;
+    }
+
+    .order-summary-popup__body {
+        max-height: none;
+        padding: 10px 14px;
+    }
+
+    .order-summary-popup__header,
+    .order-summary-popup__footer {
+        padding: 10px 14px;
+    }
+
+    .order-summary-totals {
+        gap: 4px;
+        margin-bottom: 10px;
+    }
+
+    .order-summary-row--total {
+        padding-top: 6px;
+        font-size: 16px;
+    }
+
+    .order-summary-actions {
+        justify-content: flex-start;
+    }
 }
 
 @media (max-width: 700px) {

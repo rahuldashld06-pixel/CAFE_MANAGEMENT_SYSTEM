@@ -116,6 +116,12 @@ for _each in (1, 2, 1):
     seed.post("/orders/add",
               data={"quantity_%s" % _ordered[0]: str(_each),
                     "_csrf_token": csrf(seed)}, follow_redirects=True)
+# Orders again, so the kitchen board has tickets to measure.
+for _each in (1, 2):
+    seed.post("/orders/add",
+              data={"quantity_%s" % _ordered[0]: str(_each),
+                    "_csrf_token": csrf(seed)}, follow_redirects=True)
+
 seed.get("/billing")          # raises the bills
 
 # The Order Status button belongs to the people on the till, not the
@@ -620,7 +626,32 @@ try:
     # And the floating Order Status button, which sits over every page.
     b.call("Emulation.setDeviceMetricsOverride", width=390, height=780,
            deviceScaleFactor=1, mobile=True)
-    # Signed in again as the cashier, because the button is theirs.
+    # The owner gets it too. It was staff-only on the reasoning that an
+    # admin has the Dashboard for this - but the Dashboard is a page you
+    # have to go to, and this is a button on whichever page you are
+    # already on.
+    b.call("Emulation.setDeviceMetricsOverride", width=390, height=780,
+           deviceScaleFactor=1, mobile=True)
+    b.call("Page.navigate", url=BASE + "/orders/add")
+    check("the owner is offered the order status button as well",
+          wait("!!document.getElementById('orderStatusFab')"),
+          "an owner working the counter cannot see what is outstanding "
+          "without leaving the page they are on")
+
+    check("and it opens for them",
+          b.evaluate("""
+              (function () {
+                  document.getElementById('orderStatusFab').click();
+                  return true;
+              }())
+          """) and wait("document.getElementById('orderStatusOverlay')"
+                        ".classList.contains('open')"),
+          "the button is there but does nothing")
+
+    b.evaluate("document.getElementById('orderStatusClose').click()")
+    time.sleep(0.4)
+
+    # Signed in again as the cashier, because the button is theirs too.
     b.call("Page.navigate", url=BASE + "/logout")
     wait("!!document.querySelector('form [name=username]')")
     b.evaluate("""
@@ -664,6 +695,232 @@ try:
           fab["iconShown"] and not fab["labelShown"],
           "it kept the words and lost nothing, or lost the icon too: %s"
           % fab)
+
+
+    # =================================================================
+    print("\n=== 7. The bar does not flap at the foot of a page ===")
+    # =================================================================
+    # Reported as the page shaking continuously once you reach the
+    # bottom. Measured: twenty-four small nudges there produced
+    # twenty-three flips of the top bar, each one a 220ms slide. The
+    # document height never moved - what was shaking was the bar.
+
+    def nudge(times, delta, width, height):
+        for step in range(times):
+            b.call("Input.dispatchMouseEvent", type="mouseWheel",
+                   x=width // 2, y=height // 2, deltaX=0,
+                   deltaY=(delta if step % 2 == 0 else -delta))
+            time.sleep(0.07)
+        time.sleep(0.5)
+
+    def bar_hidden():
+        return b.evaluate(
+            "document.documentElement.classList.contains('bar-away')")
+
+    b.call("Emulation.setDeviceMetricsOverride", width=390, height=780,
+           deviceScaleFactor=1, mobile=True)
+    b.call("Page.navigate", url=BASE + "/foods")
+    wait("!!document.querySelector('.page-header')")
+    time.sleep(1.0)
+
+    b.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(0.7)
+
+    b.evaluate("""
+        (function () {
+            window.__flips = 0;
+            var root = document.documentElement;
+            var was = root.classList.contains('bar-away');
+            window.__watch = setInterval(function () {
+                var now = root.classList.contains('bar-away');
+                if (now !== was) { window.__flips++; was = now; }
+            }, 16);
+        }())
+    """)
+
+    nudge(20, 9, 390, 780)
+    flips = b.evaluate("clearInterval(window.__watch); window.__flips")
+
+    check("small movements at the bottom do not move the bar",
+          flips == 0,
+          "the bar changed state %d times while somebody scrolled at the "
+          "foot of the page - each one a slide, which is the shaking "
+          "that was reported" % flips)
+
+    # And the guard against fixing it by switching the feature off.
+    b.evaluate("window.scrollTo(0, 0)")
+    time.sleep(0.6)
+    check("the bar still starts visible", not bar_hidden())
+
+    for _ in range(8):
+        b.call("Input.dispatchMouseEvent", type="mouseWheel",
+               x=195, y=390, deltaX=0, deltaY=120)
+        time.sleep(0.05)
+    time.sleep(0.6)
+    check("a real scroll down still hides it", bar_hidden(),
+          "the shaking was cured by stopping the bar working at all")
+
+    for _ in range(8):
+        b.call("Input.dispatchMouseEvent", type="mouseWheel",
+               x=195, y=390, deltaX=0, deltaY=-120)
+        time.sleep(0.05)
+    time.sleep(0.6)
+    check("and scrolling back up brings it straight back",
+          not bar_hidden(), "it stayed away")
+
+    # =================================================================
+    print("\n=== 8. The kitchen board, on a screen held sideways ===")
+    # =================================================================
+    # The board is drawn for a screen with room. At 390px tall barely a
+    # row of tickets was above the fold, and the rest was a scroll away
+    # on the one screen in the building nobody is holding.
+
+    b.call("Emulation.setDeviceMetricsOverride", width=844, height=390,
+           deviceScaleFactor=1, mobile=True)
+    b.call("Page.navigate", url=BASE + "/kitchen")
+    if wait("!!document.querySelector('.kitchen-ticket')", 12):
+        board = json.loads(b.evaluate("""
+            (function () {
+                var t = document.querySelectorAll('.kitchen-ticket');
+                var lefts = {}, visible = 0;
+                for (var i = 0; i < t.length; i++) {
+                    var r = t[i].getBoundingClientRect();
+                    lefts[Math.round(r.left)] = 1;
+                    if (r.top >= 0 && r.bottom <= window.innerHeight + 1) {
+                        visible++;
+                    }
+                }
+                var tick = document.querySelector('.kitchen-tick');
+                var line = document.querySelector('.kitchen-line');
+                return JSON.stringify({
+                    across: Object.keys(lefts).length,
+                    visible: visible,
+                    height: Math.round(
+                        t[0].getBoundingClientRect().height),
+                    tick: tick
+                        ? Math.round(tick.getBoundingClientRect().width) : 0,
+                    line: parseFloat(getComputedStyle(line).fontSize),
+                    fab: !!document.getElementById('orderStatusFab'),
+                    sideways: document.documentElement.scrollWidth
+                              - document.documentElement.clientWidth
+                });
+            }())
+        """))
+
+        check("several tickets fit across", board["across"] >= 3,
+              "only %d column(s) on an 844px screen" % board["across"])
+
+        check("and more than one is fully on screen",
+              board["visible"] >= 3,
+              "%d tickets are wholly visible in 390px of height"
+              % board["visible"])
+
+        check("nothing scrolls sideways", board["sideways"] <= 1,
+              "the board overflows by %spx" % board["sideways"])
+
+        # The one thing that must not be traded for space. It is pressed
+        # with a thumb, in a kitchen, by somebody holding a pan.
+        check("the tick is still the size of a thumb",
+              board["tick"] >= 28,
+              "it shrank to %spx to make room, which is the one control "
+              "on this page" % board["tick"])
+
+        check("and a dish is still readable", board["line"] >= 13,
+              "dish names are %spx" % board["line"])
+
+        # A pill floating over a ticket's order number, on the screen
+        # that is left on all day.
+        check("nothing floats over the tickets",
+              not board["fab"],
+              "the order status button is on the kitchen screen, which "
+              "is the one page that already shows all of this")
+    else:
+        check("the kitchen board has tickets to measure", False,
+              "no tickets rendered, so nothing above was checked")
+
+
+    # =================================================================
+    print("\n=== 9. The order summary, on a screen held sideways ===")
+    # =================================================================
+    # The sheet was a plain block with a scrolling list inside it. The
+    # list took the height it wanted, pushed the footer past the
+    # sheet's own bottom edge, and overflow:hidden cut it off - so on a
+    # phone held sideways Continue Selecting and Create Order were
+    # measured 137px below the sheet, and simply were not there.
+
+    b.call("Emulation.setDeviceMetricsOverride", width=844, height=390,
+           deviceScaleFactor=1, mobile=True)
+    b.call("Page.navigate", url=BASE + "/orders/add")
+    wait("!!document.querySelector('.food-card')")
+    time.sleep(1.0)
+
+    b.evaluate("""
+        (function () {
+            var picked = 0;
+            document.querySelectorAll('input[id^=quantity_]')
+                .forEach(function (box) {
+                    if (picked < 3) {
+                        box.value = '2';
+                        box.dispatchEvent(
+                            new Event('input', {bubbles: true}));
+                        box.dispatchEvent(
+                            new Event('change', {bubbles: true}));
+                        picked++;
+                    }
+                });
+        }())
+    """)
+    time.sleep(0.6)
+    b.evaluate("document.getElementById('orderSummaryTrigger').click()")
+    time.sleep(1.0)
+
+    sheet = json.loads(b.evaluate("""
+        (function () {
+            var acts = document.querySelector('.order-summary-actions');
+            var head = document.querySelector(
+                '.order-summary-popup__header');
+            var bar = document.querySelector('.topbar');
+            var btns = acts ? acts.querySelectorAll('.btn') : [];
+            var seen = [];
+            for (var i = 0; i < btns.length; i++) {
+                var r = btns[i].getBoundingClientRect();
+                seen.push({
+                    label: btns[i].textContent.replace(/\s+/g, ' ').trim(),
+                    onScreen: r.bottom <= window.innerHeight + 1
+                              && r.top >= -1,
+                    left: Math.round(r.left)
+                });
+            }
+            var hr = head ? head.getBoundingClientRect() : null;
+            var br = bar ? bar.getBoundingClientRect() : null;
+            return JSON.stringify({
+                buttons: seen,
+                headerClear: (hr && br) ? hr.top >= br.bottom - 1 : null,
+                justify: acts
+                    ? getComputedStyle(acts).justifyContent : null
+            });
+        }())
+    """))
+
+    check("the summary offers both choices",
+          len(sheet["buttons"]) == 2,
+          "it shows %s" % [x["label"] for x in sheet["buttons"]])
+
+    for choice in sheet["buttons"]:
+        check("%r is on the screen" % choice["label"],
+              choice["onScreen"],
+              "it is off the bottom of the sheet, which is where both "
+              "of them were")
+
+    check("and the heading is not behind the top bar",
+          sheet["headerClear"],
+          "the sheet slid its own title up under the bar")
+
+    # Nearest the hand holding the device, rather than out at the far
+    # corner of a screen that is mostly width.
+    check("the choices sit at the near edge",
+          sheet["justify"] == "flex-start",
+          "they are aligned %r" % sheet["justify"])
 
 finally:
     try:

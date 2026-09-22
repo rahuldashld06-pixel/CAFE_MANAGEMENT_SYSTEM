@@ -30,7 +30,7 @@
         </span>
         <div>
             <h1 class="p-head__name">{{ branding.cafe_name }}</h1>
-            <p class="p-head__sub">Order from your table</p>
+            <p class="p-head__sub">Just choose what you like</p>
         </div>
     </header>
 
@@ -56,15 +56,46 @@
         You will get an order number to quote at the counter.
     </p>
 
+    {# Both of these work on the menu that is already on the phone. A
+       cafe's menu is a few dozen dishes; asking the server again to
+       show a different part of it would be a round trip to spare
+       somebody a scroll. #}
+    <div class="p-find">
+        <svg class="p-find__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+        </svg>
+        <input type="search"
+               id="menuSearch"
+               class="p-find__input"
+               placeholder="Search the menu…"
+               autocomplete="off"
+               aria-label="Search the menu">
+        <button type="button" id="menuSearchClear" class="p-find__clear"
+                aria-label="Clear search" hidden>&times;</button>
+    </div>
+
+    {# All first, then the cafe's own categories. A bar rather than
+       headings down the page: on a phone the headings are only ever
+       visible one at a time anyway. #}
+    <nav class="p-tabs" id="menuTabs" aria-label="Menu sections">
+        <button type="button" class="p-tab is-on" data-section="all">All</button>
+        {% for group in groups %}
+        <button type="button" class="p-tab"
+                data-section="{{ loop.index0 }}">{{ group.name }}</button>
+        {% endfor %}
+    </nav>
+
     <form method="POST" action="{{ url_for('public_place_order', token=token) }}"
           id="orderForm">
 
         {% for group in groups %}
-        <section>
+        <section class="p-group" data-section="{{ loop.index0 }}">
             <h2 class="p-group__name">{{ group.name }}</h2>
 
             {% for food in group.foods %}
-            <div class="p-item">
+            <div class="p-item"
+                 data-find="{{ (food.food_name ~ ' ' ~ group.name ~ ' ' ~ (food.description or '')) | lower }}">
                 <div class="p-item__body">
                     <div class="p-item__name">{{ food.food_name }}</div>
                     {% if food.description %}
@@ -91,6 +122,11 @@
             {% endfor %}
         </section>
         {% endfor %}
+
+        <p class="p-none" id="menuNone" hidden>
+            Nothing on the menu matches
+            “<span id="menuNoneTerm"></span>”.
+        </p>
 
         <div class="p-bar">
             <div class="p-bar__inner">
@@ -191,6 +227,88 @@
 
     retally();
 }());
+
+// ---- Finding something on a long menu --------------------------------
+//
+// The search and the tabs both work on the menu that is already here. A
+// cafe's menu is a few dozen dishes and all of them came down with the
+// page, so showing a different part of it is a question of what is
+// hidden - not a reason to ask the server again and watch a phone
+// reload on a cafe's wifi.
+(function () {
+    var search = document.getElementById("menuSearch");
+    var clear = document.getElementById("menuSearchClear");
+    var tabs = document.getElementById("menuTabs");
+    var none = document.getElementById("menuNone");
+    var noneTerm = document.getElementById("menuNoneTerm");
+    if (!search || !tabs) return;
+
+    var groups = [].slice.call(document.querySelectorAll(".p-group"));
+    var section = "all";
+
+    function show() {
+        var wanted = search.value.trim().toLowerCase();
+        var found = 0;
+
+        groups.forEach(function (group) {
+            var inSection = section === "all"
+                || group.getAttribute("data-section") === section;
+            var showing = 0;
+
+            [].forEach.call(group.querySelectorAll(".p-item"),
+                function (item) {
+                    var hit = inSection && (!wanted
+                        || (item.getAttribute("data-find") || "")
+                               .indexOf(wanted) > -1);
+                    item.hidden = !hit;
+                    if (hit) showing++;
+                });
+
+            // A heading over nothing is worse than no heading.
+            group.hidden = showing === 0;
+            found += showing;
+        });
+
+        if (clear) clear.hidden = !wanted;
+        if (none) none.hidden = found !== 0;
+        if (noneTerm) noneTerm.textContent = search.value.trim();
+    }
+
+    search.addEventListener("input", show);
+
+    if (clear) {
+        clear.addEventListener("click", function () {
+            search.value = "";
+            show();
+            search.focus();
+        });
+    }
+
+    tabs.addEventListener("click", function (event) {
+        var tab = event.target.closest(".p-tab");
+        if (!tab) return;
+
+        section = tab.getAttribute("data-section");
+
+        [].forEach.call(tabs.querySelectorAll(".p-tab"), function (each) {
+            each.classList.toggle("is-on", each === tab);
+        });
+
+        // A filter left on while the list changes underneath looks like
+        // a fault, and searching inside one section is rarely what
+        // tapping a section means.
+        search.value = "";
+        show();
+
+        if (tab.scrollIntoView) {
+            tab.scrollIntoView({block: "nearest", inline: "center",
+                                behavior: "smooth"});
+        }
+    });
+
+    show();
+}());
+
 </script>
 
 </body>

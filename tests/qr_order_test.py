@@ -926,6 +926,119 @@ check("no template types that name in by hand",
       "typed into %s" % [name for name, body in sources.items()
                          if application.DEFAULT_BRAND_NAME in body])
 
+
+# =====================================================================
+print("\n=== Renaming the cafe reaches the people outside it ===")
+# =====================================================================
+# The cafe row carried two names. cafe_name came from the sign-up form
+# and brand_name is what Name & Symbol edits - and the sidebar read
+# brand_name, so an owner renamed the place, watched it change in front
+# of them, and the page their customers open from the QR code carried on
+# saying whatever was typed on the first day. So did the receipt, and so
+# did the browser tab.
+
+renamer = app.test_client()
+renamer.post("/register", data={
+    "cafe_name": "Name On Day One", "full_name": "Owner",
+    "username": "renamer", "phone_number": "", "password": "password123",
+    "confirm_password": "password123"}, follow_redirects=True)
+renamer.get("/settings/qr")          # mints the public token
+
+renamer.post("/settings/branding",
+             data={"brand_name": "The Second Cup",
+                   "brand_tagline": "Under new management",
+                   "_csrf_token": csrf(renamer)},
+             content_type="multipart/form-data", follow_redirects=True)
+
+# By the name this cafe alone carries. Matching on "not the old name"
+# picked whichever other cafe this suite had already built.
+renamed_token = mysql_shim._DB.execute(
+    "SELECT public_token FROM cafes WHERE brand_name = 'The Second Cup'"
+).fetchone()[0]
+
+stranger = app.test_client()
+customer_page = stranger.get("/m/%s" % renamed_token).get_data(as_text=True)
+
+check("the customer's page shows the name the owner set",
+      "The Second Cup" in customer_page,
+      "it still says something else entirely")
+
+check("and not the one typed on the first day",
+      "Name On Day One" not in customer_page,
+      "the old name is still on the page a customer is holding")
+
+# The same name has to be on the paper. An owner who renames the cafe
+# and then hands out receipts with the old name on them has not been
+# helped by any of this.
+renamer.post("/categories/add", data={"category_name": "Coffee",
+                                      "description": "",
+                                      "_csrf_token": csrf(renamer)},
+             follow_redirects=True)
+_rcat = re.search(r'<option value="(\d+)">',
+                  renamer.get("/foods/add").get_data(as_text=True)).group(1)
+renamer.post("/foods/add", data={
+    "food_name": "Espresso", "category_id": _rcat, "price": "60",
+    "quantity": "20", "minimum_stock": "2", "description": "",
+    "_csrf_token": csrf(renamer)}, follow_redirects=True)
+_rfood = re.findall(r'id="quantity_(\d+)"',
+                    renamer.get("/orders/add").get_data(as_text=True))[0]
+renamer.post("/orders/add", data={"quantity_%s" % _rfood: "1",
+                                  "_csrf_token": csrf(renamer)},
+             follow_redirects=True)
+_rorder = mysql_shim._DB.execute(
+    "SELECT MAX(order_id) FROM orders").fetchone()[0]
+_receipt = renamer.get("/orders/%s/bill" % _rorder).get_data(as_text=True)
+
+check("the printed receipt carries it too",
+      "The Second Cup" in _receipt and "Name On Day One" not in _receipt,
+      "the receipt still names the cafe as it was on the first day")
+
+# Clearing the field means "use the product default in the sidebar". It
+# must not rename somebody's business to "Cafe Manager".
+renamer.post("/settings/branding",
+             data={"brand_name": "", "brand_tagline": "",
+                   "_csrf_token": csrf(renamer)},
+             content_type="multipart/form-data", follow_redirects=True)
+_still = stranger.get("/m/%s" % renamed_token).get_data(as_text=True)
+check("and clearing the field does not rename the cafe",
+      "The Second Cup" in _still,
+      "emptying the box renamed the business to the product's default")
+
+
+# =====================================================================
+print("\n=== Finding something on the customer's menu ===")
+# =====================================================================
+# A cafe with a full menu is a long scroll on a phone held at a table.
+
+# This cafe has a dish on it. A cafe with an empty menu renders
+# the "nothing on just now" panel instead, and none of the
+# parts below would be on the page to find.
+_menu = stranger.get("/m/%s" % renamed_token).get_data(as_text=True)
+
+check("there is a search box", 'id="menuSearch"' in _menu,
+      "a customer has to scroll the whole menu to find one dish")
+
+check("and a bar of sections, starting with All",
+      'id="menuTabs"' in _menu
+      and re.search(r'data-section="all"[^>]*>All<', _menu) is not None,
+      "the sections are still headings buried down the list")
+
+check("every dish carries what it can be found by",
+      _menu.count("data-find=") >= 1,
+      "the search would have nothing to match against")
+
+check("and the page says what it is for",
+      "Just choose what you like" in _menu,
+      "the line under the cafe name is missing")
+
+# The point of doing it this way: the whole menu comes down once, so
+# choosing a section is not a trip to the server and back on a cafe's
+# wifi.
+check("choosing a section needs no round trip",
+      "data-section=" in _menu and _menu.count("<section") >= 1,
+      "the sections are not all on the page, so switching one would "
+      "have to ask the server again")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

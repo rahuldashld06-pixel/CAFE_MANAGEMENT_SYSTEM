@@ -352,8 +352,17 @@
 
     </div>
 
-    {% if session.get('role') and session.get('role') != 'admin' %}
-    <!-- Order Status popup (staff pages) -->
+    {# Everybody signed in, owner included. It was staff-only on the
+       reasoning that an admin has the Dashboard for this - but the
+       Dashboard is a page you have to go to, and this is a button in
+       the corner of whichever page you are already on. An owner
+       working the counter wants it as much as anyone. #}
+    {# Not on the kitchen screen. That page already is this popup, in
+       full and with a tick beside every dish - and it is the one screen
+       that is left on all day, where a pill floating over a ticket's
+       order number is a real problem rather than an untidiness. #}
+    {% if session.get('role') and request.endpoint != 'kitchen_display' %}
+    <!-- Order Status popup -->
     <button type="button" class="order-status-fab" id="orderStatusFab" aria-haspopup="dialog">
         <i class="bi bi-receipt-cutoff"></i>
         <span class="order-status-fab__label">Order Status</span>
@@ -730,10 +739,31 @@ window.CafeShell = {
         if (!bar) return;
 
         const AWAY = "bar-away";
-        const SETTLE = 6;      // ignore the jitter of a finger resting
-        const FREE_ZONE = 90;  // near the top the bar always shows
+
+        // How far somebody has to scroll, in one direction, before the
+        // bar reacts.
+        //
+        // Six pixels measured against the last position was not enough.
+        // A finger resting at the foot of a page wobbles more than that
+        // and every wobble flipped the bar - twenty-three flips from
+        // twenty-four nudges, each one a 220ms slide, which is the
+        // shaking that was reported.
+        //
+        // Counted from where the direction last changed rather than
+        // from the last position, so a wobble never adds up to a
+        // decision while a real scroll reaches it almost at once. That
+        // is the whole fix: refusing to act near the bottom as well
+        // sounded prudent and was not - scrolling *to* the end of a
+        // page is a genuine scroll down, and the bar should get out of
+        // the way for it like any other.
+        const TRAVEL = 18;
+
+        // Near the top the bar always shows.
+        const FREE_ZONE = 90;
 
         let lastY = window.scrollY || 0;
+        let anchorY = lastY;     // where the current direction started
+        let heading = 0;         // -1 up, 1 down, 0 undecided
         let ticking = false;
 
         function barHeight() {
@@ -757,10 +787,19 @@ window.CafeShell = {
 
         function onScroll() {
             const y = Math.max(0, window.scrollY || 0);
-            const moved = y - lastY;
-
-            if (Math.abs(moved) < SETTLE) return;
+            const step = y - lastY;
             lastY = y;
+
+            if (step === 0) return;
+
+            // A change of direction starts the count again, so a wobble
+            // never adds up to a decision. Only travel that keeps going
+            // the same way counts towards one.
+            const going = step > 0 ? 1 : -1;
+            if (going !== heading) {
+                heading = going;
+                anchorY = y - step;
+            }
 
             // The drawer sits over everything; the bar must not move
             // about underneath it.
@@ -769,7 +808,14 @@ window.CafeShell = {
                 return;
             }
 
-            if (y <= FREE_ZONE || moved < 0) {
+            if (y <= FREE_ZONE) {
+                show();
+                return;
+            }
+
+            if (Math.abs(y - anchorY) < TRAVEL) return;
+
+            if (heading < 0) {
                 show();
             } else {
                 hide();
@@ -794,11 +840,15 @@ window.CafeShell = {
         // A new page starts at the top, so the bar starts visible.
         document.addEventListener("instant:load", function () {
             lastY = 0;
+            anchorY = 0;
+            heading = 0;
             show();
         });
 
         drawerLayout.addEventListener("change", function () {
             lastY = window.scrollY || 0;
+            anchorY = lastY;
+            heading = 0;
             show();
         });
 
@@ -883,7 +933,59 @@ window.CafeShell = {
         });
     }());
 
-    // ---- Order Status popup (staff pages) ----
+    // ---- Notices go after a second -----------------------------------
+    //
+    // They used to disagree: a flash message stayed until something
+    // else replaced it, so a morning of small changes left a stack of
+    // them down the page; the billing toast cleared after four
+    // seconds; nothing else cleared at all.
+    //
+    // One second each. Long enough to read three words, short enough
+    // to be gone before it is in the way.
+    //
+    // In the shell rather than on a page, because the shell is the
+    // part that is never swapped - so this reaches the pages
+    // instant.js brings in afterwards too.
+    (function () {
+        var LINGER = 1000;
+        var FADE = 180;
+
+        function dismiss(notice) {
+            if (notice.dataset.going) return;
+            notice.dataset.going = "1";
+
+            setTimeout(function () {
+                notice.style.transition = "opacity " + FADE + "ms ease";
+                notice.style.opacity = "0";
+                setTimeout(function () {
+                    if (notice.parentNode) notice.remove();
+                }, FADE);
+            }, LINGER);
+        }
+
+        function sweep() {
+            var notices = document.querySelectorAll(
+                ".flash-stack .alert, .toast-success, .toast-error");
+            for (var i = 0; i < notices.length; i++) {
+                dismiss(notices[i]);
+            }
+        }
+
+        // Anything already on the page, anything a swap brings in, and
+        // anything a script adds afterwards - the billing toasts are
+        // built in JavaScript, so a one-off sweep would miss them.
+        sweep();
+        document.addEventListener("instant:load", sweep);
+
+        if (window.MutationObserver) {
+            new MutationObserver(sweep).observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        }
+    }());
+
+    // ---- Order Status popup ----
     const fab = document.getElementById("orderStatusFab");
     const overlay = document.getElementById("orderStatusOverlay");
     const closeBtn = document.getElementById("orderStatusClose");
