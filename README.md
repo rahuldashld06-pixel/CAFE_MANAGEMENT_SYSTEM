@@ -248,6 +248,7 @@ tests/timezone_test.py Café clock and stored-time test suite
 tests/clock_browser_test.py Real-browser suite for a café's clock settling itself
 tests/colours_test.py Café colours, palette contrast and the bill discount
 tests/colour_browser_test.py Real-browser colour-picker and page-swap suite
+tests/list_search_test.py Real-browser phone-header and list-search suite
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
@@ -264,10 +265,10 @@ python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 104  FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
-python tests/print_test.py        # expect PASSED: 52   FAILED: 0
-python tests/staff_access_test.py # expect PASSED: 36   FAILED: 0
+python tests/print_test.py        # expect PASSED: 55   FAILED: 0
+python tests/staff_access_test.py # expect PASSED: 33   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 39   FAILED: 0
-python tests/billing_paid_test.py # expect PASSED: 27   FAILED: 0
+python tests/billing_paid_test.py # expect PASSED: 44   FAILED: 0
 python tests/auto_print_browser_test.py # expect PASSED: 12  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
@@ -287,11 +288,18 @@ python tests/timezone_test.py     # expect PASSED: 41   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
+python tests/list_search_test.py  # expect PASSED: 34   FAILED: 0
 ```
 
-All thirty-three run in memory against a SQLite stand-in — no database or
-network needed. The sixteen that drive a browser use a headless Edge or
+All thirty-four run in memory against a SQLite stand-in — no database or
+network needed. The seventeen that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
+
+Each browser suite binds its own fixed port. A run that is killed part
+way can leave its server listening, and every later run of that suite
+then fails to bind and times out waiting for a page that was never
+served — which reads exactly like a broken test. `netstat -ano | findstr
+:<port>` names the process; it is safe to end.
 
 `nav_cache_test.py` is the odd one out: it puts a deliberate delay on every
 query, because the stand-in database answers instantly and the difference
