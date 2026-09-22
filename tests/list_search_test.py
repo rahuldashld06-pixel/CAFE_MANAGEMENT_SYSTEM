@@ -800,7 +800,27 @@ try:
                     tick: tick
                         ? Math.round(tick.getBoundingClientRect().width) : 0,
                     line: parseFloat(getComputedStyle(line).fontSize),
-                    fab: !!document.getElementById('orderStatusFab'),
+                    fab: (function () {
+                        var el = document.getElementById('orderStatusFab');
+                        return !!el
+                            && getComputedStyle(el).display !== 'none';
+                    }()),
+                    fabOverTicket: (function () {
+                        var el = document.getElementById('orderStatusFab');
+                        if (!el || getComputedStyle(el).display === 'none') {
+                            return false;
+                        }
+                        var f = el.getBoundingClientRect();
+                        for (var k = 0; k < t.length; k++) {
+                            var q = t[k].getBoundingClientRect();
+                            if (q.left < f.right && q.right > f.left
+                                    && q.top < f.bottom
+                                    && q.bottom > f.top) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }()),
                     sideways: document.documentElement.scrollWidth
                               - document.documentElement.clientWidth
                 });
@@ -828,12 +848,18 @@ try:
         check("and a dish is still readable", board["line"] >= 13,
               "dish names are %spx" % board["line"])
 
-        # A pill floating over a ticket's order number, on the screen
-        # that is left on all day.
-        check("nothing floats over the tickets",
-              not board["fab"],
-              "the order status button is on the kitchen screen, which "
-              "is the one page that already shows all of this")
+        # The button is back on this screen, and on every other, but it
+        # lives up in the top bar in landscape now - so what matters is
+        # that it is not sitting on a ticket's order number, which is
+        # what took it off this page in the first place.
+        check("the order status button is offered here too",
+              board["fab"],
+              "it is missing on the kitchen screen")
+
+        check("and it is not sitting on a ticket",
+              not board["fabOverTicket"],
+              "it overlaps a ticket, which is what took it off this "
+              "page the first time")
     else:
         check("the kitchen board has tickets to measure", False,
               "no tickets rendered, so nothing above was checked")

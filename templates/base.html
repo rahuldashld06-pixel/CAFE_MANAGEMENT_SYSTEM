@@ -357,11 +357,12 @@
        Dashboard is a page you have to go to, and this is a button in
        the corner of whichever page you are already on. An owner
        working the counter wants it as much as anyone. #}
-    {# Not on the kitchen screen. That page already is this popup, in
-       full and with a tick beside every dish - and it is the one screen
-       that is left on all day, where a pill floating over a ticket's
-       order number is a real problem rather than an untidiness. #}
-    {% if session.get('role') and request.endpoint != 'kitchen_display' %}
+    {# Everybody signed in, on every page. It was off the kitchen
+       screen for a while because it floated over a ticket's order
+       number there; in landscape it now sits up in the top bar, and
+       everywhere else it is out of the way at the bottom corner, so
+       there is nothing left for it to cover. #}
+    {% if session.get('role') %}
     <!-- Order Status popup -->
     <button type="button" class="order-status-fab" id="orderStatusFab" aria-haspopup="dialog">
         <i class="bi bi-receipt-cutoff"></i>

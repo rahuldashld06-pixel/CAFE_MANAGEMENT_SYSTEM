@@ -1797,30 +1797,72 @@ button, input, select, textarea {
     padding: 0 24px 96px;
 }
 
-/* On a screen held sideways it is stood down.
-   
-   At 390px tall every page is content to its bottom edge, so a button
-   fixed to a corner is a button sitting on top of something. Measured
-   on Billing it covered the first bill number outright - which is what
-   somebody reading that page came for - and on the kitchen board it sat
-   over a ticket's order number.
-   
-   There is no free corner to move it to at that height: the opposite
-   corner holds the order summary on the New Order page, and everything
-   between is table. So in landscape it stands down, and returns the
-   moment the device is turned back upright. */
+/* On a screen held sideways it moves into the top bar.
+
+   At 390px tall a button fixed to a corner is a button sitting on top
+   of something: measured, it covered the first bill number on Billing
+   and a ticket's order number on the kitchen board.
+
+   But the bar itself has room. In landscape it goes back to one row,
+   and at 844px across the middle third of that row holds nothing - the
+   hamburger and the cafe's name are at the left, the profile chip at
+   the right. A button there overlays chrome rather than content, which
+   is the whole difference.
+
+   Centred on the bar rather than tucked beside the profile chip,
+   because the chip is where somebody's thumb goes to sign out and two
+   round things side by side in a corner is how the wrong one gets
+   pressed. */
 @media (orientation: landscape) and (max-height: 520px) {
-    .order-status-fab,
-    .order-status-overlay {
+    .order-status-fab {
+        top: 7px;
+        bottom: auto;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1250;
+        padding: 7px 11px;
+        gap: 5px;
+        border-radius: 999px;
+        box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .7);
+    }
+
+    /* Hover lifts it on a desktop; there it would shift it off centre. */
+    .order-status-fab:hover {
+        transform: translateX(-50%);
+    }
+
+    .order-status-fab__label {
         display: none;
+    }
+
+    .order-status-fab__badge {
+        min-width: 17px;
+        height: 17px;
+        font-size: 10px;
+    }
+
+    /* The sheet it opens has the same little height to work with as
+       everything else on this screen. */
+    .order-status-popup {
+        max-height: 82vh;
+    }
+
+    .order-status-popup__body {
+        max-height: none;
     }
 }
 
-/* The Order Status button, on any screen too narrow to spare the room.
+/* The Order Status button, on a screen too narrow to spare the room.
    It keeps the thing that tells you what it is and the thing you
    actually read off it - the icon and the count - and drops the words.
-   A cup with a number on it, in the corner of a till, is not a puzzle. */
-@media (max-width: 560px), (orientation: landscape) and (max-height: 520px) {
+   A cup with a number on it, in the corner of a till, is not a puzzle.
+
+   Narrow only. A short landscape screen is handled in full by the block
+   above, which moves the button into the top bar - and this one used to
+   match there too, setting `left` and `bottom` back and leaving the
+   button with a top and a bottom both pinned. A box with both is a box
+   stretched between them: it came out 58px wide and 371px tall. */
+@media (max-width: 560px) {
     .order-status-fab {
         left: 12px;
         bottom: 12px;
@@ -3205,8 +3247,11 @@ body.nav-locked {
     /* How much of the page shows through, and how far it is blurred.
        Enough to read as glass; not so much that text sitting on it has
        to compete with whatever is passing behind. */
-    --glass-tint: 86%;
-    --glass-blur: 26px;
+    /* Raised from 86%. At that strength the page behind still read
+       through the bar clearly enough to compete with what is written
+       on it; this keeps the frosting without the traffic. */
+    --glass-tint: 93%;
+    --glass-blur: 28px;
     --glass-saturate: 150%;
 }
 

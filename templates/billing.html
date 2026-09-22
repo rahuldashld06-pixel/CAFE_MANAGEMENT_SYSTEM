@@ -530,14 +530,22 @@
            Burger x 2" while the mode select had 67 for a word and an
            arrow, and the print button had rendered 18px wide. The item
            column gives thirty of those back and the rest share them. */
-        .billing-table th.col-id { width: 56px; }
-        .billing-table th.col-date { width: 100px; }
-        .billing-table th.col-items { width: 130px; }
+        /* Set for the widest case - all eleven columns, which is
+           what a cafe charging tax and giving a discount has. A cafe
+           that charges neither simply has slack, and fixed layout
+           shares that out. Sized for eight, the three it did not name
+           took what was left and the table drew past its own edge. */
+        .billing-table th.col-id { width: 44px; }
+        .billing-table th.col-date { width: 80px; }
+        .billing-table th.col-items { width: 92px; }
+        .billing-table th.col-sub { width: 54px; }
+        .billing-table th.col-off { width: 54px; }
+        .billing-table th.col-tax { width: 54px; }
         .billing-table th.col-total { width: 58px; }
-        .billing-table th.col-mode { width: 104px; }
-        .billing-table th.col-return { width: 96px; }
-        .billing-table th.col-status { width: 92px; }
-        .billing-table th.col-print { width: 54px; }
+        .billing-table th.col-mode { width: 92px; }
+        .billing-table th.col-return { width: 84px; }
+        .billing-table th.col-status { width: 86px; }
+        .billing-table th.col-print { width: 42px; }
 
         /* A bill number is one word and never wraps. It was the first
            thing on the row and the first thing to look broken. */
@@ -790,9 +798,9 @@
                         <th class="col-id">Order ID</th>
                         <th class="col-date">Date</th>
                         <th class="col-items">Order Items</th>
-                        {% if adjusted %}<th>Subtotal</th>{% endif %}
-                        {% if any_discount %}<th>Discount</th>{% endif %}
-                        {% if any_tax %}<th>Tax</th>{% endif %}
+                        {% if adjusted %}<th class="col-sub">Subtotal</th>{% endif %}
+                        {% if any_discount %}<th class="col-off">Discount</th>{% endif %}
+                        {% if any_tax %}<th class="col-tax">Tax</th>{% endif %}
                         <th class="col-total">Total</th>
                         <th class="col-mode">Payment Mode</th>
                         <th class="col-return">Return</th>
