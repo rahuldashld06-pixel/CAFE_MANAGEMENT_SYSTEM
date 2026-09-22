@@ -337,7 +337,7 @@ python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 104  FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 48   FAILED: 0
-python tests/stock_alert_test.py  # expect PASSED: 24   FAILED: 0
+python tests/stock_alert_test.py  # expect PASSED: 30   FAILED: 0
 python tests/print_test.py        # expect PASSED: 55   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 33   FAILED: 0
 python tests/auto_print_test.py   # expect PASSED: 39   FAILED: 0
@@ -361,7 +361,7 @@ python tests/timezone_test.py     # expect PASSED: 41   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
-python tests/list_search_test.py  # expect PASSED: 51   FAILED: 0
+python tests/list_search_test.py  # expect PASSED: 61   FAILED: 0
 python tests/security_test.py     # expect PASSED: 44   FAILED: 0
 ```
 
