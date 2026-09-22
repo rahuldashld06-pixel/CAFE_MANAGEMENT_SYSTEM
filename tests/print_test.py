@@ -383,8 +383,14 @@ check("and that order really does have a printable bill",
       and a.get("/orders/%s/bill" % printed[0]).status_code == 200,
       "the button points at something that does not print")
 
+# It opens in a window of its own rather than the hidden frame the
+# automatic printing uses. That frame is 0x0 with opacity 0, and a
+# browser will not print a frame with no rendered area - so the button
+# did nothing and showed no bill either. What matters here is what it
+# always did: the cashier keeps their place in the list.
 check("pressing it prints rather than leaving the page",
-      "autoPrint('/orders/' + orderId + '/bill')" in billing_html,
+      "window.open('/orders/' + orderId + '/bill', '_blank')"
+      in billing_html,
       "the cashier loses their place in the list every time somebody "
       "asks for a receipt")
 

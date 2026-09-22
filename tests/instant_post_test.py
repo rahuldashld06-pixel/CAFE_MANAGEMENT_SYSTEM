@@ -310,6 +310,14 @@ try:
             form.querySelector('[type=submit], button').click();
         }())
     """)
+
+    # Renaming the cafe asks once more before it saves - it is the name
+    # on every staff screen, on the customer's QR page and at the foot
+    # of every receipt. Saying yes is part of saving now.
+    wait_for("!document.getElementById('brandingFormConfirm').hidden",
+             "the confirmation")
+    browser.evaluate("document.querySelector('[data-confirm-yes]').click()")
+
     wait_for("!!document.querySelector('.alert')", "the saved message")
     time.sleep(0.5)
 

@@ -1149,12 +1149,22 @@
         const orderId = button.dataset.printOrder;
         if (!orderId) return;
 
-        if (!window.CafeShell || !window.CafeShell.autoPrint) {
-            showBillingToast('Printing is not available on this screen.', true);
-            return;
-        }
+        // Opened where it can be seen, not into the hidden frame the
+        // automatic printing uses. That frame is 0x0 with opacity 0 -
+        // deliberately, because a kitchen ticket printing by itself
+        // should not flash a page at anybody - but a browser will not
+        // print a frame with no rendered area, so pressing this did
+        // nothing at all and showed no bill either.
+        //
+        // A customer asking for their receipt is not the silent case.
+        // The bill opens, it can be read, and the page prints itself
+        // and keeps the copy on screen if the dialog is dismissed.
+        var receipt = window.open('/orders/' + orderId + '/bill', '_blank');
 
-        window.CafeShell.autoPrint('/orders/' + orderId + '/bill');
+        if (!receipt) {
+            showBillingToast(
+                'Allow pop-ups for this site to print a receipt.', true);
+        }
     });
 
     // Capture each dropdown's server-rendered value up front, so a failed

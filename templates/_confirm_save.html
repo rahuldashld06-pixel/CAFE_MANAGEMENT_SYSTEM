@@ -1,0 +1,113 @@
+{#
+   A last word before a setting changes.
+
+   Four of the settings pages change something everybody in the cafe
+   sees, or something a customer is holding: the password somebody signs
+   in with, the cafe's own name, what every bill charges, and the code
+   stuck to the tables. Those are worth a second look, so saving them
+   asks once more and says what is about to happen.
+
+   The rest are not. A profile photo, a theme colour, whether the
+   printer arms itself - those are visible the moment they change and
+   undone by changing them back, and a dialog in front of each one is a
+   dialog nobody reads by the third time.
+
+   Call it as:
+
+       {% raw %}{% import "_confirm_save.html" as ask %}
+       {{ ask.before_saving("ratesForm", "Change what every bill charges?",
+              "New orders will be charged at the rates you have set...",
+              "Yes, save the rates") }}{% endraw %}
+
+   and give the form that id.
+#}
+
+{% macro before_saving(form_id, title, message, confirm_label="Confirm") %}
+<div class="confirm-veil" id="{{ form_id }}Confirm" hidden>
+    <div class="confirm" role="dialog" aria-modal="true"
+         aria-labelledby="{{ form_id }}ConfirmTitle">
+
+        <h2 class="confirm__title" id="{{ form_id }}ConfirmTitle">
+            <i class="bi bi-exclamation-circle"></i> {{ title }}
+        </h2>
+
+        <p class="confirm__body">{{ message }}</p>
+
+        <div class="confirm__actions">
+            {# Cancel first and plainest. Somebody who opened this by
+               accident should reach the way out before the way on. #}
+            <button type="button" class="btn btn--ghost"
+                    data-confirm-no>Cancel</button>
+            <button type="button" class="btn btn--primary"
+                    data-confirm-yes>{{ confirm_label }}</button>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    (function () {
+        function wire() {
+            var form = document.getElementById("{{ form_id }}");
+            var veil = document.getElementById("{{ form_id }}Confirm");
+            if (!form || !veil) return;
+
+            var yes = veil.querySelector("[data-confirm-yes]");
+            var no = veil.querySelector("[data-confirm-no]");
+            var agreed = false;
+            var lastFocus = null;
+
+            function close() {
+                veil.hidden = true;
+                if (lastFocus && lastFocus.focus) lastFocus.focus();
+            }
+
+            // On the form itself, not on the document: instant.js listens
+            // for submits at the document, and a listener on the element
+            // runs before one that has to bubble up to reach it. That
+            // ordering is what lets this stop the post.
+            form.addEventListener("submit", function (event) {
+                if (agreed) return;          // the second time through
+                event.preventDefault();
+                lastFocus = document.activeElement;
+                veil.hidden = false;
+                if (no) no.focus();          // the way out, first
+            });
+
+            if (yes) {
+                yes.addEventListener("click", function () {
+                    agreed = true;
+                    veil.hidden = true;
+
+                    // requestSubmit, so the page's own submit handlers
+                    // and instant.js both still see it - form.submit()
+                    // fires no event and would bypass them entirely.
+                    if (form.requestSubmit) {
+                        form.requestSubmit();
+                    } else {
+                        form.submit();
+                    }
+                });
+            }
+
+            if (no) no.addEventListener("click", close);
+
+            // Anywhere off the panel, and the escape key. Cancelling has
+            // to be at least as easy as confirming.
+            veil.addEventListener("click", function (event) {
+                if (event.target === veil) close();
+            });
+
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "Escape" && !veil.hidden) close();
+            });
+        }
+
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", wire, {once: true});
+        } else {
+            wire();
+        }
+    }());
+</script>
+{% endmacro %}

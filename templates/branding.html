@@ -4,6 +4,8 @@
 {% block title %}Name &amp; Symbol · Cafe Manager{% endblock %}
 
 {% block content %}
+{% import "_confirm_save.html" as ask %}
+
 
 <div class="page-header">
     <div>
@@ -11,9 +13,6 @@
         <h1><i class="bi bi-bookmark-star"></i> Name &amp; Symbol</h1>
         <p>What every page says in the top corner.</p>
     </div>
-    <a href="{{ back_url }}" class="btn btn--ghost" data-back>
-        <i class="bi bi-arrow-left"></i> Back
-    </a>
 </div>
 
 <div class="panel form-panel" style="max-width:680px;">
@@ -34,7 +33,7 @@
         </span>
     </div>
 
-    <form method="POST" enctype="multipart/form-data">
+    <form method="POST" enctype="multipart/form-data" id="brandingForm">
 
         <div class="form-group">
             <label for="brand_name">Name</label>
@@ -116,5 +115,14 @@
     {% endif %}
 
 </div>
+
+{{ ask.before_saving(
+      "brandingForm",
+      "Rename the cafe?",
+      "This is the name on every screen your staff use, on the page your "
+      "customers open from the QR code on their table, and at the foot of "
+      "every receipt printed from now on. Receipts already printed keep "
+      "the name they carry.",
+      "Yes, rename it") }}
 
 {% endblock %}

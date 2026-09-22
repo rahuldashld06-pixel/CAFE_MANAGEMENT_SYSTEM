@@ -3,6 +3,8 @@
 {% block title %}Tax &amp; Discount · Cafe Manager{% endblock %}
 
 {% block content %}
+{% import "_confirm_save.html" as ask %}
+
 
 <div class="page-header">
     <div>
@@ -10,9 +12,6 @@
         <h1><i class="bi bi-percent"></i> Tax &amp; Discount</h1>
         <p>What is added to every new bill, and what comes off it.</p>
     </div>
-    <a href="{{ back_url }}" class="btn btn--ghost" data-back>
-        <i class="bi bi-arrow-left"></i> Back
-    </a>
 </div>
 
 <div class="panel form-panel" style="max-width:620px;">
@@ -130,5 +129,13 @@
         show();
     }());
 </script>
+
+{{ ask.before_saving(
+      "ratesForm",
+      "Change what every bill charges?",
+      "Every order taken from now on is charged at these rates. Bills "
+      "already raised keep the rates they were charged at - this is not a "
+      "way to change what somebody has already paid.",
+      "Yes, save the rates") }}
 
 {% endblock %}

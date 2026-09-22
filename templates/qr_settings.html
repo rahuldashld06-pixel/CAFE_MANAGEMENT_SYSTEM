@@ -3,6 +3,8 @@
 {% block title %}Table QR Code · Cafe Manager{% endblock %}
 
 {% block content %}
+{% import "_confirm_save.html" as ask %}
+
 
 <div class="page-header">
     <div>
@@ -10,9 +12,6 @@
         <h1><i class="bi bi-qr-code"></i> Table QR Code</h1>
         <p>For your tables.</p>
     </div>
-    <a href="{{ back_url }}" class="btn btn--ghost" data-back>
-        <i class="bi bi-arrow-left"></i> Back
-    </a>
 </div>
 
 <div class="panel form-panel" style="max-width:680px;">
@@ -57,8 +56,10 @@
         not have.
     </p>
 
-    <form method="POST"
-          onsubmit="return confirm('Make a new code? Every code already printed and stuck to a table will stop working.');">
+    {# The browser's own confirm() said the same thing in a grey box
+       that does not belong to this app. Same question, asked in the
+       cafe's own colours - see _confirm_save.html. #}
+    <form method="POST" id="newCodeForm">
         <button type="submit" class="btn btn--small btn--delete">
             <i class="bi bi-arrow-repeat"></i> Make a new code
         </button>
@@ -99,5 +100,14 @@
         });
     }());
 </script>
+
+{{ ask.before_saving(
+      "newCodeForm",
+      "Make a new code?",
+      "Every code already printed and stuck to a table stops working the "
+      "moment this one is made. Anybody who scans an old one gets a page "
+      "saying the code has been replaced, so you will need to print and "
+      "put out the new one before the next customer sits down.",
+      "Yes, make a new code") }}
 
 {% endblock %}

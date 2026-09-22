@@ -948,6 +948,123 @@ try:
           sheet["justify"] == "flex-start",
           "they are aligned %r" % sheet["justify"])
 
+
+    # =================================================================
+    print("\n=== 10. A last word before a setting changes ===")
+    # =================================================================
+    # Four settings are seen by people who are not in the room when
+    # they change: the password somebody signs in with, the cafe's
+    # name, what every bill charges, and the code stuck to the tables.
+    # Saving one of those asks again and says what is about to happen.
+    #
+    # What matters is not that a dialog appears. It is that saying no
+    # leaves the setting alone, which is the only reason to ask.
+
+    def stored_tax():
+        return str(mysql_shim._DB.execute(
+            "SELECT tax_percent FROM cafes WHERE cafe_id = 1"
+        ).fetchone()[0])
+
+    b.call("Emulation.setDeviceMetricsOverride", width=1280, height=860,
+           deviceScaleFactor=1, mobile=False)
+
+    # Back in as the owner. The section above signed in as the cashier
+    # to look at their button, and what every bill charges is not a
+    # cashier's to change - so the page would not be there at all.
+    b.call("Page.navigate", url=BASE + "/logout")
+    wait("!!document.querySelector('form [name=username]')")
+    b.evaluate("""
+        (function () {
+            var f = document.querySelector('form');
+            f.querySelector('[name=username]').value = 'sam';
+            f.querySelector('[name=password]').value = 'password123';
+            f.submit();
+        }())
+    """)
+    wait("!!document.getElementById('page-view')")
+
+    b.call("Page.navigate", url=BASE + "/settings/tax")
+    check("the owner can reach the tax page",
+          wait("!!document.getElementById('ratesForm')"),
+          "the page never rendered, so nothing below was checked")
+    time.sleep(0.8)
+
+    was = stored_tax()
+
+    def press_save(rate):
+        b.evaluate("""
+            (function () {
+                var form = document.getElementById('ratesForm');
+                form.tax_percent.value = '%s';
+                form.querySelector('button[type=submit]').click();
+            }())
+        """ % rate)
+        time.sleep(0.5)
+
+    press_save("23")
+
+    check("saving asks once more",
+          b.evaluate("!document.getElementById('ratesFormConfirm').hidden"),
+          "it saved without asking")
+
+    check("and has not saved anything yet",
+          stored_tax() == was,
+          "the rate changed to %s while the question was still on "
+          "screen" % stored_tax())
+
+    # The way out has to work, or the question is decoration.
+    b.evaluate("document.querySelector('[data-confirm-no]').click()")
+    time.sleep(0.5)
+
+    check("saying no closes it",
+          b.evaluate("document.getElementById('ratesFormConfirm').hidden"),
+          "the dialog stayed open")
+
+    check("and leaves the setting alone",
+          stored_tax() == was,
+          "cancelling still changed the rate to %s, which makes the "
+          "question worse than useless" % stored_tax())
+
+    # And saying yes has to actually go through.
+    press_save("23")
+    b.evaluate("document.querySelector('[data-confirm-yes]').click()")
+
+    deadline = time.time() + 12
+    while time.time() < deadline and stored_tax() == was:
+        time.sleep(0.2)
+
+    check("saying yes saves it",
+          stored_tax() != was and stored_tax().startswith("23"),
+          "after confirming, the rate is %s" % stored_tax())
+
+    # Escape is the other way out, and people reach for it.
+    b.call("Page.navigate", url=BASE + "/settings/tax")
+    wait("!!document.getElementById('ratesForm')")
+    time.sleep(0.7)
+    settled = stored_tax()
+    press_save("2")
+    b.call("Input.dispatchKeyEvent", type="keyDown", key="Escape",
+           windowsVirtualKeyCode=27, nativeVirtualKeyCode=27)
+    time.sleep(0.5)
+
+    check("escape cancels it too",
+          b.evaluate("document.getElementById('ratesFormConfirm').hidden")
+          and stored_tax() == settled,
+          "escape left the rate at %s" % stored_tax())
+
+    # The header Back link is gone from the settings pages - the form's
+    # own Cancel does that job, next to the thing being cancelled.
+    check("the settings page has no second way back",
+          b.evaluate("""
+              (function () {
+                  var head = document.querySelector('.page-header');
+                  return head
+                      ? !head.querySelector('[data-back]') : false;
+              }())
+          """),
+          "the header still carries a Back link beside the form's "
+          "own Cancel")
+
 finally:
     try:
         b.close()

@@ -7,16 +7,30 @@
 
 /* ---------- Design tokens ---------- */
 :root {
-    --espresso-950: #170F0B;
-    --espresso-900: #201510;
-    --espresso-850: #271A13;
-    --espresso-800: #33231A;
-    --espresso-700: #4A3324;
-    --espresso-600: #6B4B34;
+    /* The surfaces, spread further apart than they were.
 
-    --cream: #F3E9DA;
-    --cream-dim: #C9B29A;
-    --cream-faint: #8C7563;
+       The old ramp ran #170F0B to #201510 between the page and a card
+       sitting on it - about four percent of lightness, which on a
+       laptop in a bright cafe is no edge at all. The page drops and
+       the card lifts, so a panel reads as a panel; everything above it
+       moves with them, which keeps borders visible instead of guessed
+       at.
+
+       Same hue throughout. This is a coffee bar and the colour is the
+       point; what changes is how far apart the tones sit. */
+    --espresso-950: #100A07;
+    --espresso-900: #1D1410;
+    --espresso-850: #2A1D16;
+    --espresso-800: #3C291E;
+    --espresso-700: #5A3F2C;
+    --espresso-600: #7E5A41;
+
+    /* Text, lifted where it was doing the most work. The muted weight
+       was #8C7563 on #201510 - about 2.8:1, under any readable floor -
+       and it carries prices, stock counts and times. */
+    --cream: #F8F1E6;
+    --cream-dim: #D8C3AC;
+    --cream-faint: #A98E76;
 
     --copper: #E08A3E;
     --copper-light: #F0A85F;
@@ -3268,16 +3282,52 @@ body.nav-locked {
                          saturate(var(--glass-saturate));
     }
 
-    /* The lit edge, drawn as a shadow rather than a pseudo-element.
-       A ::before would have needed position:relative on the bars, and
-       these bars are position:sticky - quietly overriding that is a
-       strange way to lose a sticky header. */
+    /* The edges, which are what say glass when nothing happens to be
+       passing behind the pane - on a wide screen the page under the bar
+       is mostly empty dark, and a blur with nothing to blur looks like
+       a flat panel.
+
+       Light along the top, the cafe's accent along the bottom, and a
+       shadow below saying the bar sits above the page rather than in
+       it. Drawn as shadows rather than a pseudo-element: a ::before
+       would have needed position:relative on bars that are
+       position:sticky, and quietly overriding that is a strange way to
+       lose a sticky header. */
     .topbar,
     .page-header {
         box-shadow:
-            inset 0 -1px 0 rgba(var(--copper-rgb), .22),
-            0 10px 26px -20px rgba(0, 0, 0, .8);
+            inset 0 1px 0 rgba(var(--copper-rgb), .10),
+            inset 0 -1px 0 rgba(var(--copper-rgb), .24),
+            0 14px 34px -24px rgba(0, 0, 0, .9);
     }
+
+    /* The faintest fall of tone down the pane. Glass is never one flat
+       colour; this is about two percent of one, which is enough to stop
+       it reading as paint.
+
+       ::before, not ::after. The top bar's ::after is already spoken
+       for - it is a zero-height, full-width flex item used as a row
+       break, which is the only way flexbox has of saying "wrap here",
+       and it is what puts the menu button on its own row on a phone.
+       Taking it for a gradient put the menu back up beside the cafe's
+       name. */
+    .topbar::before,
+    .page-header::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(
+            180deg,
+            rgba(var(--copper-rgb), .045) 0%,
+            rgba(var(--copper-rgb), 0) 62%);
+    }
+
+    /* The ::after needs a positioned ancestor and already has one:
+       both bars are position:sticky at every width, which measures as
+       sticky on a 1440px desktop too. Setting position:relative here
+       to "be safe" would override that and cost both sticky bars -
+       which is exactly how they were nearly lost once already. */
 
     /* The controls that ride on the glass are made of the same
        material, a shade brighter so they read as raised rather than
@@ -4267,4 +4317,100 @@ body.tour-open { overflow: hidden; }
     }
 
     .tour__title { font-size: 18px; }
+}
+
+/* ==========================================================
+   A last word before a setting changes
+
+   Four settings ask once more before they save: the password
+   somebody signs in with, the cafe's name, what every bill
+   charges, and the code stuck to the tables. Each one is seen
+   by people who are not in the room when it is changed, which
+   is what makes them worth a second look.
+
+   The rest do not ask. A theme colour is visible the moment it
+   changes and undone by changing it back, and a dialog in
+   front of every save is a dialog nobody reads by the third
+   time.
+   ========================================================== */
+
+.confirm-veil {
+    position: fixed;
+    inset: 0;
+    z-index: 2400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, .58);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+}
+
+.confirm-veil[hidden] { display: none; }
+
+.confirm {
+    width: min(460px, 100%);
+    padding: 22px;
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-lg);
+    background: var(--espresso-900);
+    box-shadow: 0 24px 70px -20px rgba(0, 0, 0, .85);
+    animation: confirm-in .16s ease-out;
+}
+
+.confirm__title {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0 0 10px;
+    font-size: 19px;
+    line-height: 1.3;
+    color: var(--cream);
+}
+
+.confirm__title i {
+    flex: 0 0 auto;
+    color: var(--copper);
+    font-size: 20px;
+    line-height: 1.25;
+}
+
+.confirm__body {
+    margin: 0 0 20px;
+    color: var(--cream-dim);
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.confirm__actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+@keyframes confirm-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .confirm { animation: none; }
+}
+
+/* On a phone the two choices are full width and stacked, with the way
+   out underneath rather than beside - a thumb reaching for one of two
+   small buttons in a row finds the wrong one often enough. */
+@media (max-width: 560px) {
+    .confirm { padding: 18px; }
+
+    .confirm__actions {
+        flex-direction: column-reverse;
+    }
+
+    .confirm__actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
 }
