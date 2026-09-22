@@ -149,9 +149,13 @@
         margin: 0;
     }
 
+    /* Its own size, not the column's. width:100% let it stretch to
+       whatever the table had left over - about 250px on a wide screen,
+       beside a 34px print button - and nothing else on the row was that
+       shape. A fixed width keeps every row's button identical, which is
+       what makes a column of them read as a column. */
     .payment-status-toggle {
-        width: 100%;
-        min-width: 82px;
+        width: 108px;
         height: 34px;
         padding: 6px 10px;
         border-radius: 999px;
@@ -172,8 +176,14 @@
     }
 
         .payment-method-select {
-        min-width: 100px;
-        padding: 7px 30px 7px 10px;
+        /* No floor of its own any more. It had one of 100px while its
+           column had none, so on a narrow row the select grew past its
+           own cell and sat on top of the amount box next door. The
+           column carries the floor now; the control fits the column. */
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        padding: 7px 26px 7px 10px;
         border: 1px solid rgba(255,255,255,.2);
         border-radius: 8px;
         background: rgba(255,255,255,.06);
@@ -186,15 +196,105 @@
         color: #fff;
     }
 
+    /* Centred, so the box and the Paid button beside it sit on the
+       same line. They are used one after the other - type what was
+       handed over, then press Paid - and having them at different
+       heights made the row look broken. */
+    /* The box is centred on the row and the change hangs under it,
+       rather than the two being centred as a pair - which put the box
+       itself ten pixels above the Paid button next to it. Those two are
+       used one after the other and are read as a line. */
     .return-cell {
+        position: relative;
         display: flex;
-        flex-direction: column;
-        gap: 4px;
+        align-items: center;
         min-width: 0;
+        min-height: 34px;
+    }
+
+    .return-cell .return-amount,
+    .return-cell .return-not-applicable {
+        position: absolute;
+        top: calc(50% + 17px);
+        left: 0;
+        right: 0;
+        line-height: 1.1;
+    }
+
+    /* Every cell in these three columns lines its control up with the
+       others, rather than each one sitting wherever its content puts it. */
+    .billing-table td.return-cell-wrap,
+    .billing-table td.payment-status-cell,
+    .billing-table td.print-bill-cell {
+        vertical-align: middle;
+    }
+
+    /* Each of these carries a control of a known size, so the column is
+       given that size. Left to share out whatever was spare, the mode
+       select - which has a 100px floor of its own - was overflowing
+       into the Return cell and sitting on top of the amount box. */
+    /* Floors, not fixed widths. Fixed widths here reserved 438px
+       between the four of them and left Total so narrow that "90"
+       wrapped onto two lines - a column of prices that cannot print a
+       price. A floor stops the mode select spilling into its
+       neighbour without taking room off the columns that carry the
+       numbers. */
+    /* Stated on the header, not the cell. In an auto-layout table a
+       min-width on a <td> is a suggestion the browser is free to ignore,
+       and it did: the mode column collapsed to the width of its wrapped
+       heading and the select inside it shrank to showing "C". A width
+       on the <th> is what actually sizes a column.
+
+       These four carry controls of a known size. The rest of the table
+       shares out what is left, which is why amounts are told not to
+       wrap - that is the column that would otherwise give way. */
+    .billing-table th.col-date { width: 150px; }
+    .billing-table th.col-items { width: 180px; }
+    .billing-table th.col-mode { width: 112px; }
+    .billing-table th.col-return { width: 114px; }
+    /* Wide enough for the button plus the cell's own padding, or the
+       button is clamped narrower than the 108px it asks for and the
+       column stops matching itself across breakpoints. */
+    .billing-table th.col-status { width: 136px; }
+
+    /* Two-word headings over narrow columns were wrapping onto two
+       lines and setting the height of the header row. */
+    .billing-table th {
+        white-space: nowrap;
+    }
+    .billing-table th.col-print { width: 64px; text-align: center; }
+
+    /* A date is one thing and belongs on one line. Left to wrap it took
+       three, which set the height of every row in the table. */
+    .billing-table td[data-label="Date"] {
+        white-space: nowrap;
+    }
+
+    .billing-table td.print-bill-cell { text-align: center; }
+
+    /* An amount is one word. Wrapping it is never right. */
+    .billing-table .amount,
+    .billing-table .total-amount,
+    .billing-table th.col-total {
+        white-space: nowrap;
+    }
+
+
+    .bill-line {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        white-space: nowrap;
+    }
+
+    .bill-line__qty {
+        color: var(--cream-faint);
+        font-size: 12px;
     }
 
     .cash-received-input {
         width: 100%;
+        box-sizing: border-box;
         height: 32px;
         padding: 4px 8px;
         border: 1px solid var(--espresso-700);
@@ -351,16 +451,38 @@
        cards inherit it and scroll sideways anyway. */
     @media (max-width: 900px) and (min-width: 761px) {
         .billing-table-panel { overflow-x: auto; }
+        /* Was 1150px, from when this table carried Subtotal, Tax and
+           Order Status as well. Three columns lighter, it needs far
+           less - and every pixel of floor above what is needed is a
+           pixel the Paid button sits off the edge by. */
         .billing-table {
-            min-width: 1150px;
+            min-width: 860px;
             table-layout: auto;
         }
 
-        /* Room to scroll into, so the floor is worth having again. */
-        .return-cell { min-width: 100px; }
+        .return-cell { min-width: 92px; }
     }
 
-    @media (max-width: 760px) {
+
+    @media (max-width: 760px),
+           (orientation: landscape) and (max-height: 520px) {
+        /* The fixed column widths above are for a table. Once each bill
+           is a card, a cell is a full-width row and a width in pixels
+           would squeeze it into a corner of one. */
+        .billing-table th.col-date,
+        .billing-table th.col-items,
+        .billing-table th.col-mode,
+        .billing-table th.col-return,
+        .billing-table th.col-status,
+        .billing-table th.col-print,
+        .billing-table td.return-cell-wrap,
+        .billing-table td.payment-status-cell,
+        .billing-table td.print-bill-cell,
+        .billing-table td[data-label="Payment Mode"] {
+            width: auto;
+            min-width: 0;
+        }
+
         .billing-table-panel { overflow-x: visible; }
         .billing-table { min-width: 0; }
 
@@ -476,16 +598,16 @@
                     <tr>
                         <th>Bill ID</th>
                         <th>Order ID</th>
-                        <th>Date</th>
-                        <th>Order Items</th>
+                        <th class="col-date">Date</th>
+                        <th class="col-items">Order Items</th>
                         {% if adjusted %}<th>Subtotal</th>{% endif %}
                         {% if any_discount %}<th>Discount</th>{% endif %}
                         {% if any_tax %}<th>Tax</th>{% endif %}
-                        <th>Total</th>
-                        <th>Payment Mode</th>
-                        <th>Return</th>
-                        <th>Payment Status</th>
-                        <th>Print Bill</th>
+                        <th class="col-total">Total</th>
+                        <th class="col-mode">Payment Mode</th>
+                        <th class="col-return">Return</th>
+                        <th class="col-status">Payment Status</th>
+                        <th class="col-print">Print Bill</th>
                     </tr>
                 </thead>
 
@@ -496,9 +618,9 @@
                         data-total-amount="{{ bill.total_amount }}"
                         data-order-status="{{ bill.order_status }}">
 
-                        <td class="bill-id">#{{ bill.bill_id }}</td>
+                        <td class="bill-id" data-label="Bill ID">#{{ bill.bill_id }}</td>
 
-                        <td>
+                        <td data-label="Order ID">
                             {# The number the kitchen screen shows and the
                                customer was given. The link still goes to the
                                order's own page, which is keyed on the
@@ -509,15 +631,19 @@
                             </a>
                         </td>
 
-                        <td>{{ bill.bill_date|local_time }}</td>
+                        <td data-label="Date">{{ bill.bill_date|local_time }}</td>
 
-                        <td>
+                        <td data-label="Items">
                             <div style="display:flex; flex-direction:column; gap:4px; min-width:190px;">
                                 {% for item in bill['items'] %}
-                                    <span>
+                                    {# No line price. For a one-line bill
+                                       it is the row's Total again two
+                                       columns along, and on a longer one
+                                       it is arithmetic nobody is doing
+                                       here - the receipt itemises. #}
+                                    <span class="bill-line">
                                         <strong>{{ item.food_name }}</strong>
-                                        × {{ item.quantity }}
-                                        <small style="color:var(--cream-faint);">₹{{ item.subtotal }}</small>
+                                        <span class="bill-line__qty">× {{ item.quantity }}</span>
                                     </span>
                                 {% else %}
                                     <span style="color:var(--cream-faint);">No item details</span>
@@ -525,13 +651,13 @@
                             </div>
                         </td>
 
-                        {% if adjusted %}<td class="amount">₹{{ bill.subtotal }}</td>{% endif %}
-                        {% if any_discount %}<td>&minus;₹{{ bill.discount }}</td>{% endif %}
-                        {% if any_tax %}<td>₹{{ bill.tax }}</td>{% endif %}
-                        <td class="total-amount">₹{{ bill.total_amount }}</td>
+                        {% if adjusted %}<td class="amount" data-label="Subtotal">₹{{ bill.subtotal }}</td>{% endif %}
+                        {% if any_discount %}<td data-label="Discount">&minus;₹{{ bill.discount }}</td>{% endif %}
+                        {% if any_tax %}<td data-label="Tax">₹{{ bill.tax }}</td>{% endif %}
+                        <td class="total-amount" data-label="Total">₹{{ bill.total_amount }}</td>
 
                         <!-- The selects are associated with the form in the Action cell below. -->
-                        <td>
+                        <td data-label="Payment Mode">
                             <form method="POST"
                                   action="{{ url_for('edit_bill', bill_id=bill.bill_id) }}"
                                   class="payment-method-form"
@@ -549,7 +675,8 @@
                             </form>
                         </td>
 
-                        <td class="return-cell-wrap" id="return-cell-{{ bill.bill_id }}">
+                        <td class="return-cell-wrap" data-label="Return"
+                            id="return-cell-{{ bill.bill_id }}">
                             {% if (bill.payment_method or 'Cash') == 'Cash' %}
                                 <div class="return-cell">
                                     <input type="number"
@@ -568,7 +695,8 @@
                             {% endif %}
                         </td>
 
-                        <td class="payment-status-cell" id="payment-status-cell-{{ bill.bill_id }}">
+                        <td class="payment-status-cell" data-label="Status"
+                            id="payment-status-cell-{{ bill.bill_id }}">
                             {% if bill.payment_status == 'Paid' %}
                                 <button type="button"
                                         class="payment-status-toggle payment-status-toggle--paid"
@@ -599,7 +727,7 @@
                            one for every order wastes a roll a day. This is
                            here for the ones who ask. The kitchen ticket is
                            a different thing and still prints by itself. #}
-                        <td class="print-bill-cell">
+                        <td class="print-bill-cell" data-label="Receipt">
                             <button type="button"
                                     class="btn btn--sm btn--ghost print-bill-btn"
                                     data-print-order="{{ bill.order_id }}"

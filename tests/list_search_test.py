@@ -108,6 +108,23 @@ for index, food in enumerate(MENU):
         "minimum_stock": "5", "description": "",
         "_csrf_token": csrf(seed)}, follow_redirects=True)
 
+# Orders, so the billing checks further down have rows to measure.
+# Without these the table is empty and half of them pass on nothing.
+_ordered = re.findall(r'id="quantity_(\d+)"',
+                      seed.get("/orders/add").get_data(as_text=True))
+for _each in (1, 2, 1):
+    seed.post("/orders/add",
+              data={"quantity_%s" % _ordered[0]: str(_each),
+                    "_csrf_token": csrf(seed)}, follow_redirects=True)
+seed.get("/billing")          # raises the bills
+
+# The Order Status button belongs to the people on the till, not the
+# owner, so there has to be one of those to sign in as.
+seed.post("/users/add", data={
+    "full_name": "Cash Ier", "username": "cash", "password": "password123",
+    "confirm_password": "password123", "role": "staff",
+    "_csrf_token": csrf(seed)}, follow_redirects=True)
+
 mysql_shim.skip_tour()
 
 threading.Thread(target=lambda: app.run(host="127.0.0.1", port=PORT,
@@ -391,6 +408,163 @@ try:
           len(showing) == 1 and "Iced Latte" in showing[0],
           "it shows %s - the box was wired to elements that have since "
           "been swapped out" % showing)
+
+
+    # =================================================================
+    print("\n=== 5. The billing table, at the sizes a till is used at ===")
+    # =================================================================
+    # The Paid button is the one control on this page that has to be
+    # reachable. It was width:100% inside a column the table sized from
+    # whatever was left over, so it stretched to about 250px beside a
+    # 34px print button; and a phone held sideways landed in a band that
+    # forced the table wider than the screen, putting Paid off the edge.
+
+    for label, width, height in (("a desktop", 1280, 860),
+                                 ("a phone held sideways", 844, 390),
+                                 ("a phone upright", 390, 780)):
+        b.call("Emulation.setDeviceMetricsOverride", width=width,
+               height=height, deviceScaleFactor=1,
+               mobile=(width < 1000))
+        b.call("Page.navigate", url=BASE + "/billing")
+        wait("!!document.querySelector('.billing-table')")
+        time.sleep(0.9)
+
+        facts = json.loads(b.evaluate("""
+            (function () {
+                var doc = document.documentElement;
+                var buttons = document.querySelectorAll(
+                    '.payment-status-toggle');
+                var widths = [];
+                var spans = [];
+                var reachable = true;
+                for (var i = 0; i < buttons.length; i++) {
+                    var box = buttons[i].getBoundingClientRect();
+                    widths.push(Math.round(box.width));
+                    spans.push(Math.round(box.left) + '..'
+                               + Math.round(box.right));
+                    if (box.right > window.innerWidth + 1 || box.left < -1) {
+                        reachable = false;
+                    }
+                }
+                return JSON.stringify({
+                    sideways: doc.scrollWidth - doc.clientWidth,
+                    widths: widths,
+                    spans: spans,
+                    width: window.innerWidth,
+                    reachable: reachable
+                });
+            }())
+        """))
+
+        check("%s: the page does not scroll sideways" % label,
+              facts["sideways"] <= 1,
+              "it overflows by %spx, so the Paid button is off the edge"
+              % facts["sideways"])
+
+        # Asserted first, because "every button is on screen" and
+        # "they are all the same size" are both true of no buttons at
+        # all - and this suite once ran all three against an empty
+        # table and reported two passes.
+        check("%s: there are bills to look at" % label,
+              len(facts["widths"]) >= 3,
+              "only %d Paid buttons on the page, so the checks below "
+              "would pass without looking at anything"
+              % len(facts["widths"]))
+
+        check("%s: every Paid button is on the screen" % label,
+              facts["widths"] and facts["reachable"],
+              "buttons at %s in a %spx viewport"
+              % (facts["spans"], facts["width"]))
+
+        check("%s: and they are all the same size" % label,
+              facts["widths"] and len(set(facts["widths"])) == 1,
+              "the buttons measure %s - a column of different-sized "
+              "buttons is what made this look unfinished"
+              % facts["widths"])
+
+    # The box and the button are used one after the other, so they read
+    # as a line. They were ten pixels apart vertically.
+    b.call("Emulation.setDeviceMetricsOverride", width=1280, height=860,
+           deviceScaleFactor=1, mobile=False)
+    b.call("Page.navigate", url=BASE + "/billing")
+    wait("!!document.querySelector('.cash-received-input')")
+    time.sleep(0.7)
+
+    offset = b.evaluate("""
+        (function () {
+            var box = document.querySelector('.cash-received-input');
+            var paid = document.querySelector('.payment-status-toggle');
+            if (!box || !paid) return 999;
+            var a = box.getBoundingClientRect();
+            var c = paid.getBoundingClientRect();
+            return Math.round(Math.abs((a.top + a.height / 2)
+                                       - (c.top + c.height / 2)));
+        }())
+    """)
+    check("the amount box sits on the same line as the Paid button",
+          offset <= 2,
+          "they are %spx apart, so the row reads as two half-rows"
+          % offset)
+
+    # The line price was the row's own Total again, two columns along.
+    check("the item list does not repeat the total",
+          b.evaluate("""
+              (function () {
+                  var cell = document.querySelector('.bill-line');
+                  return cell ? cell.textContent.indexOf('₹') === -1
+                              : false;
+              }())
+          """),
+          "each line still carries a price, which for a one-line bill is "
+          "the Total printed twice")
+
+    # And the floating Order Status button, which sits over every page.
+    b.call("Emulation.setDeviceMetricsOverride", width=390, height=780,
+           deviceScaleFactor=1, mobile=True)
+    # Signed in again as the cashier, because the button is theirs.
+    b.call("Page.navigate", url=BASE + "/logout")
+    wait("!!document.querySelector('form [name=username]')")
+    b.evaluate("""
+        (function () {
+            var f = document.querySelector('form');
+            f.querySelector('[name=username]').value = 'cash';
+            f.querySelector('[name=password]').value = 'password123';
+            f.submit();
+        }())
+    """)
+    wait("!!document.getElementById('page-view')")
+
+    b.call("Page.navigate", url=BASE + "/billing")
+    check("the order status button is there for a cashier",
+          wait("!!document.getElementById('orderStatusFab')"),
+          "it never appeared, so there is nothing below to measure")
+    time.sleep(1.0)
+
+    fab = json.loads(b.evaluate("""
+        (function () {
+            var el = document.getElementById('orderStatusFab');
+            if (!el) return JSON.stringify({missing: true});
+            var label = el.querySelector('.order-status-fab__label');
+            var box = el.getBoundingClientRect();
+            return JSON.stringify({
+                width: Math.round(box.width),
+                share: Math.round(box.width / window.innerWidth * 100),
+                labelShown: label ?
+                    getComputedStyle(label).display !== 'none' : false,
+                iconShown: !!el.querySelector('i')
+            });
+        }())
+    """))
+
+    check("the order status button is small on a small screen",
+          fab["share"] <= 20,
+          "it takes %d%% of the width (%spx), permanently, over whatever "
+          "is underneath it" % (fab["share"], fab["width"]))
+
+    check("but it still shows what it is",
+          fab["iconShown"] and not fab["labelShown"],
+          "it kept the words and lost nothing, or lost the icon too: %s"
+          % fab)
 
 finally:
     try:

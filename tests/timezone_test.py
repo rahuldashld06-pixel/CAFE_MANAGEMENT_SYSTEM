@@ -84,7 +84,7 @@ def kitchen_says(client):
 
 
 def billing_says(client):
-    found = re.search(r"<td>(\d+ \w+ \d{4}, [\d:]+ [AP]M)</td>",
+    found = re.search(r"<td[^>]*>(\d+ \w+ \d{4}, [\d:]+ [AP]M)</td>",
                       client.get("/billing").get_data(as_text=True))
     return found.group(1) if found else ""
 

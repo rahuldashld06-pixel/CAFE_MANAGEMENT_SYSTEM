@@ -319,6 +319,168 @@ def _no_store_pages(response):
     return response
 
 
+# ==========================================================
+# What a browser is allowed to do with our pages
+#
+# None of this replaces the checks on the server. It is the
+# layer underneath them, for when one of those has already
+# failed: a stored value that turns out to be script, a page
+# framed on somebody else's site to harvest clicks, an upload
+# that is not the picture it says it is.
+# ==========================================================
+
+# Where a page may load things from. Everything is refused unless it is
+# named here.
+#
+# 'unsafe-inline' is in script-src and it is worth being plain about
+# why, because it is the one weak line in this policy. The app writes
+# its behaviour as inline <script> in eighteen templates, and the usual
+# fix - a per-response nonce - cannot work here: instant.js fetches a
+# page and injects its markup into the *current* document, so any nonce
+# on those scripts belongs to a different response and the browser
+# refuses to run them. The whole navigation model would stop.
+#
+# Getting rid of it means moving that JavaScript into files under
+# static/, which is worth doing and is not a five-minute change. Until
+# then the rest of the policy is what does the work: scripts cannot be
+# *fetched* from anywhere unexpected, the page cannot be framed, forms
+# cannot post elsewhere, and no plugin or base-tag trick is available.
+_CSP_SELF = "'self'"
+_FONTS = "https://fonts.googleapis.com"
+_FONT_FILES = "https://fonts.gstatic.com"
+_CDN = "https://cdn.jsdelivr.net"
+_PHOTOS = "https://images.unsplash.com"
+
+_BASE_CSP = {
+    "default-src": [_CSP_SELF],
+    "script-src": [_CSP_SELF, "'unsafe-inline'", _CDN],
+    # Inline style is genuinely needed: the cafe's own colours are an
+    # inline style attribute on <html>, and a good deal of layout is
+    # written the same way.
+    "style-src": [_CSP_SELF, "'unsafe-inline'", _FONTS, _CDN],
+    "font-src": [_CSP_SELF, _FONT_FILES, _CDN, "data:"],
+    # data: for the QR codes and the generated marks; the photo host is
+    # the default sign-in backdrop.
+    "img-src": [_CSP_SELF, "data:", "blob:", _PHOTOS],
+    "connect-src": [_CSP_SELF],
+    # No <object>, <embed> or <applet>. Nothing here needs one, and they
+    # are a way to run code that script-src does not cover.
+    "object-src": ["'none'"],
+    # Nobody may put this app in a frame. Clickjacking a till - an
+    # invisible page over the Paid button - is a real thing to want.
+    "frame-ancestors": ["'none'"],
+    # A form may only post back to us. If a page is ever made to render
+    # an attacker's <form>, this is what stops the till's input being
+    # sent somewhere else.
+    "form-action": [_CSP_SELF],
+    # Stops an injected <base> quietly re-pointing every relative URL on
+    # the page at another host.
+    "base-uri": [_CSP_SELF],
+    "frame-src": ["'none'"],
+}
+
+# Taking a card payment means handing the browser to Razorpay, which
+# loads its own script and opens its own frame. Rather than opening the
+# whole app up for one page, that page gets its own policy.
+_RAZORPAY = [
+    "https://checkout.razorpay.com",
+    "https://api.razorpay.com",
+]
+_PAYMENT_CSP = {
+    key: list(value) for key, value in _BASE_CSP.items()
+}
+_PAYMENT_CSP["script-src"] = _BASE_CSP["script-src"] + _RAZORPAY
+_PAYMENT_CSP["frame-src"] = _RAZORPAY
+_PAYMENT_CSP["connect-src"] = _BASE_CSP["connect-src"] + _RAZORPAY + [
+    "https://lumberjack.razorpay.com",
+]
+_PAYMENT_CSP["img-src"] = _BASE_CSP["img-src"] + _RAZORPAY
+
+# The endpoints that hand over to Razorpay.
+_PAYMENT_ENDPOINTS = {"start_online_payment"}
+
+
+def _policy(directives):
+    return "; ".join(
+        "%s %s" % (name, " ".join(sources))
+        for name, sources in directives.items()
+    )
+
+
+_BASE_POLICY = _policy(_BASE_CSP)
+_PAYMENT_POLICY = _policy(_PAYMENT_CSP)
+
+# Features this app never uses. Naming them switches them off, so a page
+# cannot quietly ask for a camera or a location even if something
+# unexpected ends up running on it.
+_PERMISSIONS_POLICY = ", ".join([
+    "accelerometer=()",
+    "autoplay=()",
+    "camera=()",
+    "display-capture=()",
+    "encrypted-media=()",
+    "fullscreen=(self)",
+    "geolocation=()",
+    "gyroscope=()",
+    "magnetometer=()",
+    "microphone=()",
+    "midi=()",
+    "payment=()",
+    "usb=()",
+    "xr-spatial-tracking=()",
+])
+
+
+@app.after_request
+def _security_headers(response):
+    """
+    The headers that tell a browser what it may and may not do here.
+
+    Set on every response rather than on the HTML routes, because a
+    stylesheet or an image served without them is a gap in exactly the
+    same way - nosniff in particular is what stops an upload being
+    treated as something other than what it is served as.
+    """
+    headers = response.headers
+
+    headers.setdefault(
+        "Content-Security-Policy",
+        _PAYMENT_POLICY if request.endpoint in _PAYMENT_ENDPOINTS
+        else _BASE_POLICY)
+
+    # Take the declared Content-Type at its word. Without this a browser
+    # may sniff a response's bytes and decide a stored image is really
+    # HTML, and run it.
+    headers.setdefault("X-Content-Type-Options", "nosniff")
+
+    # frame-ancestors above is the modern form; this is the same refusal
+    # for anything that does not read CSP yet.
+    headers.setdefault("X-Frame-Options", "DENY")
+
+    # Send the full URL to ourselves and only the origin to anyone else,
+    # so a cafe's own addresses - which carry order and bill numbers -
+    # are not handed to a third-party host in a Referer.
+    headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+
+    headers.setdefault("Permissions-Policy", _PERMISSIONS_POLICY)
+
+    # A window this app opens, or that opens it, gets no scripting handle
+    # back into it.
+    headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+
+    # HTTPS only, and only where there is HTTPS to insist on. Sending
+    # this from a development server on http would pin a browser to a
+    # scheme that machine does not serve, which is a memorable way to
+    # lose an afternoon.
+    if IS_PRODUCTION and request.is_secure:
+        headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains")
+
+    return response
+
+
 if IS_PRODUCTION:
     # gunicorn captures the app logger; without this, app.logger.info(...)
     # (including the OTP dev fallback) is silently dropped.
@@ -648,6 +810,33 @@ def allowed_image(filename):
     )
 
 
+# What each format actually begins with. A name can say anything; these
+# are the bytes a real file of that type starts with.
+_IMAGE_SIGNATURES = (
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+)
+
+
+def sniff_image(data):
+    """
+    The type these bytes really are, or None if they are not an image.
+
+    WEBP is checked separately because its marker is not at the start:
+    the file opens "RIFF", then four bytes of length, then "WEBP".
+    """
+    for signature, mime in _IMAGE_SIGNATURES:
+        if data.startswith(signature):
+            return mime
+
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+
+    return None
+
+
 def read_image_upload(file):
     """
     Validate an uploaded image and return (bytes, mime_type).
@@ -676,7 +865,25 @@ def read_image_upload(file):
         )
 
     extension = secure_filename(file.filename).rsplit(".", 1)[-1].lower()
-    return data, _MIME_BY_EXTENSION.get(extension, "application/octet-stream")
+    mime = _MIME_BY_EXTENSION.get(extension)
+
+    # The name was only ever a claim. What is stored is what the bytes
+    # actually are, so a file called photo.png holding markup is refused
+    # here rather than being kept and later served under a type it does
+    # not have. nosniff makes that hard to exploit; not storing it at
+    # all makes it moot.
+    sniffed = sniff_image(data)
+    if sniffed is None:
+        raise ValueError(
+            "That file is not an image. Use a JPG, PNG, WEBP or GIF.")
+
+    if mime and sniffed != mime:
+        raise ValueError(
+            "That file is a %s saved with a .%s name. Rename it or export "
+            "it properly and try again."
+            % (sniffed.split("/")[-1].upper(), extension))
+
+    return data, sniffed
 
 
 def food_image_url(food_id, version=1):
@@ -1190,6 +1397,23 @@ _CORE_TABLES = [
             CONSTRAINT fk_bills_order
                 FOREIGN KEY (order_id) REFERENCES orders(order_id)
                 ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """),
+    ("login_attempts", """
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            attempt_id INT AUTO_INCREMENT PRIMARY KEY,
+            -- Username and address together. Either alone is wrong:
+            -- the username alone lets anybody lock an owner out of
+            -- their own till on purpose, and the address alone
+            -- punishes a whole cafe behind one router for one person
+            -- mistyping.
+            username VARCHAR(80) NOT NULL,
+            source VARCHAR(45) NOT NULL,
+            failures INT NOT NULL DEFAULT 0,
+            first_failure DATETIME NOT NULL,
+            locked_until DATETIME NULL,
+            UNIQUE KEY uq_login_attempt (username, source),
+            INDEX idx_login_attempt_locked (locked_until)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """),
     ("login_otp_codes", """
@@ -1804,6 +2028,113 @@ def generate_otp_code():
     # secrets.randbelow keeps this cryptographically random; +100000
     # guarantees a full 6 digits (no leading-zero codes).
     return str(secrets.randbelow(900000) + 100000)
+
+
+
+# ==========================================================
+# Guessing a password at machine speed
+#
+# The one-time code path has counted attempts from the start.
+# The password path counted nothing: a script could work a
+# list against a known username as fast as the server would
+# answer it, indefinitely, and nothing would object.
+# ==========================================================
+
+# Five wrong answers buys a lockout. A person who has genuinely
+# forgotten which of their passwords this is will not usually get past
+# three; a script does not stop at five hundred.
+LOGIN_MAX_FAILURES = int(os.environ.get("LOGIN_MAX_FAILURES", "5"))
+
+# How long the count runs for, and how long the door stays shut.
+LOGIN_FAILURE_WINDOW = int(os.environ.get("LOGIN_FAILURE_WINDOW", "900"))
+LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "900"))
+
+
+def request_source():
+    """
+    Where a request came from, as well as it can be known.
+
+    ProxyFix has already put the real client address in remote_addr from
+    X-Forwarded-For, so this is that - trimmed to fit an IPv6 address
+    and never empty, because it is half of a unique key.
+    """
+    return (request.remote_addr or "unknown")[:45]
+
+
+def login_lock_remaining(cursor, username, source):
+    """
+    Seconds left on a lockout for this username from this address, or 0.
+
+    Read before the password is checked, so a locked-out caller is
+    turned away without the hash ever being computed. That also means
+    a flood of guesses stops costing the server the work of hashing.
+    """
+    cursor.execute(
+        "SELECT locked_until FROM login_attempts "
+        "WHERE username = %s AND source = %s",
+        (username, source))
+    row = cursor.fetchone()
+    if not row or not row["locked_until"]:
+        return 0
+
+    locked_until = row["locked_until"]
+    if isinstance(locked_until, str):
+        locked_until = datetime.fromisoformat(locked_until)
+
+    remaining = (locked_until - utc_now()).total_seconds()
+    return int(remaining) if remaining > 0 else 0
+
+
+def note_login_failure(cursor, username, source):
+    """
+    Count one wrong answer, and shut the door on the fifth.
+
+    The window restarts if the last failure was long enough ago, so
+    somebody who mistypes once a month is never locked out for it.
+    """
+    now = utc_now()
+    window_start = now - timedelta(seconds=LOGIN_FAILURE_WINDOW)
+
+    cursor.execute(
+        "SELECT attempt_id, failures, first_failure FROM login_attempts "
+        "WHERE username = %s AND source = %s",
+        (username, source))
+    row = cursor.fetchone()
+
+    if row:
+        first = row["first_failure"]
+        if isinstance(first, str):
+            first = datetime.fromisoformat(first)
+
+        failures = row["failures"] + 1 if first >= window_start else 1
+        first_failure = first if first >= window_start else now
+        locked_until = (now + timedelta(seconds=LOGIN_LOCKOUT_SECONDS)
+                        if failures >= LOGIN_MAX_FAILURES else None)
+
+        cursor.execute(
+            "UPDATE login_attempts SET failures = %s, first_failure = %s, "
+            "locked_until = %s WHERE attempt_id = %s",
+            (failures, first_failure, locked_until, row["attempt_id"]))
+        return failures
+
+    cursor.execute(
+        "INSERT INTO login_attempts (username, source, failures, "
+        "first_failure, locked_until) VALUES (%s, %s, 1, %s, NULL)",
+        (username, source, now))
+    return 1
+
+
+def clear_login_failures(cursor, username, source):
+    """A right answer wipes the slate for that username and address."""
+    cursor.execute(
+        "DELETE FROM login_attempts WHERE username = %s AND source = %s",
+        (username, source))
+
+
+def describe_lockout(seconds):
+    """How long to wait, said the way a person would say it."""
+    minutes = max(1, int(round(seconds / 60.0)))
+    return "1 minute" if minutes == 1 else "%d minutes" % minutes
 
 
 def issue_login_otp(cursor, connection, user_id):
@@ -5883,6 +6214,17 @@ def login():
             connection = get_db_connection()
             cursor = connection.cursor(dictionary=True)
 
+            # Asked before the password is looked at, so a caller who is
+            # already locked out is turned away without the hash being
+            # computed - which also stops a flood of guesses costing the
+            # server the work of hashing every one of them.
+            source = request_source()
+            waiting = login_lock_remaining(cursor, username, source)
+            if waiting:
+                flash("Too many failed sign-in attempts. Try again in %s."
+                      % describe_lockout(waiting))
+                return redirect(url_for("login"))
+
             cursor.execute("""
                 SELECT user_id, username, password_hash,
                        full_name, role, is_active, phone_number, cafe_id
@@ -5897,6 +6239,10 @@ def login():
                 and user["is_active"]
                 and check_password_hash(user["password_hash"], password)
             ):
+                # A right answer wipes the slate, so a busy counter that
+                # mistyped twice this morning starts from nothing.
+                clear_login_failures(cursor, username, source)
+                connection.commit()
                 next_page = request.args.get("next", "")
                 next_is_safe = (
                     next_page.startswith("/")
@@ -5961,7 +6307,20 @@ def login():
 
                 return redirect(url_for("home"))
 
-            flash("Invalid username or password.")
+            # Counted here, on the one branch that means "that was
+            # wrong" - whether the name is unknown, the account is
+            # switched off, or the password simply did not match. The
+            # message stays the same for all three on purpose: telling
+            # somebody which of the three it was hands them a way to
+            # find out whose usernames exist.
+            failures = note_login_failure(cursor, username, source)
+            connection.commit()
+
+            if failures >= LOGIN_MAX_FAILURES:
+                flash("Too many failed sign-in attempts. Try again in %s."
+                      % describe_lockout(LOGIN_LOCKOUT_SECONDS))
+            else:
+                flash("Invalid username or password.")
 
         except mysql.connector.Error as error:
             flash(f"Login database error: {error}")

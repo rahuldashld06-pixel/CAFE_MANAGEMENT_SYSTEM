@@ -248,9 +248,82 @@ tests/timezone_test.py Café clock and stored-time test suite
 tests/clock_browser_test.py Real-browser suite for a café's clock settling itself
 tests/colours_test.py Café colours, palette contrast and the bill discount
 tests/colour_browser_test.py Real-browser colour-picker and page-swap suite
-tests/list_search_test.py Real-browser phone-header and list-search suite
+tests/list_search_test.py Real-browser phone-header, list-search and billing-layout suite
+tests/security_test.py Headers, login lockout, upload sniffing and tenant isolation
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
+
+## Security
+
+What is in place, and what each part is actually for.
+
+**Getting in.** Passwords are hashed by Werkzeug (PBKDF2). An admin with
+a mobile number on file is challenged for a one-time code, which expires
+and gives up after five wrong answers. The password path is rate
+limited the same way: five failures from one address against one
+username buys a 15-minute lockout, counted in the database so it holds
+across workers rather than resetting whenever the next request lands on
+a different one. It is keyed on the pair on purpose — keyed on the
+username alone, anyone who knew an owner's username could lock them out
+of their own till, which turns a protection into the attack. A wrong
+username and a wrong password give the same message, so the form cannot
+be used to discover who banks here.
+
+**Staying in.** Session cookies are HttpOnly, SameSite=Lax, and Secure
+in production. Signing in clears the session first, so a session id
+planted beforehand does not survive it. The app refuses to boot in
+production without `SECRET_KEY`, because a default key means anyone can
+forge a cookie for any café.
+
+**Doing things.** Every POST, PUT, PATCH and DELETE carries a CSRF
+token, compared in constant time. Every query is scoped to the café's
+owner, so one tenant cannot read or write another's rows by guessing an
+id. Staff are held to an endpoint allowlist. `?next=` is checked before
+any redirect follows it.
+
+**What the browser is allowed to do.** A Content-Security-Policy on
+every response, plus `nosniff`, `frame-ancestors 'none'` (and
+`X-Frame-Options` for anything that does not read CSP),
+`Referrer-Policy`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`.
+HSTS is sent in production over HTTPS only. Taking a card payment hands
+the browser to Razorpay, so that one route gets its own policy rather
+than opening the whole app up.
+
+One honest limit: `script-src` still carries `'unsafe-inline'`. The app
+writes its behaviour as inline `<script>` in eighteen templates, and the
+usual fix — a per-response nonce — cannot work here, because instant.js
+fetches a page and injects its markup into the *current* document, where
+a nonce belonging to another response is refused and the script never
+runs. Removing it means moving that JavaScript into files under
+`static/`. Until then the rest of the policy is what does the work:
+scripts cannot be *fetched* from anywhere unexpected, the page cannot be
+framed, forms cannot post elsewhere, and no plugin or base-tag trick is
+available.
+
+**Uploads.** Checked by content, not by name. A file called `logo.png`
+holding markup, an SVG, or a shell script is refused rather than stored
+and later served as an image. Size is capped in two places: the request
+body and the image itself.
+
+**The database.** TLS with the provider's CA verified, not merely
+encrypted — an encrypted connection to the wrong server is still the
+wrong server. `certs/ca.pem` is Aiven's public certificate and is meant
+to be committed; it contains no private key. Turning verification off
+takes a deliberate environment variable.
+
+**Taking money.** Razorpay checkout responses are signature-verified on
+the server, and webhooks are HMAC-verified with an amount check, so a
+reply claiming a payment is not taken at its word. One-time codes are
+single-use and deleted once verified, and the self-service password
+reset needs the account's registered mobile number.
+
+**Secrets.** `.env` and `config.py` are gitignored and the history has
+been checked for credential-shaped strings. On Render these are
+environment variables, never files.
+
+`tests/security_test.py` holds this to account — 44 checks covering the
+headers, the lockout (including that it does not lock the wrong person),
+the upload sniffing, and the parts that were already right.
 
 ## Tests
 
@@ -288,10 +361,11 @@ python tests/timezone_test.py     # expect PASSED: 41   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
-python tests/list_search_test.py  # expect PASSED: 34   FAILED: 0
+python tests/list_search_test.py  # expect PASSED: 51   FAILED: 0
+python tests/security_test.py     # expect PASSED: 44   FAILED: 0
 ```
 
-All thirty-four run in memory against a SQLite stand-in — no database or
+All thirty-five run in memory against a SQLite stand-in — no database or
 network needed. The seventeen that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
@@ -442,20 +516,6 @@ kitchen ticket has to print because somebody must cook the food, but most
 customers walk off without a receipt, and printing every one burns a roll a
 day. The button sits beside the payment status, where the money is already
 being taken.
-
-## Security notes
-
-- `SECRET_KEY` is mandatory in production; the app refuses to start
-  without it.
-- Passwords and OTP codes are hashed (`werkzeug.security`); OTP codes are
-  single-use and deleted once verified.
-- CSRF tokens are required on every state-changing request.
-- Razorpay checkout responses are signature-verified server-side and
-  webhooks are HMAC-verified with an amount check.
-- Session cookies are HttpOnly, SameSite=Lax, and Secure in production.
-- Self-service password reset requires the account's registered mobile
-  number.
-- Never commit `.env` or `config.py`.
 
 ## Known limitations
 

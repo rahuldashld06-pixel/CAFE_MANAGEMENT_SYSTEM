@@ -407,6 +407,78 @@ textarea:focus-visible {
     }
 }
 
+/* ==========================================================
+   Short screens
+
+   A phone held sideways is about 800px across and under 400
+   tall, and the height is the scarce one. Everything here
+   buys back vertical space; nothing changes what is on the
+   page, only how much room it asks for.
+   ========================================================== */
+
+@media (orientation: landscape) and (max-height: 520px) {
+    /* The page title, its subtitle and the bar above it were spending
+       close to a third of the screen before any content. */
+    .page-header {
+        padding-top: 2px;
+        padding-bottom: 8px;
+        margin-bottom: 10px;
+    }
+
+    .page-header h1 {
+        font-size: 17px;
+    }
+
+    .page-header .eyebrow,
+    .page-header > div > p,
+    .page-header .page-subtitle {
+        display: none;
+    }
+
+    .main {
+        padding-top: 10px;
+        padding-bottom: 18px;
+    }
+
+    .panel {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+
+    .panel-header {
+        margin-bottom: 10px;
+    }
+
+    .panel-subtitle {
+        display: none;
+    }
+}
+
+/* The Order Status button, on any screen too narrow to spare the room.
+   It keeps the thing that tells you what it is and the thing you
+   actually read off it - the icon and the count - and drops the words.
+   A cup with a number on it, in the corner of a till, is not a puzzle. */
+@media (max-width: 560px), (orientation: landscape) and (max-height: 520px) {
+    .order-status-fab {
+        left: 12px;
+        bottom: 12px;
+        gap: 6px;
+        padding: 10px 12px;
+    }
+
+    .order-status-fab__label {
+        display: none;
+    }
+
+    /* Without the label the pill is nearly round, so the count sits
+       against the icon rather than out on its own. */
+    .order-status-fab__badge {
+        min-width: 18px;
+        height: 18px;
+        font-size: 10px;
+    }
+}
+
 /* Nothing to print. The receipt and the kitchen ticket carry their own,
    sized for paper. */
 @media print {
@@ -3291,7 +3363,19 @@ body.nav-locked {
    nothing scrolls sideways: the whole bill, or food, or stock row
    is on screen at once.
    ============================================================ */
-@media (max-width: 760px) {
+/* Cards, not a table - on a narrow screen and on a short one.
+
+   A phone held sideways is about 844px across, which is over the 760px
+   line, and 390px tall. Nine columns of fixed-width controls do not fit
+   844px whatever their floors say, so the table overflowed its own
+   scrolling panel and the Paid button - the one control on Billing that
+   has to be reachable - sat past the right edge. The page itself did
+   not scroll, so nothing looked wrong from the outside.
+
+   What that screen is short of is height, and a column of cards scrolls
+   downwards, which is the direction a phone scrolls anyway. */
+@media (max-width: 760px),
+       (orientation: landscape) and (max-height: 520px) {
 
     .table-wrap {
         overflow-x: visible;

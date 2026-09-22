@@ -370,7 +370,7 @@ check("billing offers a print button on the row",
       "there is no way to print a receipt from the billing list")
 
 check("and it sits beside the payment status",
-      re.search(r"<th>Payment Status</th>\s*<th>Print Bill</th>",
+      re.search(r"<th[^>]*>Payment Status</th>\s*<th[^>]*>Print Bill</th>",
                 billing_html) is not None,
       "the column is not where the cashier's hand already is")
 
@@ -405,7 +405,7 @@ def billing_shape(client):
         html, re.S)
     spans = sorted({int(n) for n in re.findall(
         r'<td colspan="(\d+)" class="empty-row"', html)})
-    return len(re.findall(r"<th>", head.group(1))) if head else 0, spans
+    return len(re.findall(r"<th[^>]*>", head.group(1))) if head else 0, spans
 
 
 columns, spans = billing_shape(a)

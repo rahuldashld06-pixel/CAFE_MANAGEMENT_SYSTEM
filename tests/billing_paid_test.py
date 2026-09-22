@@ -228,7 +228,7 @@ check("and the link still opens the order itself",
 # The bill keeps its own number. They are different things counted
 # differently, and the bill number is what the bill is filed under.
 check("the bill keeps its own number",
-      re.search(r'class="bill-id">#1<', row) is not None,
+      re.search(r'class="bill-id"[^>]*>#1<', row) is not None,
       "the bill number changed along with the order number")
 
 
@@ -249,7 +249,8 @@ def head_of(client):
     """The column names, in the order the page puts them."""
     page = client.get("/billing").get_data(as_text=True)
     head = re.search(r"<thead>(.*?)</thead>", page, re.S)
-    return re.findall(r"<th>(.*?)</th>", head.group(1), re.S) if head else []
+    return re.findall(r"<th[^>]*>(.*?)</th>", head.group(1), re.S) \
+        if head else []
 
 
 def cell_count(client):
