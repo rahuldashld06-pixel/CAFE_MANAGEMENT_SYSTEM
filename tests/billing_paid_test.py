@@ -231,6 +231,221 @@ check("the bill keeps its own number",
       re.search(r'class="bill-id">#1<', row) is not None,
       "the bill number changed along with the order number")
 
+
+# =====================================================================
+print("\n=== Billing shows what a till needs, and not much else ===")
+# =====================================================================
+# The tiles across the top - bills, paid, pending, cancelled, revenue -
+# were a summary of the very list printed underneath them, and cost a
+# query of their own on every load.
+#
+# Subtotal and Tax went the same way, for a different reason: on a cafe
+# that charges neither, Subtotal is the total printed a second time under
+# another name, and a column of zeroes beside it is how a useful column
+# gets lost among pointless ones. They come back the moment there is
+# something to put in them.
+
+def head_of(client):
+    """The column names, in the order the page puts them."""
+    page = client.get("/billing").get_data(as_text=True)
+    head = re.search(r"<thead>(.*?)</thead>", page, re.S)
+    return re.findall(r"<th>(.*?)</th>", head.group(1), re.S) if head else []
+
+
+def cell_count(client):
+    """How many cells the first body row has, which must match the head."""
+    page = client.get("/billing").get_data(as_text=True)
+    body = re.search(r"<tbody>\s*(<tr.*?</tr>)", page, re.S)
+    return len(re.findall(r"<td[^>]*>", body.group(1))) if body else 0
+
+
+plain = app.test_client()
+plain.post("/register", data={
+    "cafe_name": "Plain Till", "full_name": "Owner", "username": "plainboss",
+    "phone_number": "", "password": "password123",
+    "confirm_password": "password123"}, follow_redirects=True)
+plain.post("/settings/tax", data={"tax_percent": "0", "discount_percent": "0",
+                                  "_csrf_token": csrf(plain)},
+           follow_redirects=True)
+plain.post("/categories/add", data={"category_name": "Coffee",
+                                    "description": "",
+                                    "_csrf_token": csrf(plain)},
+           follow_redirects=True)
+pcat = re.search(r'<option value="(\d+)">',
+                 plain.get("/foods/add").get_data(as_text=True)).group(1)
+plain.post("/foods/add", data={
+    "food_name": "Cortado", "category_id": pcat, "price": "100",
+    "quantity": "50", "minimum_stock": "2", "description": "",
+    "_csrf_token": csrf(plain)}, follow_redirects=True)
+pfood = re.findall(r'id="quantity_(\d+)"',
+                   plain.get("/orders/add").get_data(as_text=True))[0]
+
+
+def plain_order():
+    plain.post("/orders/add", data={"quantity_%s" % pfood: "2",
+                                    "_csrf_token": csrf(plain)},
+               follow_redirects=True)
+
+
+plain_order()
+columns = head_of(plain)
+
+check("the summary tiles are gone",
+      "stats-grid" not in plain.get("/billing").get_data(as_text=True),
+      "they still sit above a list that says the same thing")
+
+check("order status is no longer a column of its own",
+      "Order Status" not in columns, columns)
+
+check("and nor is subtotal or tax, with nothing to adjust",
+      "Subtotal" not in columns and "Tax" not in columns,
+      "a cafe charging neither is shown its total twice: %s" % columns)
+
+# The order asked for: what it was, when, what was in it, what it came to.
+check("what is left reads in the order it happened",
+      columns[:5] == ["Bill ID", "Order ID", "Date", "Order Items", "Total"],
+      "the columns run %s" % columns[:5])
+
+check("every row has a cell for every column",
+      cell_count(plain) == len(columns),
+      "%d columns but %d cells - the table is out by %d"
+      % (len(columns), cell_count(plain),
+         abs(len(columns) - cell_count(plain))))
+
+
+# ---- and they come back when they mean something --------------------
+plain.post("/settings/tax", data={"tax_percent": "5", "discount_percent": "0",
+                                  "_csrf_token": csrf(plain)},
+           follow_redirects=True)
+plain_order()
+columns = head_of(plain)
+
+check("charging tax brings back the tax column",
+      "Tax" in columns, columns)
+
+check("and the subtotal with it, since it now differs from the total",
+      "Subtotal" in columns,
+      "the tax is shown with nothing to say what it was charged on")
+
+check("but not a discount column, with no discount given",
+      "Discount" not in columns, columns)
+
+plain.post("/settings/tax", data={"tax_percent": "5", "discount_percent": "10",
+                                  "_csrf_token": csrf(plain)},
+           follow_redirects=True)
+plain_order()
+columns = head_of(plain)
+
+check("giving a discount brings back that column too",
+      "Discount" in columns, columns)
+
+check("and the sum reads left to right",
+      [c for c in columns
+       if c in ("Subtotal", "Discount", "Tax", "Total")]
+      == ["Subtotal", "Discount", "Tax", "Total"],
+      "they are ordered %s" % [c for c in columns if c in
+                               ("Subtotal", "Discount", "Tax", "Total")])
+
+check("and every row still has a cell for every column",
+      cell_count(plain) == len(columns),
+      "%d columns but %d cells" % (len(columns), cell_count(plain)))
+
+# A cafe that stops charging still has to be able to explain old bills.
+plain.post("/settings/tax", data={"tax_percent": "0", "discount_percent": "0",
+                                  "_csrf_token": csrf(plain)},
+           follow_redirects=True)
+columns = head_of(plain)
+check("bills already charged keep their columns after the rate is dropped",
+      "Tax" in columns and "Discount" in columns,
+      "the older bills can no longer say what they were charged: %s"
+      % columns)
+
+
+# =====================================================================
+print("\n=== The Order Status popup counts the same way ===")
+# =====================================================================
+# It is the counter's own view of the shift it is on, and it was neither
+# of those things. It listed the last fifteen orders whenever they were
+# taken, so first thing in the morning the whole popup was yesterday's
+# work with a pending badge counting orders served the night before. And
+# it numbered them by row id, which climbs for ever - so the counter
+# would call "order 4" while the popup said "Order #312" about the same
+# one.
+import datetime as _dt
+
+feeder = app.test_client()
+feeder.post("/register", data={
+    "cafe_name": "Popup Cafe", "full_name": "Owner", "username": "popupboss",
+    "phone_number": "", "password": "password123",
+    "confirm_password": "password123"}, follow_redirects=True)
+feeder.post("/categories/add", data={"category_name": "Coffee",
+                                     "description": "",
+                                     "_csrf_token": csrf(feeder)},
+            follow_redirects=True)
+fcat = re.search(r'<option value="(\d+)">',
+                 feeder.get("/foods/add").get_data(as_text=True)).group(1)
+feeder.post("/foods/add", data={
+    "food_name": "Macchiato", "category_id": fcat, "price": "90",
+    "quantity": "900", "minimum_stock": "2", "description": "",
+    "_csrf_token": csrf(feeder)}, follow_redirects=True)
+ffood = re.findall(r'id="quantity_(\d+)"',
+                   feeder.get("/orders/add").get_data(as_text=True))[0]
+
+
+def feeder_order():
+    feeder.post("/orders/add", data={"quantity_%s" % ffood: "1",
+                                     "_csrf_token": csrf(feeder)},
+                follow_redirects=True)
+
+
+with feeder.session_transaction() as sess:
+    fowner = sess.get("user_id")
+
+# Three yesterday, then the day turns over and three more.
+for _ in range(3):
+    feeder_order()
+mysql_shim._DB.execute(
+    "UPDATE orders SET order_day = ? WHERE user_id = ?",
+    (str(_dt.date.today() - _dt.timedelta(days=1)), fowner))
+mysql_shim._DB.commit()
+for _ in range(3):
+    feeder_order()
+
+feed = feeder.get("/api/order-status").get_json()
+shown = feed["orders"]
+
+check("the popup shows today's orders and no others",
+      len(shown) == 3,
+      "it lists %d orders, so yesterday's are still on the counter's "
+      "screen this morning" % len(shown))
+
+check("numbered the way they are called out, starting again at one",
+      sorted(o["daily_no"] for o in shown) == [1, 2, 3],
+      "it shows %s - the kitchen board and the customer's slip say 1, 2, 3"
+      % sorted(o["daily_no"] for o in shown))
+
+# The id still has to travel: it is what Done posts to, and what the
+# order is keyed on. Showing the daily number must not change that.
+check("but each row still carries the id the Done button needs",
+      all(o["order_id"] > 3 for o in shown)
+      and len({o["order_id"] for o in shown}) == 3,
+      "the rows carry %s, which are not this order's own ids"
+      % [o["order_id"] for o in shown])
+
+check("and the pending badge counts today only",
+      feed["pending_count"] == 3,
+      "the badge says %s, so it is counting orders that were served "
+      "yesterday" % feed["pending_count"])
+
+# Marking one done through the popup still has to find the order.
+first = shown[0]
+feeder.post("/orders/complete/%s" % first["order_id"],
+            data={"_csrf_token": csrf(feeder)}, follow_redirects=True)
+after = feeder.get("/api/order-status").get_json()
+check("marking one done through the popup works on the id, not the number",
+      sum(1 for o in after["orders"] if o["order_status"] == "Pending") == 2,
+      "the Done button posted a number that named no order")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

@@ -426,6 +426,51 @@ check("and still does once a discount adds one",
       "%d columns with the discount column in, but the empty row spans %s"
       % (columns, spans))
 
+
+print("\n=== 14. The receipt prints only the lines with something on ===")
+# A strip of paper reading "Discount 0.00" for a cafe that gives no
+# discount is a line nobody needs. And with neither a discount nor a tax,
+# Subtotal is the total printed a second time under another name.
+paperless = app.test_client()
+build(paperless, "No Charge Cafe", "nocharge", ["Filter"], price="100")
+paperless.post("/settings/tax",
+               data={"tax_percent": "0", "discount_percent": "0",
+                     "_csrf_token": csrf(paperless)}, follow_redirects=True)
+plainfoods = re.findall(
+    r'id="quantity_(\d+)"',
+    paperless.get("/orders/add").get_data(as_text=True))
+bare = place(paperless, {plainfoods[0]: 2})
+bare_html = paperless.get("/orders/%s/bill" % bare).get_data(as_text=True)
+
+check("a cafe charging nothing prints a total and nothing else",
+      "Subtotal" not in bare_html and "Tax (" not in bare_html
+      and "Discount (" not in bare_html and "Total" in bare_html,
+      "it still prints lines that say nothing: %s"
+      % re.findall(r"<span>([A-Z][a-z]+[^<]*)</span>", bare_html))
+
+# And back the moment there is something to say.
+paperless.post("/settings/tax",
+               data={"tax_percent": "5", "discount_percent": "10",
+                     "_csrf_token": csrf(paperless)}, follow_redirects=True)
+charged = place(paperless, {plainfoods[0]: 2})
+charged_html = paperless.get("/orders/%s/bill" % charged).get_data(
+    as_text=True)
+
+check("and one that charges prints the whole sum",
+      all(word in charged_html
+          for word in ("Subtotal", "Discount (10%)", "Tax (5%)", "Total")),
+      "the customer cannot see how the total was arrived at: %s"
+      % re.findall(r"<span>([A-Z][a-z]+[^<]*)</span>", charged_html))
+
+# The rates on the paper are the bill's own, not today's settings.
+paperless.post("/settings/tax",
+               data={"tax_percent": "20", "discount_percent": "0",
+                     "_csrf_token": csrf(paperless)}, follow_redirects=True)
+reprinted = paperless.get("/orders/%s/bill" % charged).get_data(as_text=True)
+check("reprinting an old bill quotes the rates it was charged at",
+      "Tax (5%)" in reprinted and "Tax (20%)" not in reprinted,
+      "the old receipt now claims a rate nobody was charged")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

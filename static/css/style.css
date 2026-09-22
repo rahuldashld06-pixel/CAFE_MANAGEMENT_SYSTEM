@@ -742,6 +742,101 @@ button.profile-dropdown__item {
     flex-wrap: wrap;
 }
 
+/* ==========================================================
+   Search over a list
+
+   One box, used over the New Order menu, Food Management and
+   Inventory. It filters what is already on the page rather
+   than asking the server again - these are a cafe's own
+   items, a few dozen of them, and a round trip to find a
+   latte somebody can already see would be a poor trade.
+
+   The phone overrides for it live further down with the rest
+   of the responsive rules.
+   ========================================================== */
+
+.menu-tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.menu-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.menu-search__icon {
+    position: absolute;
+    left: 12px;
+    font-size: 13px;
+    color: var(--cream-faint);
+    pointer-events: none;
+}
+
+.menu-search__input {
+    width: 260px;
+    max-width: 100%;
+    padding: 9px 32px 9px 34px;
+    border-radius: 999px;
+    border: 1px solid var(--espresso-700);
+    background: var(--espresso-800);
+    color: var(--cream);
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.menu-search__input::placeholder { color: var(--cream-faint); }
+
+.menu-search__input:focus {
+    outline: none;
+    border-color: var(--copper);
+    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .18);
+}
+
+/* The type=search clear button is not stylable across browsers, so it is
+   suppressed in favour of the themed one next to it. */
+.menu-search__input::-webkit-search-cancel-button { display: none; }
+
+.menu-search__clear {
+    position: absolute;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--espresso-700);
+    color: var(--cream);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.menu-search__clear:hover { background: var(--copper); color: #2a1a10; }
+
+.menu-search-empty {
+    padding: 34px 20px;
+    text-align: center;
+    color: var(--cream-faint);
+}
+
+.menu-search-empty i { font-size: 26px; display: block; margin-bottom: 10px; }
+.menu-search-empty p { margin: 0 0 14px; color: var(--cream); }
+
+/* A row the search has ruled out. A class rather than [hidden], because
+   a table row has a display of its own and the attribute would need an
+   !important to beat it. */
+.is-filtered-out { display: none !important; }
+
+@media (max-width: 720px) {
+    .menu-tools { width: 100%; justify-content: space-between; }
+    .menu-search__input { width: 100%; }
+    .menu-search { flex: 1; }
+}
+
 /* ---------- Panels ---------- */
 .panel {
     background: var(--espresso-900);
@@ -3044,15 +3139,33 @@ body.nav-locked {
         display: none;
     }
 
+    /* Every one of these is a sidebar entry too, and on a phone the
+       sidebar is how you navigate. Two text buttons and a title do not
+       fit across 390px between them: what happened instead was the
+       page losing half of its own name to make room for a link that
+       was already one tap away under the hamburger. */
+    .page-header [data-drawer-echo] {
+        display: none;
+    }
+
     .page-header h1 {
+        /* Block, not flex. text-overflow does nothing to a flex
+           container's own text, so the ellipsis here was decorative and
+           the name was simply chopped mid-word. The icon is inline
+           anyway, and wants a margin rather than a gap. */
+        display: block;
         font-size: 19px;
-        gap: 7px;
+        line-height: 1.25;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    .page-header h1 i { font-size: 17px; }
+    .page-header h1 i {
+        font-size: 17px;
+        margin-right: 8px;
+        vertical-align: -1px;
+    }
 
     /* Back to their own size, and they may shrink before the name does.
        Actions are sometimes a bare button and sometimes a wrapper holding
@@ -3071,12 +3184,27 @@ body.nav-locked {
         gap: 6px;
     }
 
+    /* The noun goes, leaving "+ Add". The page's own name is right
+       beside it saying what of, and giving those characters back to the
+       title is what lets it be read in full rather than trailing off.
+
+       It is its own element rather than part of the label because .btn
+       is a flex container, so the span is a flex item and the 8px gap
+       is what separates it - no space of its own, or the words would
+       sit twice as far apart as every other button's. */
+    .page-header .btn__noun {
+        display: none;
+    }
+
+    /* Room to be a normal button again, now that nothing is competing
+       for the width, and tall enough to be a comfortable target. */
     .page-header > .btn,
     .page-header > a.btn,
     .page-header__actions .btn {
-        padding-left: 10px;
-        padding-right: 10px;
-        font-size: 12px;
+        padding-left: 14px;
+        padding-right: 14px;
+        font-size: 13px;
+        min-height: 38px;
         white-space: nowrap;
     }
 }

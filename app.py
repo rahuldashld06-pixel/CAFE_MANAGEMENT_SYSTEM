@@ -3842,8 +3842,23 @@ app.jinja_env.filters["trim_zeros"] = format_percent
 
 @app.route("/api/order-status")
 def order_status_feed():
-    """Lightweight JSON feed of the most recent orders and their status,
-    used to power the floating 'Order Status' popup shown on every page."""
+    """
+    Today's orders and their status, for the floating Order Status popup.
+
+    Today's, not the last fifteen whenever they happened. This is the
+    counter's view of the shift it is on: first thing in the morning it
+    was showing yesterday's work, with a pending badge counting orders
+    that had been served the night before.
+
+    And numbered the way everybody else numbers them. The kitchen board,
+    the billing history and the slip in the customer's hand all show
+    daily_no, which starts again at 1 each morning; this showed the row
+    id, which climbs for ever. The counter would call "order 4" while
+    this said "Order #312" about the same one.
+
+    The row id still travels, because it is what the Done button posts
+    to. Only the number shown changes.
+    """
 
     connection = None
     cursor = None
@@ -3855,14 +3870,15 @@ def order_status_feed():
         cursor.execute("""
             SELECT
                 order_id,
+                daily_no,
                 order_date,
                 total_amount,
                 order_status
             FROM orders
-            WHERE user_id = %s
+            WHERE user_id = %s AND order_day = %s
             ORDER BY order_id DESC
             LIMIT 15
-        """, (scope_user_id(),))
+        """, (scope_user_id(), date.today()))
 
         rows = cursor.fetchall()
 
@@ -3870,6 +3886,10 @@ def order_status_feed():
         for row in rows:
             orders_out.append({
                 "order_id": row["order_id"],
+                # The number called out, which restarts each morning.
+                # Orders taken before this was counted have none, and
+                # fall back to the id so a row is never left blank.
+                "daily_no": row["daily_no"] or row["order_id"],
                 "order_date": format_order_time(row["order_date"]),
                 "total_amount": f'{row["total_amount"]:.2f}',
                 "order_status": row["order_status"] or "Pending",
@@ -5367,57 +5387,9 @@ def billing():
         # --------------------------------------
         # Summary
         #
-        # An admin is looking at whatever period the filter says. A cashier
-        # is looking at their shift, so theirs is fixed to today whatever
-        # the history below is filtered to - "12 bills, 9 paid" only means
-        # something at the till if it means today.
-        # --------------------------------------
-
-        is_admin = session.get("role") == "admin"
-
-        if is_admin:
-            summary_where, summary_params = where_sql, params
-        else:
-            summary_where = ("WHERE o.user_id = %s "
-                             "AND DATE(b.bill_date) = CURDATE()")
-            summary_params = [scope_user_id()]
-
-        cursor.execute(f"""
-            SELECT
-                COUNT(*) AS bills_count,
-                SUM(CASE WHEN b.payment_status = 'Paid' THEN 1 ELSE 0 END) AS paid_count,
-                SUM(CASE WHEN b.payment_status = 'Pending' THEN 1 ELSE 0 END) AS pending_count,
-                SUM(CASE WHEN COALESCE(o.order_status, '') = 'Cancelled' THEN 1 ELSE 0 END) AS cancelled_count,
-                COALESCE(SUM(
-                    CASE
-                        WHEN b.payment_status = 'Paid'
-                         AND COALESCE(o.order_status, '') != 'Cancelled'
-                        THEN b.total_amount
-                        ELSE 0
-                    END
-                ), 0) AS revenue
-
-            FROM bills b
-
-            LEFT JOIN orders o
-                ON b.order_id = o.order_id
-
-            {summary_where}
-        """, tuple(summary_params))
-
-        summary = cursor.fetchone()
-
         return render_template(
             "billing.html",
             bills=bills,
-            bills_today=summary["bills_count"] or 0,
-            paid_today=summary["paid_count"] or 0,
-            pending_today=summary["pending_count"] or 0,
-            cancelled_count=summary["cancelled_count"] or 0,
-            revenue_today=summary["revenue"] or Decimal("0.00"),
-            # Tells the page whether those figures describe the filtered
-            # period or just today, so it can label them honestly.
-            summary_is_today=showing_today or not is_admin,
             showing_today=showing_today,
             show_all=show_all,
             from_date=from_date,

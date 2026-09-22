@@ -142,45 +142,34 @@ admin_billing = admin.get("/billing").get_data(as_text=True)
 check("staff can still use Billing",
       staff.get("/billing").status_code == 200)
 
-# Staff get the same four counts, but fixed to today: a tally only helps at
-# the till if it describes the shift they are on.
-check("staff see the counts, labelled as today's",
-      "Bills Today" in staff_billing and "Paid Today" in staff_billing
-      and "Pending Today" in staff_billing
-      and "Cancelled Today" in staff_billing,
-      "the cashier's summary is missing or mislabelled")
-# Billing opens on today for everyone now, so an admin's default view is
-# labelled the same way a cashier's is. The period labels belong to a
-# period somebody actually chose.
-check("an admin opens on today as well, and it says so",
-      "Bills Today" in admin_billing,
-      "the admin's default view is labelled as something else")
+# The tiles that used to sit across the top of Billing - bills, paid,
+# pending, cancelled, revenue - were taken off at the cafe owner's
+# request: they summarised the very list printed underneath them. What
+# is checked here is what that left behind.
+check("nobody is shown a summary that is no longer there",
+      "stats-grid" not in staff_billing
+      and "stats-grid" not in admin_billing,
+      "the tiles are still on the page")
 
-admin_period = admin.get(
-    "/billing?from_date=2020-01-01&to_date=2020-12-31").get_data(as_text=True)
-check("and a period they choose is labelled as a period",
-      "Bills in Period" in admin_period and "Paid Bills" in admin_period,
-      "a chosen period is still labelled as today")
-check("staff are not shown the period labels",
-      "Bills in Period" not in staff_billing,
-      "a cashier is being told these are period figures when they are not")
-
-# Revenue is the one figure that stays a manager's.
-check("revenue is not on a cashier's screen",
-      'id="stat-revenue"' not in staff_billing,
-      "takings are visible to staff")
-check("but it is on the admin's", 'id="stat-revenue"' in admin_billing)
+# Revenue was the one figure on this page a cashier was not allowed to
+# see. Now it is on nobody's, which is a stronger guarantee than the one
+# it replaces - but it has to be asserted, not assumed, because "staff
+# cannot see the takings" is the part that mattered.
+for who, page in (("a cashier", staff_billing), ("an admin", admin_billing)):
+    check("Billing quotes no takings figure to %s" % who,
+          'id="stat-revenue"' not in page and "Revenue" not in page,
+          "there is still a revenue total on the page")
 
 check("the bill history itself is untouched",
       "Billing History" in staff_billing,
       "staff lost the part of Billing they actually need")
 
-# The filter drives the history, not the cashier's tally.
+# And the history is still theirs to filter.
 filtered = staff.get("/billing?from_date=2020-01-01&to_date=2020-01-31"
                      ).get_data(as_text=True)
-check("a date filter does not move the cashier's today figures",
-      "Bills Today" in filtered,
-      "filtering the history rewrote the shift summary")
+check("a cashier can still filter the history by date",
+      "Billing History" in filtered,
+      "filtering it took the history away from them")
 
 
 print("\n=== 5. Taking payment still works for staff ===")

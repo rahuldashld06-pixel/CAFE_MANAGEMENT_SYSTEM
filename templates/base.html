@@ -956,7 +956,7 @@ window.CafeShell = {
             }
 
             if (!orders.length) {
-                body.innerHTML = '<div class="order-status-empty">No orders yet.</div>';
+                body.innerHTML = '<div class="order-status-empty">No orders today yet.</div>';
                 return;
             }
 
@@ -972,7 +972,7 @@ window.CafeShell = {
                 return (
                     '<div class="order-status-item">' +
                         '<div>' +
-                            '<div class="order-status-item__id">Order #' + order.order_id + '</div>' +
+                            '<div class="order-status-item__id">Order #' + (order.daily_no || order.order_id) + '</div>' +
                             '<div class="order-status-item__meta">' + escapeHtml(order.order_date) + ' · ₹' + escapeHtml(order.total_amount) + '</div>' +
                         '</div>' +
                         statusTag +

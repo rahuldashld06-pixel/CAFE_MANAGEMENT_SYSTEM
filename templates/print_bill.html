@@ -88,21 +88,28 @@
 
         <div class="receipt__totals">
             {% if bill %}
+            {# Only the lines there is something on. A receipt that reads
+               "Discount 0.00" for a cafe that gives no discount is a line
+               nobody needs and a strip of paper nobody wanted - and with
+               neither a discount nor a tax, Subtotal is the total printed
+               a second time under another name. #}
+            {% set off = bill.discount and bill.discount|float > 0 %}
+            {% set on = bill.tax and bill.tax|float > 0 %}
+
+            {% if off or on %}
             <div class="receipt__line">
                 <span>Subtotal</span>
                 <span>{{ "%.2f"|format(bill.subtotal|float) }}</span>
             </div>
-            {# Only the lines there is something on. A receipt that
-               reads "Discount 0.00" for a cafe that gives no discount is
-               a line nobody needs and a strip of paper nobody wanted. #}
-            {% if bill.discount and bill.discount|float > 0 %}
+            {% endif %}
+            {% if off %}
             <div class="receipt__line">
                 <span>Discount ({{ charged.discount | trim_zeros }}%)</span>
                 <span>&minus;{{ "%.2f"|format(bill.discount|float) }}</span>
             </div>
             {% endif %}
 
-            {% if bill.tax and bill.tax|float > 0 %}
+            {% if on %}
             <div class="receipt__line">
                 <span>Tax ({{ charged.tax | trim_zeros }}%)</span>
                 <span>{{ "%.2f"|format(bill.tax|float) }}</span>

@@ -1,0 +1,147 @@
+{#
+   A search box over a table.
+
+   Used by Food Management and Inventory, which are the two pages where a
+   cafe with a full menu has to scroll to find one thing. It filters the
+   rows already on the page rather than asking the server again: these are
+   a cafe's own items, a few dozen of them, and a round trip to Aiven and
+   back to find a latte somebody can already see would cost half a second
+   to save nothing.
+
+   Call it as:
+
+       {% raw %}{% import "_table_search.html" as search %}
+       {{ search.over_table("foodSearch", "Search food, category or price…",
+                            foods|length, "Food Items") }}{% endraw %}
+
+   and put it inside the .panel that holds the table.
+#}
+
+{% macro over_table(id, placeholder, total, noun) %}
+<div class="panel-header" id="{{ id }}">
+    <div class="menu-tools">
+        <div class="menu-search">
+            <i class="bi bi-search menu-search__icon"></i>
+            <input type="search"
+                   class="menu-search__input"
+                   data-table-search
+                   placeholder="{{ placeholder }}"
+                   autocomplete="off"
+                   aria-label="{{ placeholder }}">
+            <button type="button"
+                    class="menu-search__clear"
+                    data-table-search-clear
+                    aria-label="Clear search"
+                    hidden>&times;</button>
+        </div>
+        <span class="badge" data-table-count>{{ total }} {{ noun }}</span>
+    </div>
+</div>
+
+<div class="menu-search-empty" data-table-empty hidden>
+    <i class="bi bi-search"></i>
+    <p>Nothing matches “<span data-table-term></span>”.</p>
+    <button type="button" class="btn btn--sm btn--ghost" data-table-reset>
+        Show everything
+    </button>
+</div>
+
+<script>
+    // Scoped to this one box by its id, so a page could carry two.
+    //
+    // instant.js re-runs a page's scripts every time it is swapped back
+    // in, so nothing here may assume it is running for the first time -
+    // hence no listeners on anything outside the panel, and state read
+    // off the DOM rather than kept in a variable that would survive.
+    (function () {
+        function wire() {
+            var header = document.getElementById("{{ id }}");
+            if (!header) return;
+
+            var panel = header.closest(".panel");
+            var input = header.querySelector("[data-table-search]");
+            var clear = header.querySelector("[data-table-search-clear]");
+            var count = header.querySelector("[data-table-count]");
+            if (!panel || !input) return;
+
+            var body = panel.querySelector("tbody");
+            var empty = panel.querySelector("[data-table-empty]");
+            var term = panel.querySelector("[data-table-term]");
+            var reset = panel.querySelector("[data-table-reset]");
+            var wrap = panel.querySelector(".table-wrap") || panel;
+            if (!body) return;
+
+            // The row the page shows when there is nothing at all is not a
+            // result and must never be filtered - or searching an empty
+            // table would hide the very line explaining that it is empty.
+            var rows = [];
+            Array.prototype.forEach.call(body.rows, function (row) {
+                if (row.querySelector(".empty-row")) return;
+                rows.push([row, (row.textContent || "").toLowerCase()
+                                                      .replace(/\s+/g, " ")]);
+            });
+
+            var total = rows.length;
+            var noun = count ? count.textContent.replace(/^\s*\d+\s*/, "") : "";
+
+            function run() {
+                var wanted = input.value.trim().toLowerCase();
+                var shown = 0;
+
+                for (var i = 0; i < rows.length; i++) {
+                    var hit = !wanted || rows[i][1].indexOf(wanted) > -1;
+                    rows[i][0].classList.toggle("is-filtered-out", !hit);
+                    if (hit) shown++;
+                }
+
+                if (clear) clear.hidden = !wanted;
+                if (count) {
+                    count.textContent = (wanted ? shown + " of " + total
+                                                : String(total)) + " " + noun;
+                }
+
+                // The table itself goes when nothing matched, or the column
+                // headings would sit above an empty space looking broken.
+                var nothing = !!wanted && shown === 0 && total > 0;
+                if (empty) empty.hidden = !nothing;
+                if (term) term.textContent = input.value.trim();
+                wrap.classList.toggle("is-filtered-out", nothing);
+            }
+
+            input.addEventListener("input", run);
+
+            if (clear) {
+                clear.addEventListener("click", function () {
+                    input.value = "";
+                    run();
+                    input.focus();
+                });
+            }
+
+            if (reset) {
+                reset.addEventListener("click", function () {
+                    input.value = "";
+                    run();
+                    input.focus();
+                });
+            }
+
+            // A search typed before the script was reached, or restored by
+            // the browser on a back step, still has to be obeyed.
+            run();
+        }
+
+        // The box is rendered above its own table, so on a first load
+        // this script runs before the rows below it have been parsed and
+        // would find nothing to filter. On a swap the markup is all
+        // there already and readyState says so, which is why this bug
+        // only showed on a fresh load - the page worked perfectly the
+        // moment you navigated away and back.
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", wire, {once: true});
+        } else {
+            wire();
+        }
+    }());
+</script>
+{% endmacro %}

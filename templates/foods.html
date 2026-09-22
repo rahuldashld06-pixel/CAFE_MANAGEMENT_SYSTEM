@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_table_search.html" as search %}
 
 {% block title %}Food Management · Cafe Manager{% endblock %}
 
@@ -15,12 +16,16 @@
                offered it - for anyone else this bounced back with a
                permission message. #}
             {% if session.get('role') == 'admin' %}
-            <a href="{{ url_for('home') }}" class="btn btn--ghost">
+            {# Marked as a shortcut the drawer already carries. On a phone
+               the header is a slim one-line bar and this link was taking
+               the room the page's own name needed - to reach a page that
+               is one tap away under the hamburger either way. #}
+            <a href="{{ url_for('home') }}" class="btn btn--ghost" data-drawer-echo>
                 <i class="bi bi-arrow-left"></i> Dashboard
             </a>
             {% endif %}
             <a class="btn btn--primary" href="{{ url_for('add_food') }}">
-                <i class="bi bi-plus-circle"></i> Add Food
+                <i class="bi bi-plus-circle"></i> Add<span class="btn__noun">Food</span>
             </a>
         </div>
     </div>
@@ -38,6 +43,11 @@
 
     <!-- Food Table -->
     <div class="panel">
+
+        {{ search.over_table("foodListSearch",
+                             "Search food, category or price…",
+                             foods|length, "Food Items") }}
+
         <div class="table-wrap">
             <table class="data-table">
 

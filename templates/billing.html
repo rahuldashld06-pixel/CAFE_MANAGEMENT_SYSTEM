@@ -380,7 +380,11 @@
         </div>
 
         <div class="page-header__actions">
-            <a href="{{ url_for('kitchen_display') }}" class="btn btn--ghost">
+            {# Marked as a shortcut the drawer already carries. On a phone
+               the header is a slim one-line bar and this link was taking
+               the room the page's own name needed - to reach a page that
+               is one tap away under the hamburger either way. #}
+            <a href="{{ url_for('kitchen_display') }}" class="btn btn--ghost" data-drawer-echo>
                 <i class="bi bi-fire"></i> Kitchen
             </a>
         </div>
@@ -430,57 +434,6 @@
         </form>
     </div>
 
-    {# Everyone gets these. An admin sees whatever period the filter above
-       is set to; a cashier always sees today, because a count only helps at
-       the till if it describes the shift they are on. Revenue stays admin
-       only either way. #}
-    <!-- SUMMARY -->
-    <div class="stats-grid">
-
-        <div class="stat-card">
-            <div class="stat-card__icon"><i class="bi bi-receipt-cutoff"></i></div>
-            <div class="stat-card__body">
-                <div class="stat-card__label">{{ 'Bills Today' if summary_is_today else 'Bills in Period' }}</div>
-                <div class="stat-card__value" id="stat-bills-total">{{ bills_today }}</div>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-card__icon"><i class="bi bi-check-circle-fill"></i></div>
-            <div class="stat-card__body">
-                <div class="stat-card__label">{{ 'Paid Today' if summary_is_today else 'Paid Bills' }}</div>
-                <div class="stat-card__value" id="stat-paid-bills">{{ paid_today }}</div>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-card__icon"><i class="bi bi-clock-fill"></i></div>
-            <div class="stat-card__body">
-                <div class="stat-card__label">{{ 'Pending Today' if summary_is_today else 'Pending Bills' }}</div>
-                <div class="stat-card__value" id="stat-pending-bills">{{ pending_today }}</div>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-card__icon"><i class="bi bi-x-circle-fill"></i></div>
-            <div class="stat-card__body">
-                <div class="stat-card__label">{{ 'Cancelled Today' if summary_is_today else 'Cancelled Orders' }}</div>
-                <div class="stat-card__value">{{ cancelled_count }}</div>
-            </div>
-        </div>
-
-        {% if session.get('role') == 'admin' %}
-        <div class="stat-card">
-            <div class="stat-card__icon"><i class="bi bi-currency-rupee"></i></div>
-            <div class="stat-card__body">
-                <div class="stat-card__label">Revenue</div>
-                <div class="stat-card__value">₹<span id="stat-revenue">{{ revenue_today }}</span></div>
-            </div>
-        </div>
-        {% endif %}
-
-    </div>
-
     <!-- ALL BILLS -->
     <div class="panel billing-table-panel">
 
@@ -497,27 +450,38 @@
 
         <div class="table-wrap">
             <table class="data-table billing-table">
-                {# A column of zeroes is a column nobody reads. Shown only
-                   if some bill on the page actually has one - which covers
-                   a cafe that has stopped giving a discount but still has
-                   older bills that carried it. #}
-                {# map('float') because a bill that predates the column
-                   has None there, and None is not greater than anything. #}
+                {# Subtotal, Discount and Tax are shown only when some
+                   bill on this page actually carries one. For a cafe that
+                   charges neither, Subtotal and Total are the same number
+                   printed twice, and a column of zeroes beside them is how
+                   a useful column gets lost among pointless ones.
+
+                   Judged per page rather than per cafe on purpose: one
+                   that has since stopped charging tax still has older
+                   bills that were charged it, and those have to be able
+                   to explain what they came to.
+
+                   map('float') because a bill raised before these columns
+                   existed has None there, and None is not greater than
+                   anything. #}
                 {% set any_discount = bills | map(attribute='discount')
                                              | map('float')
                                              | select('gt', 0) | list | length %}
+                {% set any_tax = bills | map(attribute='tax')
+                                       | map('float')
+                                       | select('gt', 0) | list | length %}
+                {% set adjusted = any_discount or any_tax %}
 
                 <thead>
                     <tr>
                         <th>Bill ID</th>
                         <th>Order ID</th>
                         <th>Date</th>
-                        <th>Subtotal</th>
-                        <th>Tax</th>
-                        {% if any_discount %}<th>Discount</th>{% endif %}
-                        <th>Total</th>
                         <th>Order Items</th>
-                        <th>Order Status</th>
+                        {% if adjusted %}<th>Subtotal</th>{% endif %}
+                        {% if any_discount %}<th>Discount</th>{% endif %}
+                        {% if any_tax %}<th>Tax</th>{% endif %}
+                        <th>Total</th>
                         <th>Payment Mode</th>
                         <th>Return</th>
                         <th>Payment Status</th>
@@ -546,10 +510,6 @@
                         </td>
 
                         <td>{{ bill.bill_date|local_time }}</td>
-                        <td class="amount">₹{{ bill.subtotal }}</td>
-                        <td>₹{{ bill.tax }}</td>
-                        {% if any_discount %}<td>&minus;₹{{ bill.discount }}</td>{% endif %}
-                        <td class="total-amount">₹{{ bill.total_amount }}</td>
 
                         <td>
                             <div style="display:flex; flex-direction:column; gap:4px; min-width:190px;">
@@ -565,15 +525,10 @@
                             </div>
                         </td>
 
-                        <td>
-                            {% if bill.order_status == 'Cancelled' %}
-                                <span class="status-dot status-dot--red" title="Cancelled"></span>
-                            {% elif bill.order_status == 'Completed' %}
-                                <span class="status-dot status-dot--green" title="Completed"></span>
-                            {% else %}
-                                <span class="status-dot status-dot--yellow" title="{{ bill.order_status }}"></span>
-                            {% endif %}
-                        </td>
+                        {% if adjusted %}<td class="amount">₹{{ bill.subtotal }}</td>{% endif %}
+                        {% if any_discount %}<td>&minus;₹{{ bill.discount }}</td>{% endif %}
+                        {% if any_tax %}<td>₹{{ bill.tax }}</td>{% endif %}
+                        <td class="total-amount">₹{{ bill.total_amount }}</td>
 
                         <!-- The selects are associated with the form in the Action cell below. -->
                         <td>
@@ -657,7 +612,7 @@
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="{{ 13 if any_discount else 12 }}" class="empty-row">
+                        <td colspan="{{ 9 + (1 if adjusted else 0) + (1 if any_discount else 0) + (1 if any_tax else 0) }}" class="empty-row">
                             <i class="bi bi-receipt"></i>
                             <p>No bills found for the selected period.</p>
                             <a href="{{ url_for('add_order') }}" class="btn btn--sm btn--primary">
@@ -742,20 +697,6 @@
         setTimeout(() => toast.remove(), 4000);
     }
 
-    function adjustStatCount(id, delta) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const current = parseInt(el.textContent, 10) || 0;
-        el.textContent = current + delta;
-    }
-
-    function adjustRevenue(amount) {
-        const el = document.getElementById('stat-revenue');
-        if (!el) return;
-        const current = parseFloat(el.textContent.replace(/,/g, '')) || 0;
-        el.textContent = (current + amount).toFixed(2);
-    }
-
     async function submitBillingForm(form) {
         const response = await fetch(form.action, {
             method: 'POST',
@@ -792,11 +733,6 @@
                         cell.innerHTML =
                             '<button type="button" class="payment-status-toggle payment-status-toggle--paid" disabled title="This bill is already paid">' +
                             '<i class="bi bi-check-circle-fill"></i> Paid</button>';
-                    }
-                    adjustStatCount('stat-paid-bills', 1);
-                    adjustStatCount('stat-pending-bills', -1);
-                    if (typeof data.total_amount === 'number') {
-                        adjustRevenue(data.total_amount);
                     }
                     showBillingToast(data.message, false);
 

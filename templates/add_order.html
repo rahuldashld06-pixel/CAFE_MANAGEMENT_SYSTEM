@@ -21,78 +21,6 @@
    sets display:grid, which would otherwise win over the attribute. */
 [hidden] { display: none !important; }
 
-/* ---------- Menu search ---------- */
-.menu-tools {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-}
-
-.menu-search {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.menu-search__icon {
-    position: absolute;
-    left: 12px;
-    font-size: 13px;
-    color: var(--cream-faint);
-    pointer-events: none;
-}
-
-.menu-search__input {
-    width: 260px;
-    max-width: 100%;
-    padding: 9px 32px 9px 34px;
-    border-radius: 999px;
-    border: 1px solid var(--espresso-700);
-    background: var(--espresso-800);
-    color: var(--cream);
-    font-size: 14px;
-    font-family: inherit;
-}
-
-.menu-search__input::placeholder { color: var(--cream-faint); }
-
-.menu-search__input:focus {
-    outline: none;
-    border-color: var(--copper);
-    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .18);
-}
-
-/* The type=search clear button is not stylable across browsers, so it is
-   suppressed in favour of the themed one next to it. */
-.menu-search__input::-webkit-search-cancel-button { display: none; }
-
-.menu-search__clear {
-    position: absolute;
-    right: 8px;
-    width: 20px;
-    height: 20px;
-    border: 0;
-    border-radius: 50%;
-    background: var(--espresso-700);
-    color: var(--cream);
-    font-size: 15px;
-    line-height: 1;
-    cursor: pointer;
-}
-
-.menu-search__clear:hover { background: var(--copper); color: #2a1a10; }
-
-.menu-search-empty {
-    padding: 34px 20px;
-    text-align: center;
-    color: var(--cream-faint);
-}
-
-.menu-search-empty i { font-size: 26px; display: block; margin-bottom: 10px; }
-.menu-search-empty p { margin: 0 0 14px; color: var(--cream); }
-
 /* ---------- Category sections ---------- */
 .food-group + .food-group { margin-top: 26px; }
 
@@ -123,9 +51,6 @@
 
 @media (max-width: 720px) {
     .panel-header { flex-wrap: wrap; gap: 12px; }
-    .menu-tools { width: 100%; justify-content: space-between; }
-    .menu-search__input { width: 100%; }
-    .menu-search { flex: 1; }
 }
 
 .food-card {
@@ -539,7 +464,11 @@
             <h1><i class="bi bi-cart-plus"></i> New Order</h1>
         </div>
         <div class="page-header__actions">
-            <a href="{{ url_for('kitchen_display') }}" class="btn btn--ghost">
+            {# Marked as a shortcut the drawer already carries. On a phone
+               the header is a slim one-line bar and this link was taking
+               the room the page's own name needed - to reach a page that
+               is one tap away under the hamburger either way. #}
+            <a href="{{ url_for('kitchen_display') }}" class="btn btn--ghost" data-drawer-echo>
                 <i class="bi bi-fire"></i> Kitchen
             </a>
         </div>
