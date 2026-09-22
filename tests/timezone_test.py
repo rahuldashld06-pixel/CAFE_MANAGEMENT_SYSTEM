@@ -238,6 +238,142 @@ check("and a place that does not exist is refused",
       "time on every screen unreadable" % stored_zone())
 
 
+
+# =====================================================================
+print("\n=== The picker asks for a country, not for an IANA name ===")
+# =====================================================================
+# It used to offer the raw tz database: two thousand entries reading
+# "Indian/Chagos", "America/Argentina/Catamarca", "Etc/GMT+7". Those are
+# addresses in a database, not answers to "where is this cafe?" - and
+# nobody running a cafe in Delhi should have to know that India's clock
+# is filed under Kolkata.
+choices = application.timezone_choices()
+labels = [label for _, label in choices]
+values = [zone for zone, _ in choices]
+
+check("every country is offered by its own name",
+      not [label for label in labels if "/" in label],
+      "these still read as zone names: %s"
+      % [label for label in labels if "/" in label][:6])
+
+for country in ("India", "United Kingdom", "Japan", "Nepal", "Sri Lanka",
+                "United Arab Emirates", "Bangladesh", "Singapore"):
+    check("%s is in the list" % country, country in labels,
+          "somebody running a cafe there could not say where they are")
+
+check("India means the clock India actually keeps",
+      dict((label, zone) for zone, label in choices)["India"]
+      == "Asia/Kolkata",
+      "India is offered as %s"
+      % dict((label, zone) for zone, label in choices).get("India"))
+
+# A country wide enough to keep several clocks cannot be collapsed to
+# one. An "Australia" that quietly meant Sydney would tell Perth the
+# wrong time twice a day.
+for country, city in (("Australia", "Perth"), ("United States", "Denver"),
+                      ("Brazil", "Manaus"), ("Canada", "Vancouver")):
+    check("%s still says which part" % country,
+          "%s \u2014 %s" % (country, city) in labels,
+          "%s is offered as %s" % (country,
+                                   [l for l in labels
+                                    if l.startswith(country)][:4]))
+
+check("and every value offered is a zone this machine has",
+      all(application.known_timezone(zone) is not None for zone in values),
+      "the picker offers a clock that would be refused on save")
+
+check("nothing is offered twice",
+      len(values) == len(set(values)),
+      "the same clock appears under two entries")
+
+
+# =====================================================================
+print("\n=== The spelling a browser reports is not always the list's ===")
+# =====================================================================
+# A laptop in India says "Asia/Calcutta". The picker, and IANA itself
+# these days, say "Asia/Kolkata". Same clock, two names - and a cafe
+# stored under the one the picker does not list opens the page to find
+# nothing selected, which looks a lot like having lost the setting.
+for reported, expected in (("Asia/Calcutta", "Asia/Kolkata"),
+                           ("Asia/Saigon", "Asia/Ho_Chi_Minh"),
+                           ("Europe/Kiev", "Europe/Kyiv"),
+                           ("Asia/Rangoon", "Asia/Yangon"),
+                           ("America/Buenos_Aires",
+                            "America/Argentina/Buenos_Aires")):
+    check("%s is filed as %s" % (reported, expected),
+          application.canonical_zone(reported) == expected,
+          "it was filed as %s, which the picker does not offer"
+          % application.canonical_zone(reported))
+
+check("a name with no alias is left exactly as it is",
+      application.canonical_zone("Asia/Tokyo") == "Asia/Tokyo")
+
+
+# =====================================================================
+print("\n=== Signing in sets it, and only while nobody has ===")
+# =====================================================================
+# The whole point of the exercise: a cafe should never have to go and
+# find this page for its screens to tell the right time.
+fresh = app.test_client()
+fresh.post("/register", data={
+    "cafe_name": "Fresh Cafe", "full_name": "New Owner", "username": "newbie",
+    "phone_number": "", "password": "password123",
+    "confirm_password": "password123",
+    "timezone": "Asia/Calcutta"}, follow_redirects=True)
+
+new_cafe = mysql_shim._DB.execute(
+    "SELECT cafe_id FROM cafes WHERE cafe_name = 'Fresh Cafe'").fetchone()[0]
+
+
+def zone_of(cafe_id):
+    return mysql_shim._DB.execute(
+        "SELECT timezone FROM cafes WHERE cafe_id = ?", (cafe_id,)).fetchone()[0]
+
+
+check("registering a cafe settles its clock there and then",
+      zone_of(new_cafe) == "Asia/Kolkata",
+      "it says %r - a brand new cafe would read UTC until somebody "
+      "signed out and back in" % zone_of(new_cafe))
+
+check("and the page shows the country, already chosen",
+      re.search(r'value="Asia/Kolkata"\s*selected>\s*India',
+                fresh.get("/settings/timezone").get_data(as_text=True))
+      is not None,
+      "the admin opens the page to find their country not selected")
+
+# Set on purpose, and then left alone however many laptops sign in.
+fresh.post("/settings/timezone", data={"timezone": "Asia/Tokyo",
+                                       "_csrf_token": csrf(fresh)},
+           follow_redirects=True)
+check("changing it from the profile sticks",
+      zone_of(new_cafe) == "Asia/Tokyo", zone_of(new_cafe))
+
+with app.test_request_context():
+    application.settle_cafe_clock(new_cafe, "America/New_York")
+check("and a later sign-in from elsewhere does not move it back",
+      zone_of(new_cafe) == "Asia/Tokyo",
+      "a laptop signing in from another country moved the whole cafe "
+      "to %s, undoing a choice somebody made on purpose"
+      % zone_of(new_cafe))
+
+
+# =====================================================================
+print("\n=== A clock the country list has never heard of ===")
+# =====================================================================
+# The list is this app's, not IANA's. Dropping somebody's working clock
+# because it is not in a list I wrote would be a poor trade.
+mysql_shim._DB.execute(
+    "UPDATE cafes SET timezone = 'Antarctica/Troll' WHERE cafe_id = ?",
+    (new_cafe,))
+mysql_shim._DB.commit()
+
+page = fresh.get("/settings/timezone").get_data(as_text=True)
+check("it is still offered, and still selected",
+      re.search(r'value="Antarctica/Troll"\s*selected', page) is not None,
+      "the picker dropped a working clock, so opening the page and "
+      "saving would silently move the cafe somewhere else")
+
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

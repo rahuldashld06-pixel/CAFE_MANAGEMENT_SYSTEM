@@ -19,6 +19,8 @@ import io
 import os
 import re
 import mysql.connector
+import unicodedata
+import countries
 from decimal import Decimal, InvalidOperation
 try:
     import razorpay
@@ -3606,6 +3608,102 @@ def update_stock(food_id):
 DEFAULT_TIMEZONE = (os.environ.get("APP_TIMEZONE", "") or "UTC").strip()
 
 
+def canonical_zone(name):
+    """
+    The one name this app files a given clock under.
+
+    A browser in Delhi reports "Asia/Calcutta". The picker, and IANA
+    itself these days, say "Asia/Kolkata". Same clock, two spellings -
+    and a cafe stored under the spelling the picker does not list opens
+    the page to find nothing selected, which looks a great deal like
+    having lost the setting.
+
+    A name with no known alias comes back unchanged. An unfamiliar zone
+    that this machine still resolves is a working clock, and this is not
+    the place to take it away from anybody.
+    """
+    name = (name or "").strip()
+    return countries.ZONE_ALIASES.get(name, name)
+
+
+def _sorts_under(name):
+    """
+    Where a country name belongs in an A-Z list.
+
+    Sorting by code point puts every accented name after Z, so the
+    Aland Islands would follow Zimbabwe and Cote d'Ivoire would follow
+    Czechia. The accents are dropped for the comparison only - the list
+    still shows the name properly spelled.
+    """
+    stripped = unicodedata.normalize("NFKD", name)
+    return "".join(c for c in stripped
+                   if not unicodedata.combining(c)).lower()
+
+
+# Built once. available_timezones() reads the whole tz database, and the
+# answer is the same every time.
+_TIMEZONE_CHOICES = None
+
+
+def timezone_choices(current=None):
+    """
+    What the time zone picker offers: countries, and cities where a
+    country needs them.
+
+    The raw IANA list was what this used to show - two thousand entries
+    reading "Indian/Chagos" and "Etc/GMT+7". Nobody running a cafe knows
+    or should have to know that India's clock is filed under Kolkata.
+
+    A country that keeps one clock is one line, by name. The two dozen
+    that keep several get a line each, because there is no honest way to
+    collapse them: an "Australia" that quietly meant Sydney would tell
+    Perth the wrong time twice a day.
+
+    Whatever the cafe is on now is always in the list, even if the
+    countries file has never heard of it. A picker that silently drops
+    somebody's working clock is worse than one with an odd name in it.
+    """
+    global _TIMEZONE_CHOICES
+
+    if _TIMEZONE_CHOICES is None:
+        real = available_timezones()
+        built = []
+        for country, zones in countries.COUNTRY_ZONES:
+            # A zone this machine's tz database does not have is left
+            # out rather than offered and then refused on save.
+            usable = [zone for zone in zones if zone in real]
+            if not usable:
+                continue
+
+            if len(usable) == 1:
+                built.append((usable[0], country))
+            else:
+                for zone in usable:
+                    built.append((zone, "%s \u2014 %s"
+                                  % (country, countries.city_of(zone))))
+
+        built.sort(key=lambda pair: _sorts_under(pair[1]))
+        _TIMEZONE_CHOICES = built
+
+    choices = list(_TIMEZONE_CHOICES)
+
+    current = canonical_zone(current)
+    if (current and current not in {zone for zone, _ in choices}
+            and known_timezone(current) is not None):
+        choices.insert(0, (current, current))
+
+    return choices
+
+
+def zone_label(zone):
+    """The country a zone is offered under, for saying out loud."""
+    zone = canonical_zone(zone)
+    for value, label in timezone_choices(zone):
+        if value == zone:
+            return label
+    return zone or "UTC"
+
+
 def known_timezone(name):
     """The zone if it is a real one, otherwise None."""
     name = (name or "").strip()
@@ -6105,6 +6203,14 @@ def register():
                          VALUES(%s,%s,%s,'admin',1,%s,%s)""",(username,generate_password_hash(password),full_name,phone or None,cid))
             uid=cur.lastrowid; cur.execute('UPDATE cafes SET owner_user_id=%s WHERE cafe_id=%s',(uid,cid)); c.commit()
             session.clear(); session.permanent=True; session['user_id']=uid; session['username']=username; session['role']='admin'; session['cafe_id']=cid
+
+            # The form carried what clock this screen is on. A brand new
+            # cafe has none, and this is the earliest anybody can be
+            # asked - so its very first page already reads the right
+            # time, rather than reading UTC until somebody signs out and
+            # back in again.
+            settle_cafe_clock(cid, request.form.get('timezone'))
+
             flash(f'Welcome! Your café "{cafe_name}" has been created.')
             return redirect(url_for('home'))
         except mysql.connector.Error as error:
@@ -7416,7 +7522,10 @@ def settle_cafe_clock(cafe_id, wanted):
     Never worth failing a sign-in over. Somebody who cannot get in
     because of a timestamp has a worse problem than a timestamp.
     """
-    wanted = (wanted or "").strip()
+    # Filed under the name the picker uses, so an admin opening the
+    # page afterwards finds their country already selected rather than
+    # an empty box. A browser in Delhi reports "Asia/Calcutta".
+    wanted = canonical_zone(wanted)
     if not cafe_id or known_timezone(wanted) is None:
         return False
 
@@ -7462,7 +7571,7 @@ def timezone_guess():
     if not session.get("user_id"):
         return jsonify({"ok": False}), 403
 
-    wanted = (request.form.get("timezone") or "").strip()
+    wanted = canonical_zone(request.form.get("timezone"))
     if known_timezone(wanted) is None:
         return jsonify({"ok": False, "reason": "not a zone"}), 400
 
@@ -7708,10 +7817,10 @@ def timezone_settings():
         cafe_id = require_cafe_session()
 
         if request.method == "POST":
-            wanted = (request.form.get("timezone") or "").strip()
+            wanted = canonical_zone(request.form.get("timezone"))
 
             if known_timezone(wanted) is None:
-                flash("That is not a time zone this server knows about.")
+                flash("Pick the country this cafe is in.")
                 return redirect(stay_on("timezone_settings"))
 
             cursor.execute(
@@ -7725,14 +7834,16 @@ def timezone_settings():
             g.pop("current_user_row", None)
 
             flash("Clock set to %s. It is %s there now."
-                  % (wanted, cafe_now(cafe_id).strftime("%I:%M %p")))
+                  % (zone_label(wanted),
+                     cafe_now(cafe_id).strftime("%I:%M %p")))
             return redirect(came_from())
 
-        current = cafe_timezone_name(cafe_id)
+        current = canonical_zone(cafe_timezone_name(cafe_id))
         return render_template(
             "timezone_settings.html",
-            zones=sorted(available_timezones()),
+            choices=timezone_choices(current),
             current=current,
+            current_label=zone_label(current),
             now_there=cafe_now(cafe_id).strftime("%d %b %Y, %I:%M %p"),
         )
     finally:

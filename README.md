@@ -58,17 +58,31 @@ branding, fully isolated from the others.
   order rather than explaining it. Bills already raised keep the rates
   they were charged at.
 - **The café's own clock.** Times are stored in UTC and read back on the
-  zone the café picks under Profile → Time Zone — the kitchen board, the
+  zone the café picks under Profile → Time Zone, which asks for a
+  *country* — India, not `Asia/Kolkata`. It offered the raw IANA list
+  once, two thousand entries reading `Indian/Chagos` and `Etc/GMT+7`;
+  those are addresses in a database, not answers to "where is this
+  café?". The couple of dozen countries too wide for one clock appear
+  once per clock (`Australia — Perth`), because an "Australia" that
+  quietly meant Sydney would tell Perth the wrong time twice a day. The
+  countries live in `countries.py`, and every zone in it is checked
+  against the ones the machine actually has before it reaches a page —
+  IANA is the authority, that file is only a way of asking. The kitchen
+  board, the
   billing list, the printed receipt and the page a customer is holding all
   agree. Every stored time is written by the app rather than left to a
   column default, because a default is filled by whichever machine the
   database happens to be on: that is how an order and its own bill ended
   up stamped by two different clocks. Nobody has to go and find the
-  setting first: the sign-in form carries whatever clock the browser is
-  on, and the first person through the door settles it, so the very first
-  page already reads right. It settles only once — a café that has chosen
-  keeps its clock however many laptops sign in from elsewhere — and the
-  setting stays there for anyone changing it on purpose. Note that this
+  setting first: the sign-up and sign-in forms carry whatever clock the
+  browser is on, so a café's very first page already reads right. It
+  settles only once — a café that has chosen keeps its clock however many
+  laptops sign in from elsewhere — and stays that way until somebody
+  changes it in the profile menu. What the browser reports is filed under
+  the name the picker uses before it is stored: a laptop in Delhi says
+  `Asia/Calcutta` where the list says `Asia/Kolkata`, and a café stored
+  under a spelling the picker does not offer would open the page to find
+  nothing selected. Note that this
   changes what a time *reads* as and nothing else — an order keeps the day
   it was counted under and the number it was given.
 - **Switching pages costs nothing.** Every sidebar page is fetched in the
@@ -195,6 +209,7 @@ provisioning by hand when the runtime user cannot execute DDL.
 
 ```
 app.py               All routes and application logic
+countries.py         Countries and the clocks they keep, for the time zone picker
 wsgi.py              WSGI entry point for gunicorn
 config.py            Optional local config (gitignored)
 requirements.txt     Python dependencies
@@ -268,7 +283,7 @@ python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
 python tests/tutorial_test.py     # expect PASSED: 41   FAILED: 0
 python tests/tour_browser_test.py # expect PASSED: 26  FAILED: 0
 python tests/nav_cache_test.py    # expect PASSED: 8    FAILED: 0
-python tests/timezone_test.py     # expect PASSED: 14   FAILED: 0
+python tests/timezone_test.py     # expect PASSED: 41   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
