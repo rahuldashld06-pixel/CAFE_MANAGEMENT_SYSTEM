@@ -350,7 +350,7 @@ python tests/mobile_nav_test.py   # expect PASSED: 84   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
-python tests/qr_order_test.py     # expect PASSED: 112  FAILED: 0
+python tests/qr_order_test.py     # expect PASSED: 121  FAILED: 0
 python tests/kitchen_screen_test.py # expect PASSED: 23  FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
@@ -361,7 +361,7 @@ python tests/timezone_test.py     # expect PASSED: 41   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
-python tests/list_search_test.py  # expect PASSED: 61   FAILED: 0
+python tests/list_search_test.py  # expect PASSED: 78   FAILED: 0
 python tests/security_test.py     # expect PASSED: 44   FAILED: 0
 ```
 
