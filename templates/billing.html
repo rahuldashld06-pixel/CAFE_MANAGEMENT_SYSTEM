@@ -248,21 +248,40 @@
        These four carry controls of a known size. The rest of the table
        shares out what is left, which is why amounts are told not to
        wrap - that is the column that would otherwise give way. */
-    .billing-table th.col-date { width: 150px; }
-    .billing-table th.col-items { width: 180px; }
-    .billing-table th.col-mode { width: 112px; }
-    .billing-table th.col-return { width: 114px; }
+    /* Wide enough for the heading on one line. Left to itself the
+       column takes the width of "Bill" and puts "ID" underneath, which
+       sets the height of the header row for the sake of two words. */
+    .billing-table th.col-id { width: 56px; }
+    .billing-table th.col-date { width: 138px; }
+
+    /* Narrower than it was. A dish name is usually one short line, and
+       at 180px the Total ended up a hand's width to the right of the
+       thing it is the total of. */
+    .billing-table th.col-items { width: 146px; }
+    .billing-table th.col-total { width: 76px; }
+
+    /* Centred under its heading rather than pushed against the next
+       column, which is what made this end of the table look lopsided. */
+    .billing-table th.col-total,
+    .billing-table td.total-amount {
+        text-align: center;
+    }
+
+    /* Only one of these is ever shown - see the landscape block. */
+    .date-short { display: none; }
+    .billing-table th.col-mode { width: 106px; }
+    .billing-table th.col-return { width: 106px; }
     /* Wide enough for the button plus the cell's own padding, or the
        button is clamped narrower than the 108px it asks for and the
        column stops matching itself across breakpoints. */
-    .billing-table th.col-status { width: 136px; }
+    .billing-table th.col-status { width: 128px; }
 
     /* Two-word headings over narrow columns were wrapping onto two
        lines and setting the height of the header row. */
     .billing-table th {
         white-space: nowrap;
     }
-    .billing-table th.col-print { width: 64px; text-align: center; }
+    .billing-table th.col-print { width: 56px; text-align: center; }
 
     /* A date is one thing and belongs on one line. Left to wrap it took
        three, which set the height of every row in the table. */
@@ -280,11 +299,16 @@
     }
 
 
+    /* A long dish name wraps. Held on one line it made the Order Items
+       column as wide as the longest name on the page, which in an
+       auto-layout table overrides the width asked for and pushes the
+       columns after it off the screen. There is height to spare on a
+       row; there is no width to spare. */
     .bill-line {
         display: inline-flex;
         align-items: baseline;
+        flex-wrap: wrap;
         gap: 6px;
-        white-space: nowrap;
     }
 
     .bill-line__qty {
@@ -464,8 +488,146 @@
     }
 
 
-    @media (max-width: 760px),
-           (orientation: landscape) and (max-height: 520px) {
+    /* A phone or a small tablet rotated: about 700-1000px across and
+       under 520px tall. It keeps the table, because the wide view is
+       what rotating the device was for. What it gets instead is every
+       part of that table sized for the room available.
+
+       The two things being bought here are width - eleven columns
+       across 844px is roughly 77 each - and height, because having to
+       scroll down to reach Paid is the same complaint as having to
+       scroll across. */
+    @media (orientation: landscape) and (max-height: 520px) {
+        .billing-table-panel { overflow-x: auto; }
+
+        /* Fixed, so the widths below are obeyed. Left on auto the
+           browser sizes each column to its content and quietly ignores
+           them - Order Items asked for 116px and took 218, which
+           pushed Print Bill off the end of an 844px screen. Fixed
+           means the declarations are the layout and the content fits
+           itself around them. */
+        .billing-table {
+            min-width: 0;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .billing-table th,
+        .billing-table td {
+            padding: 6px 5px;
+            font-size: 11.5px;
+        }
+
+        /* Two short words that were wrapping to two lines and setting
+           the height of the header row. */
+        .billing-table th { white-space: normal; line-height: 1.15; }
+
+        /* The year is the easiest thing in the row to do without. */
+        .date-long { display: none; }
+        .date-short { display: inline; }
+
+        .billing-table th.col-id { width: 48px; }
+        .billing-table th.col-date { width: 106px; }
+        .billing-table th.col-items { width: 156px; }
+        .billing-table th.col-total { width: 64px; }
+        .billing-table th.col-mode { width: 92px; }
+        .billing-table th.col-return { width: 94px; }
+        .billing-table th.col-status { width: 94px; }
+        .billing-table th.col-print { width: 44px; }
+
+
+        .payment-method-select {
+            padding: 5px 18px 5px 6px;
+            font-size: 11px;
+        }
+
+        .cash-received-input {
+            height: 26px;
+            padding: 3px 6px;
+            font-size: 11px;
+        }
+
+        .payment-status-toggle {
+            width: 78px;
+            height: 26px;
+            font-size: 10px;
+            gap: 3px;
+            padding: 4px 6px;
+        }
+
+        .return-cell { min-height: 26px; }
+        .return-cell .return-amount,
+        .return-cell .return-not-applicable {
+            top: calc(50% + 13px);
+            font-size: 10px;
+        }
+
+        .print-bill-btn {
+            padding: 4px 6px;
+        }
+
+        .bill-line__qty { font-size: 11px; }
+
+        /* Everything above the table gives up height, so rows are on
+           screen without scrolling to them. The filter was a full panel
+           with its own heading for two date boxes and two buttons. */
+        .billing-filter-panel {
+            padding: 8px 10px;
+            margin-bottom: 8px;
+        }
+
+        .billing-filter-panel h2,
+        .billing-filter-panel .panel-subtitle,
+        .billing-table-panel .panel-subtitle {
+            display: none;
+        }
+
+        .billing-table-panel {
+            padding: 8px 10px;
+        }
+
+        .billing-table-panel .panel-header {
+            margin-bottom: 6px;
+        }
+
+        /* The filter, on one tight line. The two labels say what the
+           two date boxes already show, and the panel around them was
+           costing a row of bills. */
+        .billing-filter-panel .panel-header { display: none; }
+
+        .billing-filter-panel .history-filter {
+            gap: 8px;
+            align-items: center;
+        }
+
+        .billing-filter-panel .filter-field {
+            margin: 0;
+        }
+
+        .billing-filter-panel .filter-field label {
+            display: none;
+        }
+
+        .billing-filter-panel input[type="date"] {
+            height: 30px;
+            padding: 3px 8px;
+            font-size: 11.5px;
+        }
+
+        .billing-filter-panel .btn {
+            padding: 6px 12px;
+            font-size: 11.5px;
+            min-height: 30px;
+        }
+
+        /* The page title already says Billing; the panel does not need
+           to say History a second time above the history. */
+        .billing-table-panel .panel-header h2 {
+            font-size: 14px;
+        }
+    }
+
+    @media (max-width: 760px) {
         /* The fixed column widths above are for a table. Once each bill
            is a card, a cell is a full-width row and a width in pixels
            would squeeze it into a corner of one. */
@@ -523,7 +685,7 @@
     {% endwith %}
 
     <!-- BILLING HISTORY PERIOD -->
-    <div class="panel">
+    <div class="panel billing-filter-panel">
         <div class="panel-header">
             <div>
                 <h2><i class="bi bi-calendar3"></i> Billing History Period</h2>
@@ -596,8 +758,8 @@
 
                 <thead>
                     <tr>
-                        <th>Bill ID</th>
-                        <th>Order ID</th>
+                        <th class="col-id">Bill ID</th>
+                        <th class="col-id">Order ID</th>
                         <th class="col-date">Date</th>
                         <th class="col-items">Order Items</th>
                         {% if adjusted %}<th>Subtotal</th>{% endif %}
@@ -631,7 +793,10 @@
                             </a>
                         </td>
 
-                        <td data-label="Date">{{ bill.bill_date|local_time }}</td>
+                        <td data-label="Date">
+                            <span class="date-long">{{ bill.bill_date|local_time }}</span>
+                            <span class="date-short">{{ bill.bill_date|short_time }}</span>
+                        </td>
 
                         <td data-label="Items">
                             <div style="display:flex; flex-direction:column; gap:4px; min-width:190px;">

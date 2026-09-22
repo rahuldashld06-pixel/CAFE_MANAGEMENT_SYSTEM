@@ -217,6 +217,102 @@ check("the refresh carries the day too", feed.status_code == 200
       .get("short") == datetime.datetime.now().strftime("%a"),
       "a screen left open past midnight would keep yesterday's name")
 
+
+# =====================================================================
+print("\n=== What needs ordering is at the top of Inventory ===")
+# =====================================================================
+# A cafe opens this page to find out what to reorder. Listed by menu
+# number alone, that meant reading forty rows to find the two that
+# mattered - so anything short comes to the top, worst first, and drops
+# back to its own place the moment it is restocked.
+
+shelf = app.test_client()
+shelf.post("/register", data={
+    "cafe_name": "Shelf Cafe", "full_name": "Owner", "username": "shelfboss",
+    "phone_number": "", "password": "password123",
+    "confirm_password": "password123"}, follow_redirects=True)
+shelf.post("/categories/add", data={"category_name": "All", "description": "",
+                                    "_csrf_token": csrf(shelf)},
+           follow_redirects=True)
+shelf_cat = re.search(r'<option value="(\d+)">',
+                      shelf.get("/foods/add").get_data(as_text=True)).group(1)
+
+# Numbered 1..6 in the order they are added. Two of them are short.
+for _name, _qty in (("Americano", 40), ("Bagel", 0), ("Cortado", 30),
+                    ("Donut", 25), ("Eclair", 3), ("Focaccia", 50)):
+    shelf.post("/foods/add", data={
+        "food_name": _name, "category_id": shelf_cat, "price": "90",
+        "quantity": str(_qty), "minimum_stock": "5", "description": "",
+        "_csrf_token": csrf(shelf)}, follow_redirects=True)
+
+
+def shelf_order():
+    """The food names down the Inventory page, in the order shown."""
+    page = shelf.get("/inventory").get_data(as_text=True)
+    body = re.search(r"<tbody>(.*?)</tbody>", page, re.S)
+    if not body:
+        return []
+    names = []
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", body.group(1), re.S):
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+        if len(cells) >= 2:
+            names.append(re.sub(r"<[^>]+>", "", cells[1]).strip())
+    return names
+
+
+listed = shelf_order()
+
+check("every food is on the page",
+      len(listed) == 6,
+      "only %d rows, so the order below proves nothing" % len(listed))
+
+check("nothing left comes first",
+      listed[0] == "Bagel",
+      "the list starts %s - the one with no stock at all is what "
+      "somebody opened this page for" % listed[:3])
+
+check("then what is running low",
+      listed[1] == "Eclair",
+      "the list runs %s" % listed[:3])
+
+check("and the rest keep their own order",
+      listed[2:] == ["Americano", "Cortado", "Donut", "Focaccia"],
+      "the rest run %s, which is not menu-number order" % listed[2:])
+
+# The other half: restocking must put a food back where it belongs,
+# not leave it stranded at the top or send it to the end.
+_rows = mysql_shim._DB.execute(
+    "SELECT i.inventory_id, f.food_name FROM inventory i "
+    "JOIN foods f ON f.food_id = i.food_id "
+    "WHERE f.user_id = (SELECT user_id FROM users "
+    "WHERE username = 'shelfboss')").fetchall()
+_by_name = {name: inv for inv, name in _rows}
+
+for _name in ("Bagel", "Eclair"):
+    shelf.post("/inventory/update/%s" % _by_name[_name],
+               data={"quantity": "60", "minimum_stock": "5",
+                     "_csrf_token": csrf(shelf)}, follow_redirects=True)
+
+restocked = shelf_order()
+check("a restocked food goes back to its own position",
+      restocked == ["Americano", "Bagel", "Cortado", "Donut",
+                    "Eclair", "Focaccia"],
+      "after restocking the list runs %s" % restocked)
+
+# And the badge a row carries has to agree with where it was sorted.
+shelf.post("/inventory/update/%s" % _by_name["Focaccia"],
+           data={"quantity": "2", "minimum_stock": "5",
+                 "_csrf_token": csrf(shelf)}, follow_redirects=True)
+
+page = shelf.get("/inventory").get_data(as_text=True)
+first_row = re.search(r"<tbody>\s*<tr[^>]*>(.*?)</tr>", page, re.S)
+check("a row sorted to the top is badged as short",
+      first_row is not None
+      and "Focaccia" in first_row.group(1)
+      and "LOW STOCK" in first_row.group(1),
+      "the food at the top is not the one the page calls low, so the "
+      "sort and the badge disagree about what is short")
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

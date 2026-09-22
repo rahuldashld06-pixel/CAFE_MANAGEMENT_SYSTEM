@@ -3163,6 +3163,99 @@ body.nav-locked {
     z-index: 1;
 }
 
+/* ==========================================================
+   Frosted glass
+
+   The bars that float over the page - the top bar, the page
+   title bar, and the controls sitting in them.
+
+   Everything here is built from the theme's own surface and
+   accent colours, so a cafe that has chosen its own
+   background gets glass made of that background rather than
+   a grey pane laid on top of it.
+
+   The solid colour stays the rule and the glass is layered
+   on top only where the browser supports it. Without that,
+   a browser with no backdrop-filter shows a see-through bar
+   with the page's own text sliding about underneath it,
+   which is a good deal worse than no effect at all.
+   ========================================================== */
+
+:root {
+    /* How much of the page shows through, and how far it is blurred.
+       Enough to read as glass; not so much that text sitting on it has
+       to compete with whatever is passing behind. */
+    --glass-tint: 86%;
+    --glass-blur: 26px;
+    --glass-saturate: 150%;
+}
+
+@supports (backdrop-filter: blur(1px)) or
+          (-webkit-backdrop-filter: blur(1px)) {
+
+    .topbar,
+    .page-header {
+        background: color-mix(in srgb,
+                    var(--espresso-950) var(--glass-tint), transparent);
+        -webkit-backdrop-filter: blur(var(--glass-blur))
+                                 saturate(var(--glass-saturate));
+        backdrop-filter: blur(var(--glass-blur))
+                         saturate(var(--glass-saturate));
+    }
+
+    /* The lit edge, drawn as a shadow rather than a pseudo-element.
+       A ::before would have needed position:relative on the bars, and
+       these bars are position:sticky - quietly overriding that is a
+       strange way to lose a sticky header. */
+    .topbar,
+    .page-header {
+        box-shadow:
+            inset 0 -1px 0 rgba(var(--copper-rgb), .22),
+            0 10px 26px -20px rgba(0, 0, 0, .8);
+    }
+
+    /* The controls that ride on the glass are made of the same
+       material, a shade brighter so they read as raised rather than
+       cut out of it. */
+    .profile-trigger,
+    .page-header .btn--ghost,
+    .page-header__actions .btn--ghost {
+        background: color-mix(in srgb,
+                    var(--espresso-800) 58%, transparent);
+        -webkit-backdrop-filter: blur(12px) saturate(140%);
+        backdrop-filter: blur(12px) saturate(140%);
+        border-color: color-mix(in srgb,
+                      var(--cream) 14%, transparent);
+    }
+
+    .profile-trigger:hover,
+    .page-header .btn--ghost:hover,
+    .page-header__actions .btn--ghost:hover {
+        background: color-mix(in srgb,
+                    var(--espresso-700) 66%, transparent);
+        border-color: color-mix(in srgb,
+                      var(--copper) 55%, transparent);
+    }
+
+    /* The two floating buttons, so the whole floating layer is one
+       material rather than glass bars above solid pills. */
+    .order-status-fab,
+    .order-summary-trigger {
+        -webkit-backdrop-filter: blur(14px) saturate(150%);
+        backdrop-filter: blur(14px) saturate(150%);
+    }
+
+    /* The menu that drops out of the profile chip belongs to the same
+       layer, and a solid panel hanging off a glass one looks like two
+       different surfaces. */
+    .profile-dropdown {
+        background: color-mix(in srgb,
+                    var(--espresso-900) 88%, transparent);
+        -webkit-backdrop-filter: blur(22px) saturate(150%);
+        backdrop-filter: blur(22px) saturate(150%);
+    }
+}
+
 /* ============================================================
    No scrollbars anywhere
 
@@ -3363,19 +3456,57 @@ body.nav-locked {
    nothing scrolls sideways: the whole bill, or food, or stock row
    is on screen at once.
    ============================================================ */
-/* Cards, not a table - on a narrow screen and on a short one.
+/* One row again, on a screen that is short rather than narrow.
 
-   A phone held sideways is about 844px across, which is over the 760px
-   line, and 390px tall. Nine columns of fixed-width controls do not fit
-   844px whatever their floors say, so the table overflowed its own
-   scrolling panel and the Paid button - the one control on Billing that
-   has to be reachable - sat past the right edge. The page itself did
-   not scroll, so nothing looked wrong from the outside.
+   The bar splits onto two rows below 1024px because the cafe's name and
+   the menu button do not share a line on a phone held upright. Rotate
+   it and there are 844px to play with, where they share one easily -
+   and the second row was costing about a row and a half of bills on a
+   screen with 390px to spend. */
+@media (orientation: landscape) and (max-height: 520px) {
+    .topbar {
+        flex-wrap: nowrap;
+        row-gap: 0;
+        padding-top: 6px;
+        padding-bottom: 6px;
+    }
 
-   What that screen is short of is height, and a column of cards scrolls
-   downwards, which is the direction a phone scrolls anyway. */
-@media (max-width: 760px),
-       (orientation: landscape) and (max-height: 520px) {
+    /* The spacer that forced the break. */
+    .topbar::after {
+        display: none;
+    }
+
+    .nav-toggle {
+        order: 0;
+        margin-right: 10px;
+    }
+
+    .topbar-brand { margin-right: auto; }
+
+    .topbar-brand__tagline,
+    .profile-trigger__role {
+        display: none;
+    }
+
+    /* The mark and the name, smaller. */
+    .topbar-brand__logo,
+    .topbar-brand img {
+        width: 30px;
+        height: 30px;
+    }
+
+    .topbar-brand__name { font-size: 15px; }
+}
+
+/* Cards, not a table, on a narrow screen.
+
+   Not on a short one. A phone held sideways is about 844px across,
+   which is room for a table if everything on it is sized for the space
+   - and rotating the phone is what somebody does *to* get the wide
+   view. Handing them the narrow one for their trouble is the opposite
+   of what the gesture asked for. See the landscape block in
+   billing.html, which makes the table fit rather than replacing it. */
+@media (max-width: 760px) {
 
     .table-wrap {
         overflow-x: visible;

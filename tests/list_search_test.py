@@ -432,6 +432,12 @@ try:
         facts = json.loads(b.evaluate("""
             (function () {
                 var doc = document.documentElement;
+                var panel = document.querySelector('.billing-table-panel');
+                var table = document.querySelector('.billing-table');
+                var firstPaid = document.querySelector(
+                    '.payment-status-toggle');
+                var heads = document.querySelectorAll('.billing-table th');
+                var lastHead = heads[heads.length - 1];
                 var buttons = document.querySelectorAll(
                     '.payment-status-toggle');
                 var widths = [];
@@ -448,6 +454,17 @@ try:
                 }
                 return JSON.stringify({
                     sideways: doc.scrollWidth - doc.clientWidth,
+                    panelSideways: panel
+                        ? panel.scrollWidth - panel.clientWidth : 0,
+                    cards: table
+                        ? getComputedStyle(table).display !== 'table' : null,
+                    lastColumnRight: lastHead
+                        ? Math.round(
+                            lastHead.getBoundingClientRect().right) : null,
+                    firstPaidBottom: firstPaid
+                        ? Math.round(
+                            firstPaid.getBoundingClientRect().bottom) : null,
+                    fold: window.innerHeight,
                     widths: widths,
                     spans: spans,
                     width: window.innerWidth,
@@ -481,6 +498,88 @@ try:
               "the buttons measure %s - a column of different-sized "
               "buttons is what made this look unfinished"
               % facts["widths"])
+
+        # Nothing scrolls sideways, including the table's own panel -
+        # which is its own scroller, so the page can look settled while
+        # half the columns are off the end of it.
+        check("%s: the table does not scroll sideways either" % label,
+              facts["panelSideways"] <= 1,
+              "the panel holding it scrolls by %spx, so the last "
+              "columns are off the end of the screen"
+              % facts["panelSideways"])
+
+        check("%s: the last column is on the screen" % label,
+              facts["lastColumnRight"] is None
+              or facts["lastColumnRight"] <= facts["width"] + 1,
+              "the last column ends at %spx on a %spx screen"
+              % (facts["lastColumnRight"], facts["width"]))
+
+    # =================================================================
+    print("\n=== 6. A rotated phone gets the wide view, and it fits ===")
+    # =================================================================
+    # Rotating a phone is what somebody does *to* see more at once. An
+    # earlier pass sent this size to the card layout, which is the
+    # narrow view - the opposite of what the gesture asked for. The
+    # table stays; what changes is that everything on it is sized for
+    # the room, and everything above it gives up height so the first
+    # Paid button is on screen without scrolling down to it.
+
+    b.call("Emulation.setDeviceMetricsOverride", width=844, height=390,
+           deviceScaleFactor=1, mobile=True)
+    b.call("Page.navigate", url=BASE + "/billing")
+    wait("!!document.querySelector('.billing-table')")
+    time.sleep(1.0)
+
+    rotated = json.loads(b.evaluate("""
+        (function () {
+            var table = document.querySelector('.billing-table');
+            var paid = document.querySelector('.payment-status-toggle');
+            var heads = document.querySelectorAll('.billing-table th');
+            var last = heads[heads.length - 1];
+            return JSON.stringify({
+                display: getComputedStyle(table).display,
+                columns: heads.length,
+                lastRight: last
+                    ? Math.round(last.getBoundingClientRect().right) : null,
+                paidBottom: paid
+                    ? Math.round(paid.getBoundingClientRect().bottom) : null,
+                fold: window.innerHeight,
+                width: window.innerWidth,
+                shortDate: (function () {
+                    var s = document.querySelector('.date-short');
+                    return s && getComputedStyle(s).display !== 'none';
+                }())
+            });
+        }())
+    """))
+
+    check("it is still a table, not a stack of cards",
+          rotated["display"] == "table",
+          "it renders as %r - rotating the phone gave back the narrow "
+          "view it was rotated to escape" % rotated["display"])
+
+    check("and every column of it is on the screen",
+          rotated["lastRight"] is not None
+          and rotated["lastRight"] <= rotated["width"] + 1,
+          "the last of %d columns ends at %spx on a %spx screen"
+          % (rotated["columns"], rotated["lastRight"], rotated["width"]))
+
+    # The other half of the same request. A button that is on screen
+    # only after scrolling down to it is not on screen.
+    check("the first Paid button is reachable without scrolling",
+          rotated["paidBottom"] is not None
+          and rotated["paidBottom"] <= rotated["fold"],
+          "it ends %spx down a %spx screen, so the till has to scroll "
+          "to take a payment"
+          % (rotated["paidBottom"], rotated["fold"]))
+
+    check("and the date drops the year to make the room",
+          rotated["shortDate"],
+          "it still prints the year, which is the easiest thing in the "
+          "row to do without")
+
+    b.call("Emulation.setDeviceMetricsOverride", width=1280, height=860,
+           deviceScaleFactor=1, mobile=False)
 
     # The box and the button are used one after the other, so they read
     # as a line. They were ten pixels apart vertically.

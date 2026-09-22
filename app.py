@@ -3763,8 +3763,29 @@ def inventory():
 
             WHERE f.user_id = %s
 
-            -- Same order as Food Management, for the same reason.
-            ORDER BY COALESCE(f.food_no, f.food_id) ASC
+            -- Anything short comes to the top, worst first: nothing
+            -- left, then running low, then everything else. A cafe
+            -- opens this page to find out what needs ordering, and
+            -- having to read forty rows to find the two that matter is
+            -- the wrong way round.
+            --
+            -- Within each group the menu number still decides, so a
+            -- food that has just been restocked drops straight back to
+            -- where it has always been rather than to the end of the
+            -- list. The order is worked out fresh on every load, so
+            -- that happens by itself the moment stock is updated.
+            --
+            -- The three cases are the ones the page itself shows as
+            -- OUT OF STOCK, LOW STOCK and IN STOCK. They are written
+            -- the same way here so a row can never be sorted as one
+            -- thing and badged as another.
+            ORDER BY
+                CASE
+                    WHEN i.quantity = 0 THEN 0
+                    WHEN i.quantity <= i.minimum_stock THEN 1
+                    ELSE 2
+                END ASC,
+                COALESCE(f.food_no, f.food_id) ASC
         """, (scope_user_id(),))
 
         inventory_list = cursor.fetchall()
@@ -4165,8 +4186,20 @@ def format_local_time(value):
     return local.strftime("%d %b %Y, %I:%M %p")
 
 
+def format_short_time(value):
+    """
+    The same time without the year, for a table that has run out of
+    width. Anybody reading a till today knows what year it is.
+    """
+    local = as_cafe_time(value)
+    if local is None:
+        return "" if not value else str(value)
+    return local.strftime("%d %b, %I:%M %p")
+
+
 app.jinja_env.filters["receipt_time"] = format_receipt_time
 app.jinja_env.filters["local_time"] = format_local_time
+app.jinja_env.filters["short_time"] = format_short_time
 # A rate as people write it: 5.00 -> "5", 12.50 -> "12.5".
 app.jinja_env.filters["trim_zeros"] = format_percent
 

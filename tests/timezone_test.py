@@ -84,7 +84,10 @@ def kitchen_says(client):
 
 
 def billing_says(client):
-    found = re.search(r"<td[^>]*>(\d+ \w+ \d{4}, [\d:]+ [AP]M)</td>",
+    # The cell carries the date twice - a long form and a short one
+    # without the year, and the stylesheet shows whichever fits. This
+    # reads the long one, which is the only one with a year in it.
+    found = re.search(r'date-long">(\d+ \w+ \d{4}, [\d:]+ [AP]M)<',
                       client.get("/billing").get_data(as_text=True))
     return found.group(1) if found else ""
 
