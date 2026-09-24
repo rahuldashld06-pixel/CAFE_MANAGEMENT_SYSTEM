@@ -291,9 +291,18 @@
 
     .billing-table td.print-bill-cell { text-align: center; }
 
-    /* An amount is one word. Wrapping it is never right. */
+    /* An amount is one word. Wrapping it is never right.
+
+       Discount and Tax are reached by their label rather than a class
+       because they have none - and giving them class="amount" would
+       carry its font-weight onto every screen to fix a wrap on one.
+       Without them here, every cell's overflow-wrap:anywhere applied,
+       and a tax of 216.28 came out as three lines of "216.28" cut
+       wherever the column happened to end. */
     .billing-table .amount,
     .billing-table .total-amount,
+    .billing-table td[data-label="Discount"],
+    .billing-table td[data-label="Tax"],
     .billing-table th.col-total {
         white-space: nowrap;
     }
@@ -512,9 +521,14 @@
             table-layout: fixed;
         }
 
+        /* 3px, not 5px. Two pixels a side across twelve columns is
+           24px of screen, and at this width the table had none to
+           spare. Every column gives up the same 4px of width below, so
+           no column loses a pixel of room for what is written in it -
+           they sit closer together, and that is all. */
         .billing-table th,
         .billing-table td {
-            padding: 6px 5px;
+            padding: 6px 3px;
             font-size: 11.5px;
         }
 
@@ -530,21 +544,53 @@
            Burger x 2" while the mode select had 67 for a word and an
            arrow, and the print button had rendered 18px wide. The item
            column gives thirty of those back and the rest share them. */
-        /* Set for the widest case - all eleven columns, which is
+        /* Set for the widest case - all twelve columns, which is
            what a cafe charging tax and giving a discount has. A cafe
            that charges neither simply has slack, and fixed layout
-           shares that out. Sized for eight, the three it did not name
-           took what was left and the table drew past its own edge. */
-        .billing-table th.col-id { width: 44px; }
-        .billing-table th.col-date { width: 80px; }
-        .billing-table th.col-items { width: 92px; }
-        .billing-table th.col-sub { width: 54px; }
-        .billing-table th.col-off { width: 54px; }
-        .billing-table th.col-tax { width: 54px; }
-        .billing-table th.col-total { width: 58px; }
-        .billing-table th.col-mode { width: 92px; }
-        .billing-table th.col-return { width: 84px; }
-        .billing-table th.col-status { width: 86px; }
+           shares that out. Sized for eight, the ones it did not name
+           took what was left and the table drew past its own edge.
+
+           They have to add up to less than the panel holds, because
+           the panel does not scroll here: anything past the end is
+           simply unreachable. At 800px across - a phone held sideways,
+           which is the narrowest screen that still gets this table -
+           the panel has 766px inside it.
+
+               was  784px, and Print Bill ended 11px off the screen
+               now  756px, and it ends 17px inside it
+
+           Half of that came out of the gutters rather than out of any
+           column: the cell padding above went from 5px a side to 3px.
+           The rest is a re-balance, and it went where the measurements
+           said rather than where the old numbers were.
+
+           Measured against a bigger bill than this table had ever been
+           sized against - 1299 a plate, seven of them, 18% tax and
+           7.5% off - because the old numbers were set against a cafe
+           selling ninety rupee burgers and had nothing left the first
+           time a four figure total turned up.
+
+               four money columns   264, and they may not wrap at all
+               Order Items           76, a dish name over three lines
+               Date                  64, the clock under the day
+               Return                62, an input takes what it is given
+
+           Order Items and Date pay for the money columns because they
+           are the two that wrap onto another line without losing
+           anything. They were nearly made to pay too much: at 64px
+           "Chicken Caesar" came out as "Chick / en Caesa / r", which
+           is the dish-name version of the fault this whole block
+           exists to fix. */
+        .billing-table th.col-id { width: 40px; }
+        .billing-table th.col-date { width: 64px; }
+        .billing-table th.col-items { width: 76px; }
+        .billing-table th.col-sub { width: 52px; }
+        .billing-table th.col-off { width: 72px; }
+        .billing-table th.col-tax { width: 66px; }
+        .billing-table th.col-total { width: 74px; }
+        .billing-table th.col-mode { width: 86px; }
+        .billing-table th.col-return { width: 62px; }
+        .billing-table th.col-status { width: 82px; }
         .billing-table th.col-print { width: 42px; }
 
         /* A bill number is one word and never wraps. It was the first
@@ -555,9 +601,14 @@
         }
 
         /* The select fills its column now there is a column to fill,
-           with just enough room kept for the arrow. */
+           with just enough room kept for the arrow.
+
+           27px of that 86 was the select's own padding, which left
+           "Cash" showing as "C". The arrow needs a gap, not 20px of
+           one - this buys back 8px of readable label without taking a
+           pixel from any other column. */
         .payment-method-select {
-            padding: 5px 20px 5px 7px;
+            padding: 5px 13px 5px 6px;
         }
 
         /* Shorter, so what is owed or owing sits clear underneath it
@@ -583,6 +634,79 @@
             padding: 5px 9px;
             min-width: 34px;
             justify-content: center;
+        }
+
+        /* ---- Nothing paints over the column to its right ----
+
+           A fixed-layout column is a promise about where the next
+           column starts, and four of these cells were not keeping it.
+           Measured at 800px across with tax and a discount on, which is
+           the widest this table ever gets:
+
+               Date         wants 124px on one line in an 80px column
+               Order Items  child asks for 190px in a 92px column
+               Return       child asks for 92px in an 84px column
+               Print Bill   36px button in 42px less 10px of padding
+
+           The last three are all the same fault - a child carrying a
+           width of its own, which the column cannot talk it out of. The
+           card layout below 760px already takes those widths back; the
+           sideways table, which keeps its columns, never did, so a dish
+           name was drawn across the money beside it. The date is the
+           odd one out and has its own note further down.
+
+           Only the date was reported. The other three were sitting
+           there in the same screenshot. No column gives up a pixel for
+           any of this. */
+
+        /* The item list carries its min-width inline, for the desktop
+           table where there is room for it. Inline beats a stylesheet,
+           so taking it back needs !important - which is why the card
+           layout below already has one here. Without it this rule is
+           written, matched, and ignored. */
+        .billing-table td > div[style*="min-width"] {
+            min-width: 0 !important;
+        }
+
+        /* Set to 92px for the scrolling table at this width, which is a
+           wider table than this one. */
+        .return-cell {
+            min-width: 0;
+            width: 100%;
+        }
+
+        .cash-received-input {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+
+        /* The narrowest column in the table, holding the widest thing
+           that cannot shrink - a button has to stay the size of a
+           fingertip. It gets the room out of its own padding rather
+           than out of another column. */
+        .billing-table th.col-print,
+        .billing-table td.print-bill-cell {
+            padding-left: 2px;
+            padding-right: 2px;
+        }
+
+        /* The date, which is what was reported: held on one line it
+           wanted 124px of an 80px column and was drawn straight across
+           the dish name. It still never breaks mid-stamp - the two
+           halves are separately unbreakable - it is simply allowed to
+           put the clock under the day. "23 Sep" over "08:21 PM" needs
+           62px of the 80 this column has.
+
+           The rows carrying more than one dish were two lines tall
+           already, so on those this costs nothing at all. */
+        .billing-table td[data-label="Date"] {
+            white-space: normal;
+        }
+
+        .billing-table td[data-label="Date"] .date-part {
+            display: inline-block;
+            white-space: nowrap;
         }
 
 
@@ -831,7 +955,14 @@
 
                         <td data-label="Date">
                             <span class="date-long">{{ bill.bill_date|local_time }}</span>
-                            <span class="date-short">{{ bill.bill_date|short_time }}</span>
+                            {# The short form in two halves rather than one
+                               string. A column too narrow for the whole
+                               stamp can then break between the day and the
+                               clock and nowhere else - left to wrap on its
+                               own spaces it came apart into three lines and
+                               set the height of every row. #}
+                            {% set stamp = (bill.bill_date|short_time).split(', ') %}
+                            <span class="date-short"><span class="date-part">{{ stamp[0] }}</span>{% if stamp|length > 1 %} <span class="date-part">{{ stamp[1] }}</span>{% endif %}</span>
                         </td>
 
                         <td data-label="Items">

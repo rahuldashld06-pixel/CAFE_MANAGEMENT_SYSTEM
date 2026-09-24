@@ -237,8 +237,19 @@ try:
         waited = (jobs[0]["at"] / 1000.0) - started
         check("it is the kitchen ticket, not the bill",
               "/kot" in jobs[0]["url"], "printed %s" % jobs[0]["url"])
+        # The evidence, not just the verdict. This measured 0.1s once,
+        # in a run where four other suites were timing out and a
+        # leftover headless browser was competing for the machine - and
+        # 0.1s cannot be squared with the check above it, which had just
+        # proved nothing had printed a second in. The clocks were not
+        # the answer: python's and the browser's agree here to a
+        # millisecond. It has not been reproduced since, so rather than
+        # guess at it, a recurrence now prints what it saw.
         check("and it waited roughly the configured two seconds",
-              1.5 <= waited <= 6.0, "waited %.1fs" % waited)
+              1.5 <= waited <= 6.0,
+              "waited %.1fs - ordered at %.3f, printed at %.3f, "
+              "all jobs: %s" % (waited, started, jobs[0]["at"] / 1000.0,
+                                jobs))
 
     print("\n=== 3. The receipt, the moment Paid is pressed ===")
     set_printing(auto_bill="on", kot_delay="2")

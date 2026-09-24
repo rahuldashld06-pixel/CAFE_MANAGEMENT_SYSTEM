@@ -59,8 +59,17 @@ PASSED, FAILED = [], []
 
 def check(name, condition, detail=""):
     (PASSED if condition else FAILED).append(name)
-    print(("  PASS  " if condition else "  FAIL  ") + name +
-          ("" if condition else "\n          -> %s" % detail))
+    line = (("  PASS  " if condition else "  FAIL  ") + name +
+            ("" if condition else "\n          -> %s" % detail))
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        # A detail that quotes a money cell quotes its rupee sign
+        # with it, and this console encodes in cp1252. Printing
+        # raised, so the run died on the way to REPORTING a
+        # failure rather than on the failure - which reads like a
+        # broken test and buries the real one underneath it.
+        print(line.encode("ascii", "replace").decode("ascii"))
 
 
 lock = threading.Lock()
@@ -838,6 +847,193 @@ try:
           bool(_clearance),
           "no rule gives .order-status-fab a safe-area bottom any more, "
           "so on a phone with a home indicator it sits under it")
+
+    b.call("Emulation.setTouchEmulationEnabled", enabled=False)
+
+
+    # -----------------------------------------------------------------
+    # The billing table, sideways, with nothing painting over anything.
+    #
+    # Reported as the date drawn straight across the dish name:
+    # "22 Sep, 09:48 AMVeg Burger". The table is table-layout: fixed
+    # here, which means the declared column widths ARE the layout - so a
+    # column is a promise about where the next one starts, and anything
+    # inside a cell that is wider than its column breaks that promise by
+    # drawing over the neighbour rather than pushing it along.
+    #
+    # Three cells were doing it and only one was noticed. The date was
+    # held on one line on purpose - left to wrap it took three lines and
+    # set the height of every row - and the other two had children with
+    # a width of their own: the item list carries min-width:190px inline
+    # for the desktop table, and the return cell a 92px floor.
+    #
+    # So the check is not about any one of them. It walks every cell in
+    # the row and asks whether its contents stay inside it, which is the
+    # rule all three were breaking.
+    b.call("Emulation.setTouchEmulationEnabled", enabled=True,
+           maxTouchPoints=5)
+    b.call("Emulation.setDeviceMetricsOverride", width=800, height=360,
+           deviceScaleFactor=1, mobile=True)
+    b.call("Page.navigate", url=BASE + "/billing")
+    wait("!!document.querySelector('.billing-table tbody tr')")
+    time.sleep(1.2)
+
+    SPILL_JS = """
+        (function () {
+            var rows = document.querySelectorAll('.billing-table tbody tr');
+            var heads = document.querySelectorAll('.billing-table thead th');
+            var out = [], counted = 0;
+            for (var r = 0; r < rows.length; r++) {
+                var cells = rows[r].children;
+                if (!cells.length) continue;
+                counted++;
+                for (var i = 0; i < cells.length; i++) {
+                    var cell = cells[i];
+                    var box = cell.getBoundingClientRect();
+                    if (!box.width) continue;
+
+                    // Past its own right edge, by its own overflow or by
+                    // a child that would not fit.
+                    var over = Math.max(
+                        0, cell.scrollWidth - cell.clientWidth);
+                    for (var k = 0; k < cell.children.length; k++) {
+                        over = Math.max(over, Math.round(
+                            cell.children[k].getBoundingClientRect().right
+                            - box.right));
+                    }
+                    if (over > 1) {
+                        out.push({
+                            column: heads[i]
+                                ? (heads[i].textContent || '')
+                                    .replace(/\s+/g, ' ').trim()
+                                : ('#' + i),
+                            over: over,
+                            text: (cell.textContent || '')
+                                    .replace(/\s+/g, ' ').trim().slice(0, 30)
+                        });
+                    }
+                }
+            }
+            return JSON.stringify({rows: counted, spills: out});
+        }())
+    """
+
+    def table_spills():
+        return json.loads(b.evaluate(SPILL_JS))
+
+    def last_column_edge():
+        return json.loads(b.evaluate("""
+            (function () {
+                var heads = document.querySelectorAll(
+                    '.billing-table thead th');
+                var last = heads[heads.length - 1];
+                var box = last.getBoundingClientRect();
+                return JSON.stringify({
+                    name: (last.textContent || '')
+                            .replace(/\s+/g, ' ').trim(),
+                    past: Math.round(box.right - window.innerWidth),
+                    columns: heads.length
+                });
+            }())
+        """))
+
+    spills = table_spills()
+
+    check("there are bills in the sideways table to measure",
+          spills["rows"] > 0,
+          "an empty table has no cell that can paint over another, so "
+          "the check below would pass on nothing")
+
+    check("no cell paints over the column to its right",
+          not spills["spills"],
+          "these cells run past their own column, over whatever is "
+          "drawn beside them: %s"
+          % "; ".join("%s by %dpx (%s)"
+                      % (s["column"], s["over"], s["text"])
+                      for s in spills["spills"][:6]))
+
+    # The date specifically, because it is the one that was reported and
+    # because the fix for it is the fragile kind: it may break between
+    # the day and the clock, and nowhere else. A date broken as "23" /
+    # "Sep," / "08:21 PM" would pass the check above and still be the
+    # three-line row that nowrap was put there to prevent.
+    date_shape = json.loads(b.evaluate("""
+        (function () {
+            var cell = document.querySelector(
+                '.billing-table tbody td[data-label="Date"]');
+            if (!cell) return JSON.stringify({missing: true});
+            var parts = cell.querySelectorAll('.date-part');
+            var tops = [];
+            for (var i = 0; i < parts.length; i++) {
+                var t = Math.round(
+                    parts[i].getBoundingClientRect().top);
+                if (tops.indexOf(t) === -1) tops.push(t);
+            }
+            return JSON.stringify({
+                parts: parts.length,
+                lines: tops.length,
+                text: (cell.textContent || '')
+                        .replace(/\s+/g, ' ').trim()
+            });
+        }())
+    """))
+
+    check("the date is in at most two lines",
+          not date_shape.get("missing") and date_shape["lines"] <= 2,
+          "it came apart into %s lines, which is what holding it on one "
+          "line was preventing: %s"
+          % (date_shape.get("lines"), date_shape.get("text")))
+
+    # -----------------------------------------------------------------
+    # The same table, at its widest.
+    #
+    # A cafe that charges tax and gives a discount gets three more
+    # columns - Subtotal, Discount, Tax - and every fault reported here
+    # lived in that version. The nine-column table has room to spare and
+    # hides all of it.
+    #
+    # The columns are shown when the BILLS carry a tax or a discount,
+    # not when the cafe currently charges one, so this puts the figures
+    # on the bills directly. Four-figure amounts with paise, because the
+    # widths were originally measured against ninety rupee burgers and
+    # had nothing left the first time a real bill turned up.
+    mysql_shim._DB.execute(
+        "UPDATE bills SET subtotal = 9093, discount = 681.98, "
+        "tax = 1514.02, total_amount = 9925.04")
+    mysql_shim._DB.commit()
+
+    b.call("Page.navigate", url=BASE + "/billing")
+    wait("!!document.querySelector('.billing-table tbody tr')")
+    time.sleep(1.2)
+
+    edge = last_column_edge()
+    check("charging tax and a discount adds the three columns",
+          edge["columns"] == 12,
+          "the table has %d columns, so this is not the wide case and "
+          "nothing below tests it" % edge["columns"])
+
+    wide = table_spills()
+    check("nothing paints over its neighbour at twelve columns",
+          not wide["spills"],
+          "these cells run past their own column: %s"
+          % "; ".join("%s by %dpx (%s)"
+                      % (s["column"], s["over"], s["text"])
+                      for s in wide["spills"][:6]))
+
+    # The declared widths add up to more than the panel holds, the panel
+    # does not scroll, and so the last column simply is not reachable.
+    # It was 11px past the right of the screen, which is most of the
+    # print button.
+    check("and the last column is on the screen",
+          edge["past"] <= 0,
+          "%s ends %dpx past the right of the screen, and the panel "
+          "does not scroll to reach it" % (edge["name"], edge["past"]))
+
+    # Put the bills back, so the sections after this one see the table
+    # the rest of the suite was written against.
+    mysql_shim._DB.execute(
+        "UPDATE bills SET subtotal = total_amount, discount = 0, tax = 0")
+    mysql_shim._DB.commit()
 
     b.call("Emulation.setTouchEmulationEnabled", enabled=False)
 
