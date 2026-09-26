@@ -199,6 +199,26 @@ Only worth setting if the Redis is in the **same region** as the app. One
 that is not costs about what the database round trip it replaces costs,
 and this app's database is already half a second away.
 
+## Money
+
+Prices, tax and discounts are `Decimal` end to end - never float. A
+float cannot hold 1299.50 exactly, and a fraction of a rupee out on
+every line is how a till stops balancing at the end of a week.
+
+That matters for the offline stand-in too. It used to rewrite
+`DECIMAL(10,2)` to `NUMERIC` and store Decimals as float, so a price
+with paise came back a float and order creation died on
+`Decimal + float` - offline only, since production is Decimal on both
+sides. It now declares the column with TEXT affinity, stores the exact
+string and converts it back, so a dish priced 1299.50 can be ordered in
+a test and three of them come to exactly 3898.50.
+
+One gap, named rather than buried: `PARSE_DECLTYPES` only applies to a
+column read straight from a table, so `SUM(...)` and `COALESCE(...)`
+still come back as floats in the stand-in where MySQL gives a Decimal.
+Every place the app adds money up it does so in Python over rows it has
+already read, so nothing reaches that gap today.
+
 ## A note on speed
 
 Measured from inside the deployed app, a single database round trip costs
@@ -450,7 +470,7 @@ that were already right.
 ## Tests
 
 ```bash
-python tests/smoke_test.py        # expect PASSED: 39   FAILED: 0
+python tests/smoke_test.py        # expect PASSED: 43   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
 python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/instant_post_test.py # expect PASSED: 16   FAILED: 0
@@ -483,7 +503,7 @@ python tests/timezone_test.py     # expect PASSED: 41   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
-python tests/list_search_test.py  # expect PASSED: 107  FAILED: 0
+python tests/list_search_test.py  # expect PASSED: 108  FAILED: 0
 python tests/identity_test.py     # expect PASSED: 88   FAILED: 0
 python tests/security_test.py     # expect PASSED: 107  FAILED: 0
 ```

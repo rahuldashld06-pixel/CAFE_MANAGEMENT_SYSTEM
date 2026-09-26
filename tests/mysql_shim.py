@@ -24,9 +24,19 @@ class IntegrityError(Error):
 
 from decimal import Decimal
 
-sqlite3.register_adapter(Decimal, lambda d: float(d))
+# str, not float. float(Decimal("1299.50")) is 1299.5 and float
+# cannot hold a money value exactly; the text can, and the converter
+# below turns it straight back into the Decimal it was.
+sqlite3.register_adapter(Decimal, str)
 
-_DB = sqlite3.connect(":memory:", check_same_thread=False)
+# MySQL hands back a Decimal for a DECIMAL column and app.py relies on
+# it - line totals are summed onto Decimal("0.00"), which will not add
+# a float. Without this a dish priced with paise could not be ordered
+# at all offline, so no test could use one.
+sqlite3.register_converter("DECTEXT", lambda raw: Decimal(raw.decode()))
+
+_DB = sqlite3.connect(":memory:", check_same_thread=False,
+                      detect_types=sqlite3.PARSE_DECLTYPES)
 _DB.row_factory = sqlite3.Row
 _DB.execute("PRAGMA foreign_keys=ON")
 
@@ -78,7 +88,13 @@ def _translate(sql):
     s = re.sub(r"\bENUM\([^)]*\)", "TEXT", s, flags=re.I)
     s = re.sub(r"\bTINYINT\(\d+\)", "INTEGER", s, flags=re.I)
     s = re.sub(r"\bINT\(\d+\)", "INTEGER", s, flags=re.I)
-    s = re.sub(r"\bDECIMAL\(\d+,\s*\d+\)", "NUMERIC", s, flags=re.I)
+    # DECTEXT, not NUMERIC. SQLite picks a column's affinity out of the
+    # letters in its declared type: anything containing "TEXT" is stored
+    # as given, while NUMERIC quietly turns "1299.50" into a float on
+    # the way in and the exactness is gone before anything reads it
+    # back. The name is also what PARSE_DECLTYPES looks up to find the
+    # converter registered above.
+    s = re.sub(r"\bDECIMAL\(\d+,\s*\d+\)", "DECTEXT", s, flags=re.I)
     s = re.sub(r"\bVARCHAR\(\d+\)", "TEXT", s, flags=re.I)
     s = re.sub(r"\bDATETIME\b", "TEXT", s, flags=re.I)
     s = re.sub(r"\s+ON\s+UPDATE\s+CURRENT_TIMESTAMP\b", "", s, flags=re.I)

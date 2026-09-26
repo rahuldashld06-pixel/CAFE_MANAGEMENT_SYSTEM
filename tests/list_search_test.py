@@ -978,6 +978,42 @@ try:
         }())
     """))
 
+    # The payment mode is not decoration: it is what an owner reads
+    # down the column when they want to know how much came in by card.
+    # A native select reserves room for the browser's own arrow that no
+    # padding gets back, so this column showed a caret and no word -
+    # readable only on the Reports page, which is a different question
+    # from "what am I marking paid".
+    mode = json.loads(b.evaluate("""
+        (function () {
+            var sel = document.querySelector('.payment-method-select');
+            if (!sel) return JSON.stringify({missing: true});
+            var style = getComputedStyle(sel);
+            var probe = document.createElement('span');
+            probe.textContent = sel.options[sel.selectedIndex].text;
+            probe.style.font = style.font;
+            probe.style.position = 'absolute';
+            probe.style.visibility = 'hidden';
+            probe.style.whiteSpace = 'nowrap';
+            document.body.appendChild(probe);
+            var needs = probe.getBoundingClientRect().width;
+            probe.remove();
+            return JSON.stringify({
+                label: sel.options[sel.selectedIndex].text,
+                room: sel.getBoundingClientRect().width
+                      - parseFloat(style.paddingLeft)
+                      - parseFloat(style.paddingRight),
+                needs: needs
+            });
+        }())
+    """))
+
+    check("the payment mode can actually be read",
+          not mode.get("missing") and mode["room"] >= mode["needs"],
+          "%r needs %.0fpx and the box leaves %.0fpx, so it shows a "
+          "truncated word and an arrow"
+          % (mode.get("label"), mode.get("needs", 0), mode.get("room", 0)))
+
     check("the date is in at most two lines",
           not date_shape.get("missing") and date_shape["lines"] <= 2,
           "it came apart into %s lines, which is what holding it on one "

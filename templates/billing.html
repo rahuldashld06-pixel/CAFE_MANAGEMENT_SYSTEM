@@ -554,10 +554,20 @@
            the panel does not scroll here: anything past the end is
            simply unreachable. At 800px across - a phone held sideways,
            which is the narrowest screen that still gets this table -
-           the panel has 766px inside it.
+           the panel's CONTENT box is 746px. Not its clientWidth, which
+           is 766 and includes the panel's own padding; sizing against
+           that put the table in a box twenty pixels bigger than the one
+           it sits in, which is why Print Bill kept reappearing at the
+           edge however often it was fixed.
 
                was  784px, and Print Bill ended 11px off the screen
-               now  756px, and it ends 17px inside it
+               now  744px, and the whole table sits inside the content
+
+           The figures below are measured against money as it is
+           actually drawn - 1299.00, not 1299. The offline stand-in used
+           to hand back 1299, so every width derived through it was two
+           characters short of production. Subtotal wanted 76px and had
+           52. Fixing the stand-in is what finally showed it.
 
            Half of that came out of the gutters rather than out of any
            column: the cell padding above went from 5px a side to 3px.
@@ -581,17 +591,17 @@
            "Chicken Caesar" came out as "Chick / en Caesa / r", which
            is the dish-name version of the fault this whole block
            exists to fix. */
-        .billing-table th.col-id { width: 40px; }
-        .billing-table th.col-date { width: 64px; }
+        .billing-table th.col-id { width: 32px; }
+        .billing-table th.col-date { width: 60px; }
         .billing-table th.col-items { width: 76px; }
-        .billing-table th.col-sub { width: 52px; }
+        .billing-table th.col-sub { width: 78px; }
         .billing-table th.col-off { width: 72px; }
         .billing-table th.col-tax { width: 66px; }
-        .billing-table th.col-total { width: 74px; }
-        .billing-table th.col-mode { width: 86px; }
-        .billing-table th.col-return { width: 62px; }
-        .billing-table th.col-status { width: 82px; }
-        .billing-table th.col-print { width: 42px; }
+        .billing-table th.col-total { width: 78px; }
+        .billing-table th.col-mode { width: 72px; }
+        .billing-table th.col-return { width: 60px; }
+        .billing-table th.col-status { width: 80px; }
+        .billing-table th.col-print { width: 38px; }
 
         /* A bill number is one word and never wraps. It was the first
            thing on the row and the first thing to look broken. */
@@ -608,7 +618,28 @@
            one - this buys back 8px of readable label without taking a
            pixel from any other column. */
         .payment-method-select {
-            padding: 5px 13px 5px 6px;
+            /* A native select keeps room for the browser's own arrow,
+               and no amount of padding gets it back - which is why this
+               column showed a caret and no word however wide it was
+               made. Drawing the arrow instead hands that room over.
+
+               It matters because the mode is not decoration: it is what
+               the owner reads down the column when they want to know
+               how much came in by card. The full breakdown is on the
+               Reports page, but the person marking a bill paid should
+               be able to see what they are marking. */
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            /* Measured, not guessed: the box came to 44px, its own
+               padding took 21 of them, and "Cash" needs 26 of the 23
+               left. Five pixels back from the padding is the whole
+               difference between a word and "Cas". */
+            padding: 5px 11px 5px 4px;
+            background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23D8C3AC' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 3px center;
+            background-size: 7px 5px;
         }
 
         /* Shorter, so what is owed or owing sits clear underneath it

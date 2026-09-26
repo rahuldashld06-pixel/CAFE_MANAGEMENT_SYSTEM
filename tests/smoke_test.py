@@ -289,6 +289,60 @@ check("Dashboard stats API responds", r.status_code == 200, f"status={r.status_c
 r = a.get("/api/order-status")
 check("Order status feed responds", r.status_code == 200, f"status={r.status_code}")
 
+print("\n=== 11. Money with paise in it ===")
+# A dish priced 1299.50 could not be ordered offline at all. The stand-in
+# stored DECIMAL as NUMERIC and adapted Decimal to float, so the price
+# came back a float - and line totals are summed onto Decimal("0.00"),
+# which will not add one. Order creation died with "unsupported operand
+# type(s) for +: 'decimal.Decimal' and 'float'".
+#
+# Production never had it: there both sides are Decimal. But it meant no
+# test could use a realistic price, so the arithmetic every bill depends
+# on was only ever exercised on whole rupees.
+from decimal import Decimal as _Decimal            # noqa: E402
+
+a.post("/foods/add", data={
+    "food_name": "Paise Wrap", "category_id": "1", "price": "1299.50",
+    "quantity": "40", "minimum_stock": "5", "description": "",
+    "_csrf_token": csrf(a)}, follow_redirects=True)
+
+_priced = mysql_shim._DB.execute(
+    "SELECT food_id, price FROM foods WHERE food_name = 'Paise Wrap'"
+).fetchone()
+
+check("a dish can be priced with paise", _priced is not None,
+      "the food was not created at all")
+
+if _priced:
+    check("and the price comes back as a Decimal, not a float",
+          isinstance(_priced[1], _Decimal) and _priced[1] == _Decimal("1299.50"),
+          "it came back as %r (%s) - a float cannot hold a money value "
+          "exactly, and the app sums line totals onto a Decimal"
+          % (_priced[1], type(_priced[1]).__name__))
+
+    _before = mysql_shim._DB.execute(
+        "SELECT COUNT(*) FROM orders").fetchone()[0]
+    a.post("/orders/add", data={
+        "quantity_%d" % _priced[0]: "3", "_csrf_token": csrf(a)},
+        follow_redirects=True)
+    _after = mysql_shim._DB.execute(
+        "SELECT COUNT(*) FROM orders").fetchone()[0]
+
+    check("an order for it goes through",
+          _after == _before + 1,
+          "ordering a dish priced with paise was refused")
+
+    _line = mysql_shim._DB.execute(
+        "SELECT subtotal FROM order_items WHERE item_name = 'Paise Wrap' "
+        "ORDER BY order_item_id DESC LIMIT 1").fetchone()
+
+    check("and three of them is exactly 3898.50",
+          _line and _line[0] == _Decimal("3898.50"),
+          "the line came to %r - off by a fraction of a rupee on every "
+          "order is how a till stops balancing"
+          % (_line[0] if _line else None))
+
+
 print("\n" + "=" * 60)
 print(f"PASSED: {len(PASSED)}   FAILED: {len(FAILED)}")
 if FAILED:

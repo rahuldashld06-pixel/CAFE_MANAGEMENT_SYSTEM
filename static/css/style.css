@@ -759,11 +759,6 @@ button.profile-dropdown__item {
     box-shadow: inset 3px 0 0 var(--copper);
 }
 .nav-link.active i { color: var(--copper-light); }
-
-.nav-link--soon {
-    opacity: 0.55;
-    cursor: default;
-}
 .nav-link--soon:hover {
     background: transparent;
     transform: none;
@@ -982,33 +977,6 @@ button.profile-dropdown__item {
     font-weight: 700;
     color: var(--cream);
 }
-
-.stat-card--warning {
-    border-color: rgba(225, 97, 79, 0.4);
-}
-
-/* ---------- Quick actions ---------- */
-.quick-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px;
-}
-
-.action-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 13px 16px;
-    background: var(--espresso-850);
-    border: 1px solid var(--espresso-700);
-    border-radius: var(--radius-md);
-    color: var(--cream);
-    font-family: var(--font-body);
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
-}
 .action-btn i {
     font-size: 16px;
     color: var(--copper-light);
@@ -1175,33 +1143,6 @@ button.profile-dropdown__item {
 .unavailable {
     color: var(--berry);
     font-weight: 700;
-}
-
-/* ---------- Status dots ---------- */
-/* Colour-only status indicator: green = done/paid, yellow = pending,
-   red = cancelled. Hover/focus shows the status via the title tooltip. */
-.status-dot {
-    display: inline-block;
-    width: 13px;
-    height: 13px;
-    border-radius: 50%;
-    vertical-align: middle;
-    cursor: default;
-}
-
-.status-dot--green {
-    background: var(--sage);
-    box-shadow: 0 0 0 3px rgba(143, 187, 153, 0.22);
-}
-
-.status-dot--yellow {
-    background: var(--gold);
-    box-shadow: 0 0 0 3px rgba(242, 201, 76, 0.22);
-}
-
-.status-dot--red {
-    background: var(--berry);
-    box-shadow: 0 0 0 3px rgba(225, 97, 79, 0.22);
 }
 
 /* ---------- Forms ---------- */
@@ -1461,14 +1402,6 @@ button.profile-dropdown__item {
 }
 .order-meta strong {
     color: var(--cream);
-}
-
-.order-total {
-    margin-top: 18px;
-    font-family: var(--font-display);
-    font-size: 20px;
-    text-align: right;
-    color: var(--gold);
 }
 
 /* ---------- Responsive ---------- */
@@ -1736,13 +1669,6 @@ button, input, select, textarea {
    that outright - a phone showed one enormous food card per row no matter
    what the menu's own rules asked for. */
 @media (max-width: 700px) {
-    .form-grid,
-    .order-grid,
-    .dashboard-grid,
-    .two-column,
-    .three-column {
-        grid-template-columns: 1fr !important;
-    }
 
     .history-filter {
         align-items: stretch !important;
@@ -1979,12 +1905,6 @@ button, input, select, textarea {
     font-size: 11.5px;
     color: var(--cream-faint);
     margin-top: 2px;
-}
-
-.order-status-item__amount {
-    font-weight: 700;
-    font-size: 13px;
-    white-space: nowrap;
 }
 
 .order-status-badge {
@@ -3657,11 +3577,6 @@ body.nav-locked {
     }
 
     .topbar-brand { margin-right: auto; }
-
-    .topbar-brand__tagline,
-    .profile-trigger__role {
-        display: none;
-    }
 
     /* The mark and the name, smaller. */
     .topbar-brand__logo,
