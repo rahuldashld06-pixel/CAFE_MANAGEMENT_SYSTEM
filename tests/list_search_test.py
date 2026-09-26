@@ -1406,6 +1406,153 @@ try:
           "the header still carries a Back link beside the form's "
           "own Cancel")
 
+
+    # =================================================================
+    print("\n=== 11. The till does not wait for the database ===")
+    # =================================================================
+    # An order is eleven round trips to a database half a second away,
+    # so Create Order left somebody watching a disabled button for five
+    # seconds with a customer in front of them. The writing still takes
+    # as long; the screen no longer waits for it.
+    #
+    # What has to hold: the basket empties at once, and if the write
+    # fails the items come back with a message that does not clear
+    # itself.
+
+    b.call("Emulation.setTouchEmulationEnabled", enabled=False)
+    b.call("Emulation.setDeviceMetricsOverride", width=1280, height=900,
+           deviceScaleFactor=1, mobile=False)
+    b.call("Page.navigate", url=BASE + "/orders/add")
+    wait("!!document.getElementById('orderForm')")
+    time.sleep(1.0)
+
+    def basket_count():
+        return b.evaluate("""
+            (function () {
+                var total = 0;
+                document.querySelectorAll('.quantity-input')
+                        .forEach(function (box) {
+                            total += Number(box.value) || 0;
+                        });
+                return total;
+            }())
+        """)
+
+    def add_one():
+        b.evaluate("""
+            (function () {
+                var box = document.querySelector('.quantity-input');
+                box.value = 2;
+                box.dispatchEvent(new Event('input', {bubbles: true}));
+            }())
+        """)
+
+    add_one()
+    check("there is something in the basket to send",
+          basket_count() == 2,
+          "the basket holds %s, so nothing below is a test"
+          % basket_count())
+
+    # Hold the server's answer so the screen can be looked at while the
+    # write is still in flight - which is the whole point.
+    b.evaluate("""
+        window.__release = null;
+        window.__realFetch = window.fetch;
+        window.fetch = function (url, options) {
+            if (String(url).indexOf('/orders/add') === -1) {
+                return window.__realFetch.apply(window, arguments);
+            }
+            var self = this, args = arguments;
+            return new Promise(function (resolve, reject) {
+                window.__release = function (fail) {
+                    if (fail) { reject(new Error('no connection')); return; }
+                    resolve(window.__realFetch.apply(self, args));
+                };
+            });
+        };
+    """)
+
+    b.evaluate("document.getElementById('orderForm')"
+               ".dispatchEvent(new Event('submit', "
+               "{cancelable: true, bubbles: true}))")
+    time.sleep(0.4)
+
+    check("the basket empties before the server has answered",
+          basket_count() == 0,
+          "the basket still holds %s while the write is in flight, so "
+          "the till is still waiting" % basket_count())
+
+    # Create Order is disabled with an empty basket, which is right and
+    # has nothing to do with the write in flight. What matters is that
+    # the NEXT order can be started while the last one is still being
+    # written - so put something in the basket and see.
+    add_one()
+    time.sleep(0.2)
+
+    check("the next order can be started before the last one lands",
+          not b.evaluate(
+              "!!(document.getElementById('popupCreateOrder') || {}).disabled")
+          and "Creating" not in (b.evaluate(
+              "(document.getElementById('popupCreateOrder') || {})"
+              ".textContent || ''") or ""),
+          "Create Order is still disabled or still says Creating, so "
+          "the till is blocked until the database answers")
+
+    # Put it back to empty so the failure check below measures the
+    # restored basket and not what was just added.
+    b.evaluate("""
+        (function () {
+            document.querySelectorAll('.quantity-input')
+                    .forEach(function (box) {
+                        box.value = 0;
+                        box.dispatchEvent(new Event('input', {bubbles: true}));
+                    });
+        }())
+    """)
+
+    # Now let it fail, the way a dropped connection does.
+    b.evaluate("window.__release(true)")
+    time.sleep(0.8)
+
+    check("a failed order puts the items back",
+          basket_count() == 2,
+          "the basket holds %s after the send failed - those items are "
+          "gone and nobody was told" % basket_count())
+
+    warning = b.evaluate("""
+        (function () {
+            var banner = document.getElementById('orderFailedBanner');
+            return banner ? (banner.textContent || '').trim() : '';
+        }())
+    """)
+
+    check("and says so",
+          "back in the basket" in warning,
+          "the failure said %r" % warning[:80])
+
+    check("in a message that does not clear itself",
+          b.evaluate("""
+              (function () {
+                  var banner = document.getElementById('orderFailedBanner');
+                  if (!banner) return false;
+                  return !!banner.querySelector(
+                      '.order-failed-banner__close');
+              }())
+          """),
+          "the warning has no dismiss button, which means it is either "
+          "permanent or it disappears on a timer - and a timer is how "
+          "somebody misses it")
+
+    # And it really is still sendable afterwards.
+    b.evaluate("window.fetch = window.__realFetch;")
+    before = int(b.evaluate("""
+        (function () {
+            return document.querySelectorAll('.quantity-input').length;
+        }())
+    """))
+    check("the screen is still working after a failure",
+          before > 0, "the order page fell over")
+
 finally:
     try:
         b.close()

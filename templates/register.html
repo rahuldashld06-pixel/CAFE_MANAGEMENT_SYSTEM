@@ -364,12 +364,20 @@
 
                 <div class="field">
                     <label for="phone_number">Mobile Number</label>
+                    {% include "_phone_field.html" %}
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="email">Email address</label>
                     <input
-                        type="tel"
-                        id="phone_number"
-                        name="phone_number"
-                        placeholder="e.g. +91 98765 43210"
-                        maxlength="20">
+                        type="email"
+                        id="email"
+                        name="email"
+                        autocomplete="email"
+                        maxlength="190">
+                    <small>You can sign in with this or your username.</small>
                 </div>
             </div>
 

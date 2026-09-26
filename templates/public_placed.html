@@ -127,7 +127,7 @@
     }
 
     var ASK = {{ url_for('public_order_status', token=token,
-                         order_id=order.order_id)|tojson }};
+                         ref=order.public_ref)|tojson }};
     var EVERY = 5000;
     // A table this order was left at hours ago. Nobody is reading it and
     // the kitchen closed; stop asking rather than poll all night.

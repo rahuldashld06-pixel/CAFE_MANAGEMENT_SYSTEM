@@ -370,6 +370,13 @@ mysql_shim._DB.execute(
     (new_cafe,))
 mysql_shim._DB.commit()
 
+# Written straight to the database, behind the app's back, so nothing
+# told the cache. A change made THROUGH the app drops it on the way out
+# of the request; this one cannot, so it is dropped here. Anywhere else
+# in the app a write from another worker is invisible for up to
+# CACHE_SECONDS, which is the trade the cache is making on purpose.
+application.cache_clear()
+
 page = fresh.get("/settings/timezone").get_data(as_text=True)
 check("it is still offered, and still selected",
       re.search(r'value="Antarctica/Troll"\s*selected', page) is not None,

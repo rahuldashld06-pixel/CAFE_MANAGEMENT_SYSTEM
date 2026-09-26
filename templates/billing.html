@@ -1150,9 +1150,17 @@
         const stack = getBillingToastStack();
         const toast = document.createElement('div');
         toast.className = isError ? 'toast-error' : 'toast-success';
-        toast.innerHTML =
-            '<i class="bi ' + (isError ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill') + '"></i> ' +
-            message;
+        // The icon is ours; the message comes back from the server.
+        // Nothing that reaches here carries typed-in text today, so this
+        // is not a hole being closed - it is the trap being taken out
+        // before somebody adds a message that quotes a dish name. Every
+        // other place in this app that puts server text on screen goes
+        // through textContent or escapeHtml.
+        const mark = document.createElement('i');
+        mark.className = 'bi ' + (isError ? 'bi-exclamation-triangle-fill'
+                                          : 'bi-check-circle-fill');
+        toast.appendChild(mark);
+        toast.appendChild(document.createTextNode(' ' + message));
         stack.appendChild(toast);
         // Swept up by the shell's own timer now, on the same
         // clock as every other notice. This is only a backstop for a

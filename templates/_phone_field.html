@@ -1,0 +1,93 @@
+{#
+  A mobile number, with the country it belongs to.
+
+  The country is what gets picked and the dial code is what gets used:
+  +1 is twenty-odd countries and +44 covers the Channel Islands as well
+  as Britain, so a list of codes would have been a list of ambiguities.
+
+  The digit count is the country's, and it is enforced twice - here so
+  it is caught while being typed, and again on the server, because a
+  form is a suggestion and anybody can post whatever they like.
+#}
+<div class="phone-field">
+    <select name="phone_country" id="{{ prefix }}phone_country"
+            class="phone-field__country"
+            aria-label="Country the number is in">
+        {% for country, code, lengths in phone_countries %}
+        <option value="{{ country }}"
+                data-code="{{ code }}"
+                data-lengths="{{ lengths|join(',') }}"
+                {% if country == chosen_country %}selected{% endif %}>
+            {{ country }} (+{{ code }})
+        </option>
+        {% endfor %}
+    </select>
+
+    <div class="phone-field__number">
+        <span class="phone-field__code" aria-hidden="true">+{{
+            dial_code_of(chosen_country) or '' }}</span>
+        <input type="tel"
+               id="{{ prefix }}phone_number"
+               name="phone_number"
+               value="{{ value or '' }}"
+               inputmode="numeric"
+               autocomplete="tel-national"
+               {% if required %}required{% endif %}
+               aria-describedby="{{ prefix }}phone_hint">
+    </div>
+</div>
+
+<small id="{{ prefix }}phone_hint" class="phone-field__hint"
+       data-phone-hint>&nbsp;</small>
+
+<script>
+    /* Keeps the + code and the "10 digits" note in step with the
+       country, and stops the box accepting more digits than the
+       country has. Nothing here is a check - the server does that -
+       it is only so a wrong number is obvious while it is being
+       typed rather than months later when a code does not arrive. */
+    (function () {
+        var box = document.getElementById("{{ prefix }}phone_number");
+        var picker = document.getElementById("{{ prefix }}phone_country");
+        if (!box || !picker) return;
+
+        var shown = picker.parentNode.querySelector(".phone-field__code");
+        var hint = document.getElementById("{{ prefix }}phone_hint");
+
+        function lengths() {
+            var raw = picker.options[picker.selectedIndex]
+                        .getAttribute("data-lengths") || "";
+            return raw.split(",").map(Number).filter(Boolean);
+        }
+
+        function spoken(list) {
+            if (list.length === 1) return list[0];
+            return list.slice(0, -1).join(", ") + " or " +
+                   list[list.length - 1];
+        }
+
+        function sync() {
+            var chosen = picker.options[picker.selectedIndex];
+            var code = chosen.getAttribute("data-code") || "";
+            var wanted = lengths();
+            if (shown) shown.textContent = "+" + code;
+            box.setAttribute("maxlength", String(Math.max.apply(null, wanted)));
+            var typed = (box.value || "").replace(/\D/g, "").length;
+            if (hint) {
+                hint.textContent = typed && wanted.indexOf(typed) === -1
+                    ? spoken(wanted) + " digits needed, " + typed + " so far"
+                    : spoken(wanted) + " digits";
+            }
+        }
+
+        picker.addEventListener("change", sync);
+        box.addEventListener("input", function () {
+            /* Digits only. People paste spaces and brackets, and none
+               of it is part of the number. */
+            var only = (box.value || "").replace(/\D/g, "");
+            if (only !== box.value) box.value = only;
+            sync();
+        });
+        sync();
+    }());
+</script>

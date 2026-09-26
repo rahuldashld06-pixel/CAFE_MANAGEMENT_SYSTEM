@@ -306,7 +306,11 @@ menu_ids = re.findall(r'name="quantity_(\d+)"', menu)
 sent = guest.post("/m/%s/order" % token,
                   data={"quantity_%s" % menu_ids[0]: "1"},
                   follow_redirects=False)
-from_table = int(sent.headers["Location"].rstrip("/").split("/")[-1])
+# The redirect ends in the order's own reference now.
+from_table = mysql_shim._DB.execute(
+    "SELECT order_id FROM orders WHERE public_ref = ?",
+    (sent.headers["Location"].rstrip("/").split("/")[-1],)
+).fetchone()[0]
 
 check("but an order from a table is not held back at all",
       from_table in feed(admin),

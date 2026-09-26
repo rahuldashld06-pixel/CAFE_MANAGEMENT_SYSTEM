@@ -102,8 +102,14 @@ def _translate(sql):
     if m:
         table, key, cols = m.group(1), m.group(2), m.group(3)
         s = f'CREATE UNIQUE INDEX {key} ON {table} ({cols})' 
+    # Seconds from now, on the SAME clock NOW() answers with. SQLite's
+    # datetime('now') is UTC while this shim's NOW() is local, so an
+    # expiry written by one and read by the other is wrong by the
+    # machine's offset - five and a half hours in India, which made a
+    # one-time code expire before it was ever shown. Production never
+    # had it: there both sides are MySQL's own NOW().
     s = re.sub(r"DATE_ADD\(NOW\(\),\s*INTERVAL\s*%s\s*SECOND\)",
-               "datetime('now', '+' || %s || ' seconds')", s, flags=re.I)
+               "datetime(NOW(), '+' || %s || ' seconds')", s, flags=re.I)
     s = re.sub(r"\bDATE\((\w+\.?\w*)\)", r"date(\1)", s)
 
     # Multi-table UPDATE ... JOIN. MySQL can drive an UPDATE from a join;

@@ -161,6 +161,44 @@ branding, fully isolated from the others.
   with no address bar and no browser chrome. In an ordinary tab a button in
   the top bar fills the screen instead, and remembers the choice.
 
+## Caching
+
+One row - who is signed in and the café around them - was read on every
+page load: name, role, theme, tax rate, branding, all the same answer
+every time. At roughly half a second per round trip to the database that
+was half a second before any screen appeared. It is now read once and
+reused, which takes eight reads across eight screens down to one.
+
+Stock is deliberately **not** cached. Two tills racing for the last
+croissant is settled by a row lock inside the transaction, and a cache
+in front of that would be a cache in front of the only thing keeping the
+count honest.
+
+Anything that changes something drops the cached rows on its way out of
+the request, rather than each write site remembering to. A short list of
+endpoints skips that - the ones a kitchen screen posts to every few
+seconds, and taking an order, which writes only orders, stock and bills.
+That list is checked rather than trusted: the suite drives each one and
+fails if any statement changes a column the cached row carries. It has
+already caught one - `timezone_guess` writes `cafes.timezone`, and while
+it sat on that list the café's clock went stale and kitchen tickets
+printed in UTC.
+
+**Sharing it between workers.** Gunicorn runs three worker processes, so
+by default each keeps its own copy and a change in one is invisible to
+the others until their copies age out (`CACHE_SECONDS`, 30 by default).
+Whoever made the change always sees it immediately. Setting `REDIS_URL`
+replaces that with a single shared copy, so a drop is a drop for
+everybody and the window disappears. It is optional and fail-soft: with
+no Redis, or with one that stops answering, each worker falls back to
+its own memory rather than showing anybody an error. `/healthz` reports
+which is actually in use, because a `REDIS_URL` that quietly fails to
+connect looks exactly like one that works.
+
+Only worth setting if the Redis is in the **same region** as the app. One
+that is not costs about what the database round trip it replaces costs,
+and this app's database is already half a second away.
+
 ## A note on speed
 
 Measured from inside the deployed app, a single database round trip costs
@@ -249,6 +287,7 @@ tests/clock_browser_test.py Real-browser suite for a café's clock settling itse
 tests/colours_test.py Café colours, palette contrast and the bill discount
 tests/colour_browser_test.py Real-browser colour-picker and page-swap suite
 tests/list_search_test.py Real-browser phone-header, list-search and billing-layout suite
+tests/identity_test.py Phone numbers by country, and signing in by email
 tests/security_test.py Headers, login lockout, upload sniffing and tenant isolation
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
@@ -317,18 +356,101 @@ reply claiming a payment is not taken at its word. One-time codes are
 single-use and deleted once verified, and the self-service password
 reset needs the account's registered mobile number.
 
+**Ordering from a QR code.** The address a customer's phone posts to
+takes no session and no CSRF token — it cannot, because a customer
+never signs in — so how often it is called is the only thing limiting
+it. Two counts are kept, and one query reads both: 30 orders a minute
+from one address, and 120 a minute for the whole café. Either limit
+alone is wrong for the same reason the login lockout gives. Every table
+in a café shares one token, so a café-wide count on its own would let
+one phone stop everybody else ordering; and a per-address count on its
+own does nothing about a flood spread over a few proxies.
+
+The numbers sit in a wide gap. A phone places one order and then eats.
+A whole café behind one router is nowhere near 30 a minute at its
+busiest, and 120 a minute is a café nobody has. A flood is thousands.
+Change them with `QR_ORDER_MAX_PER_SOURCE`, `QR_ORDER_MAX_PER_CAFE` and
+`QR_ORDER_WINDOW` if your café is busier than that.
+
+What matters as much as the limit is what a refusal costs. An accepted
+order is twelve database round trips and takes the per-café lock that
+every other order queues on; a refused one is two round trips, takes no
+lock and writes nothing, so a flood bounces off without standing on the
+kitchen's own orders. The order is counted only once it is real, so an
+order that fails because the last sandwich went is not also held
+against the table that tried.
+
+Rotating the table code on the QR settings page invalidates every
+existing token at once, which is the kill switch if one ever leaks.
+
+**Headers, and counting the proxies.** Every response carries a
+content security policy naming `script-src`, `object-src`, `base-uri`,
+`frame-src` and `frame-ancestors 'none'`, plus `X-Frame-Options: DENY`,
+`nosniff`, a referrer policy and a permissions policy. HSTS is the one
+that was genuinely missing in production, and the reason is worth
+keeping: it was sent only when `request.is_secure`, which is true behind
+one proxy and false behind two. This runs behind Cloudflare and then
+Render, so `X-Forwarded-Proto` arrives as a list and ProxyFix — set to
+trust one hop — read the last entry, which is Render handing the request
+to gunicorn over plain HTTP inside its own network. The logic was right
+and its input was not. It now asks whether any hop in the chain was
+HTTPS, which does not care how long the chain is, and still refuses to
+send the header when nothing in it was.
+
+**The sign-in code.** Everybody who signs in is asked for a one-time
+code after their password - admin, manager, cashier and staff alike,
+because a password on its own is a password on its own whoever holds
+it. An account with no email and no mobile number on file has nowhere
+to be sent one and signs in on its password as before; filling in those
+details closes the gap. The customer with the QR code never signs in at
+all and is untouched by any of it. The code lasts ten minutes, allows
+five wrong guesses, and can be resent from the code screen with a
+thirty-second cooldown so the button cannot be used to flood an inbox. It can go by SMS, as before, or by email — email first
+when there is an address and a mail server to send with, because it
+costs nothing per message. Sending uses `smtplib` from the standard
+library, so no package was added: any SMTP server will do, including a
+Gmail app password. Set `SMTP_HOST`, `SMTP_PORT` (587, or 465 for
+implicit TLS), `SMTP_USER`, `SMTP_PASSWORD` and `SMTP_FROM`. With none
+of them set the code goes to the log, which is how a laptop signs in
+and how a half-configured deploy stays diagnosable. The screen names
+where it went — `i••@cafe.com` — because somebody with two addresses
+needs to know which to open.
+
+**Which address somebody is counted as.** The login lockout and the QR
+order limit are both counted per address, so they are only as good as
+knowing who is asking. `request.remote_addr` is not that: ProxyFix
+trusts one hop, which makes it the *last* entry of `X-Forwarded-For`,
+and behind Cloudflare and then Render the last entry is Render. Every
+visitor in the world came out as one address — which quietly turned the
+login lockout into one keyed on the username alone, the exact thing its
+own table comment warns against.
+
+`request_source()` now believes `CF-Connecting-IP` first, since
+Cloudflare sets it itself and overwrites whatever arrived. Failing that
+it counts `TRUSTED_PROXY_HOPS` from the *right* of `X-Forwarded-For` —
+the only trustworthy end, because anything a client invents arrives on
+the left while each real proxy appends on the right. Someone writing
+`1.2.3.4` into their own header ends up with it sitting harmlessly to
+the left of their real address.
+
+Putting a load balancer in front of the service is therefore one
+number: `TRUSTED_PROXY_HOPS=3`. There are tests for two hops, three
+hops, a forged header at each, and Cloudflare's own header.
+
 **Secrets.** `.env` and `config.py` are gitignored and the history has
 been checked for credential-shaped strings. On Render these are
 environment variables, never files.
 
-`tests/security_test.py` holds this to account — 44 checks covering the
+`tests/security_test.py` holds this to account — 107 checks covering the
 headers, the lockout (including that it does not lock the wrong person),
-the upload sniffing, and the parts that were already right.
+the upload sniffing, the QR order limit (including that a refusal is
+cheap and that one flooding table does not shut the café), and the parts
+that were already right.
 
 ## Tests
 
 ```bash
-python tests/smoke_test.py        # expect PASSED: 38   FAILED: 0
+python tests/smoke_test.py        # expect PASSED: 39   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
 python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/instant_post_test.py # expect PASSED: 16   FAILED: 0
@@ -350,7 +472,7 @@ python tests/mobile_nav_test.py   # expect PASSED: 84   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
-python tests/qr_order_test.py     # expect PASSED: 121  FAILED: 0
+python tests/qr_order_test.py     # expect PASSED: 123  FAILED: 0
 python tests/kitchen_screen_test.py # expect PASSED: 23  FAILED: 0
 python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
@@ -361,11 +483,12 @@ python tests/timezone_test.py     # expect PASSED: 41   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
-python tests/list_search_test.py  # expect PASSED: 100  FAILED: 0
-python tests/security_test.py     # expect PASSED: 44   FAILED: 0
+python tests/list_search_test.py  # expect PASSED: 107  FAILED: 0
+python tests/identity_test.py     # expect PASSED: 88   FAILED: 0
+python tests/security_test.py     # expect PASSED: 107  FAILED: 0
 ```
 
-All thirty-five run in memory against a SQLite stand-in — no database or
+All thirty-six run in memory against a SQLite stand-in — no database or
 network needed. The seventeen that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 

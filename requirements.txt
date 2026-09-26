@@ -10,3 +10,6 @@ qrcode>=7.4,<9
 # The time-zone database. Windows ships none at all, and a container
 # may not either - without this a cafe cannot be told what o clock it is.
 tzdata>=2024.1
+# Only used when REDIS_URL is set. Without it the app keeps its cache
+# in each worker's own memory and never imports this.
+redis>=5.0,<7

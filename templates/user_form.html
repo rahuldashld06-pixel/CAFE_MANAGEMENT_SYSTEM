@@ -68,12 +68,21 @@
             <!-- Mobile Number -->
             <div class="field">
                 <label>Mobile Number</label>
-                <input
-                    type="tel"
-                    name="phone_number"
-                    placeholder="e.g. +91 98765 43210"
-                    maxlength="20"
-                    value="{{ user.phone_number if user else '' }}">
+                {% set value = user.phone_number if user else "" %}
+                {% set prefix = "user_" %}
+                {% include "_phone_field.html" %}
+            </div>
+
+            <!-- Email -->
+            <div class="field">
+                <label for="user_email">Email address</label>
+                <input type="email"
+                       id="user_email"
+                       name="email"
+                       autocomplete="email"
+                       maxlength="190"
+                       value="{{ user.email if user and user.email else '' }}">
+                <small>They can sign in with this or their username.</small>
                 <small id="phoneHint">Required for admin accounts to receive a one-time login code by SMS.</small>
             </div>
 

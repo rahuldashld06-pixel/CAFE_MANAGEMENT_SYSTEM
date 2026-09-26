@@ -216,8 +216,17 @@ r = anon.post("/forgot-password", data={
     "username": "alpha_admin", "full_name": "alpha_admin Owner",
     "phone_number": "", "new_password": "takenover1",
     "confirm_password": "takenover1"}, follow_redirects=True)
+# Either refusal is fine, and neither says whether the account exists.
+# "couldn't verify" is the answer once there is a number to check
+# against; asking for the number comes first now, so an empty one is
+# turned back before any lookup happens at all.
 check("Reset with username + full name alone is refused",
-      b"couldn't verify" in r.data or b"couldn" in r.data, r.data[:400])
+      b"couldn" in r.data or b"enter a mobile number" in r.data,
+      r.data[:400])
+
+check("and the refusal does not say whether the account exists",
+      b"No such user" not in r.data and b"not found" not in r.data.lower(),
+      "the page confirms who banks here")
 
 r = anon.post("/login", data={
     "username": "alpha_admin", "password": "takenover1"},

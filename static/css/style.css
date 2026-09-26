@@ -4474,3 +4474,117 @@ body.tour-open { overflow: hidden; }
         justify-content: center;
     }
 }
+
+/* ---------- The mobile number field ---------- */
+/* A country and a number, side by side on a screen with room and
+   stacked on one without. The country is a real select rather than a
+   list of dial codes: +1 is twenty-odd countries and +44 covers the
+   Channel Islands as well as Britain, so codes alone would have been a
+   list of ambiguities. */
+.phone-field {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.phone-field__country {
+    flex: 0 1 45%;
+    min-width: 0;
+}
+
+/* The dial code sits inside the box, in front of the number, so what
+   is typed reads as the whole number rather than half of one. */
+.phone-field__number {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding-left: 10px;
+    background: var(--espresso-850);
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-md, 10px);
+}
+
+.phone-field__code {
+    flex: 0 0 auto;
+    color: var(--cream-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.phone-field__number input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    padding-left: 0;
+}
+
+.phone-field__number input:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.phone-field__hint {
+    display: block;
+    margin-top: 6px;
+    color: var(--cream-faint);
+}
+
+@media (max-width: 560px) {
+    .phone-field {
+        flex-direction: column;
+    }
+
+    .phone-field__country {
+        flex: 1 1 auto;
+    }
+}
+
+/* ---------- An order that said "sent" and was not ---------- */
+/* The success message clears itself after a second. This one does not:
+   whoever saw "sent" has already turned to the next customer, and an
+   order that quietly did not happen is the one thing this screen must
+   never let past. */
+.order-failed-banner {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: min(560px, calc(100vw - 32px));
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--berry, #b3446c);
+    background: var(--espresso-900, #1D1410);
+    color: var(--cream, #F8F1E6);
+    box-shadow: 0 18px 44px -18px rgba(0, 0, 0, .9);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.order-failed-banner__close {
+    flex: 0 0 auto;
+    padding: 7px 13px;
+    border: 1px solid var(--cream-faint, #A98E76);
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.order-failed-banner__close:hover {
+    background: var(--espresso-800, #3C291E);
+}
+
+@media (max-width: 560px) {
+    .order-failed-banner {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+    }
+}

@@ -34,5 +34,33 @@ services:
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
+      # The sign-in code goes here when these are set; without them it
+      # goes to the log. Any SMTP server, including a Gmail app
+      # password. 587 for STARTTLS, 465 for implicit TLS.
+      # A shared cache, so a change in one worker is seen by the other
+      # two at once instead of after CACHE_SECONDS. Only worth setting
+      # if the Redis is in the SAME REGION as this service - one that
+      # is not costs about what the database round trip it replaces
+      # costs. Leave unset to keep the per-worker cache.
+      # How many proxies stand between a visitor and this service,
+      # each appending itself to X-Forwarded-For. Cloudflare then
+      # Render is two, which is the default. Put a load balancer in
+      # front and it is three - and that is the whole of the change.
+      # Get it wrong and every visitor is counted as one address, which
+      # lets one person trip everybody else's rate limits.
+      - key: TRUSTED_PROXY_HOPS
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false

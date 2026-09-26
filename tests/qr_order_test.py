@@ -219,9 +219,37 @@ check("and not the first cafe's",
       "Flat White" not in other_menu,
       "one cafe's food appeared on another's menu")
 
-check("an order number cannot be read through another cafe's code",
-      guest.get("/m/%s/placed/%d" % (other_token, order_id)).status_code
-      == 404,
+def ref_of(order_id):
+    """The address a customer's phone uses for this order."""
+    return mysql_shim._DB.execute(
+        "SELECT public_ref FROM orders WHERE order_id = %d" % order_id
+    ).fetchone()[0]
+
+
+def id_of(ref):
+    """The order behind a reference, for the routes staff use."""
+    return mysql_shim._DB.execute(
+        "SELECT order_id FROM orders WHERE public_ref = '%s'" % ref
+    ).fetchone()[0]
+
+
+# A real reference belonging to the first cafe. Not ref_of(order_id):
+# that number was scraped off the confirmation page, and it is the
+# order's DAILY number, which only matches the row id while there has
+# been exactly one cafe ordering.
+first_cafe_ref = mysql_shim._DB.execute(
+    "SELECT o.public_ref FROM orders o "
+    "INNER JOIN cafes c ON c.owner_user_id = o.user_id "
+    "WHERE c.public_token = ? AND o.source = 'qr' "
+    "ORDER BY o.order_id LIMIT 1", (token,)).fetchone()
+
+check("the first cafe has an order with its own reference",
+      first_cafe_ref and first_cafe_ref[0],
+      "no reference was minted, so the check below proves nothing")
+
+check("an order cannot be read through another cafe's code",
+      guest.get("/m/%s/placed/%s"
+                % (other_token, first_cafe_ref[0])).status_code == 404,
       "one cafe's order was readable through another's code")
 
 
@@ -668,9 +696,15 @@ shop_ids = re.findall(r'name="quantity_(\d+)"', shop_menu)
 sent = shopper.post("/m/%s/order" % fresh,
                     data={"quantity_%s" % shop_ids[0]: "1"},
                     follow_redirects=False)
-waiting_id = int(sent.headers["Location"].rstrip("/").split("/")[-1])
+waiting_ref = sent.headers["Location"].rstrip("/").split("/")[-1]
+waiting_id = id_of(waiting_ref)
 
-asking = "/m/%s/status/%d" % (fresh, waiting_id)
+check("the address a customer is left holding is not a counting number",
+      not waiting_ref.isdigit() and len(waiting_ref) >= 12,
+      "the order is followed at %r, which can be counted upwards to "
+      "read every other table's order" % waiting_ref)
+
+asking = "/m/%s/status/%s" % (fresh, waiting_ref)
 nobody = app.test_client()          # never signed in, never will be
 
 answer = nobody.get(asking)
@@ -696,15 +730,15 @@ check("and no names, prices or totals come back with it",
          for dish in (answer.get_json() or {}).get("items", [])])
 
 check("another cafe's code cannot be used to watch this order",
-      nobody.get("/m/%s/status/%d" % (other_token, waiting_id))
+      nobody.get("/m/%s/status/%s" % (other_token, waiting_ref))
       .status_code == 404,
       "one cafe can follow another cafe's orders")
 
 check("and a retired code cannot either",
-      nobody.get("/m/%s/status/%d" % (token, waiting_id)).status_code == 404,
+      nobody.get("/m/%s/status/%s" % (token, waiting_ref)).status_code == 404,
       "the code that was replaced still works")
 
-page = shopper.get("/m/%s/placed/%d" % (fresh, waiting_id)) \
+page = shopper.get("/m/%s/placed/%s" % (fresh, waiting_ref)) \
               .get_data(as_text=True)
 # Both wordings are in the page - the dictionary it changes itself from
 # is embedded as JSON - so what matters is which one is being shown.
@@ -726,7 +760,7 @@ check("once the kitchen presses Done the answer changes",
       "it still says %s"
       % (nobody.get(asking).get_json() or {}).get("status"))
 
-ready_page = shopper.get("/m/%s/placed/%d" % (fresh, waiting_id)) \
+ready_page = shopper.get("/m/%s/placed/%s" % (fresh, waiting_ref)) \
                     .get_data(as_text=True)
 check("and someone opening the page fresh is told straight away",
       "Your food is ready" in ready_page,
@@ -740,13 +774,14 @@ check("without it still asking, now that there is nothing left to ask",
 cancel_menu = shopper.post("/m/%s/order" % fresh,
                            data={"quantity_%s" % shop_ids[0]: "1"},
                            follow_redirects=False)
-doomed_id = int(cancel_menu.headers["Location"].rstrip("/").split("/")[-1])
+doomed_ref = cancel_menu.headers["Location"].rstrip("/").split("/")[-1]
+doomed_id = id_of(doomed_ref)
 admin.post("/orders/cancel/%d" % doomed_id,
            data={"_csrf_token": csrf(admin)},
            headers={"X-Requested-With": "XMLHttpRequest"})
 
 check("a cancelled order tells the customer as well",
-      (nobody.get("/m/%s/status/%d" % (fresh, doomed_id)).get_json()
+      (nobody.get("/m/%s/status/%s" % (fresh, doomed_ref)).get_json()
        or {}).get("status") == "Cancelled",
       "they would wait for food nobody is making")
 
@@ -770,7 +805,12 @@ def order_two():
         "/m/%s/order" % fresh,
         data={"quantity_%s" % picks[0]: "1", "quantity_%s" % picks[1]: "1"},
         follow_redirects=False)
-    return customer, int(reply.headers["Location"].rstrip("/").split("/")[-1])
+    # The redirect ends in the order's own reference now. Callers want
+    # the id - they use it for the kitchen board and the printed bill -
+    # so it is looked up here, and ref_of() turns it back where a page a
+    # customer holds is being asked for.
+    return customer, id_of(
+        reply.headers["Location"].rstrip("/").split("/")[-1])
 
 
 def ticket_lines(order_id):
@@ -835,13 +875,14 @@ print("\n=== 20. And the customer watches it happen ===")
 # hear about the whole order.
 nobody_at_all = app.test_client()
 
-told = nobody_at_all.get("/m/%s/status/%d" % (fresh, both)).get_json() or {}
+told = nobody_at_all.get("/m/%s/status/%s"
+                         % (fresh, ref_of(both))).get_json() or {}
 check("a finished order tells them every line is ready",
       told.get("items") and all(dish["made"] for dish in told["items"]),
       "it says %s" % told)
 
 finished_page = both_customer.get(
-    "/m/%s/placed/%d" % (fresh, both)).get_data(as_text=True)
+    "/m/%s/placed/%s" % (fresh, ref_of(both))).get_data(as_text=True)
 check("and their page marks both",
       finished_page.count('data-made="1"') == 2,
       "the page marks %d of 2" % finished_page.count('data-made="1"'))
@@ -852,13 +893,13 @@ half_lines = ticket_lines(half)
 tick(half_lines[0]["item_id"])
 
 halfway = nobody_at_all.get(
-    "/m/%s/status/%d" % (fresh, half)).get_json() or {}
+    "/m/%s/status/%s" % (fresh, ref_of(half))).get_json() or {}
 check("one dish ready and one still coming is reported as exactly that",
       [dish["made"] for dish in halfway.get("items", [])] == [True, False],
       "it says %s" % halfway)
 
 half_page = half_customer.get(
-    "/m/%s/placed/%d" % (fresh, half)).get_data(as_text=True)
+    "/m/%s/placed/%s" % (fresh, ref_of(half))).get_data(as_text=True)
 check("and their page marks only the one that is ready",
       half_page.count('data-made="1"') == 1
       and half_page.count('data-made="0"') == 1,
@@ -891,7 +932,7 @@ print("\n=== 21. The system is credited under the cafe ===")
 credit_pages = {
     "the menu": guest.get("/m/%s" % fresh).get_data(as_text=True),
     "the page after ordering": both_customer.get(
-        "/m/%s/placed/%d" % (fresh, both)).get_data(as_text=True),
+        "/m/%s/placed/%s" % (fresh, ref_of(both))).get_data(as_text=True),
 }
 
 for where, html in credit_pages.items():

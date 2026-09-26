@@ -1,4 +1,5 @@
 from functools import wraps
+import base64
 import json
 import logging
 import secrets
@@ -222,6 +223,70 @@ def stay_on(endpoint):
     return url_for(endpoint)
 
 
+@app.after_request
+def _forget_cached_rows(response):
+    """
+    Anything that changed something drops this worker's cached rows.
+
+    Invalidating per write site would mean finding all twenty of them
+    and never missing one as the app grows. This cannot miss: if the
+    request could have changed anything, the cache goes. Over-forgetting
+    costs one query on the next page; under-forgetting shows somebody
+    yesterday's cafe name, so the bias is deliberate.
+
+    The exception is the handful of endpoints a kitchen screen posts to
+    every few seconds. They touch orders and a heartbeat column, never
+    the user or cafe rows that are cached, and left in they would empty
+    the cache continuously for any cafe with a screen open - which is
+    every cafe that matters.
+    """
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}             and request.endpoint not in _CACHE_KEEPERS             and response.status_code < 500:
+        cache_drop_cafe(session.get("cafe_id"))
+        cache_drop("userrow:%s:%s" % (session.get("user_id"),
+                                      session.get("cafe_id")))
+    return response
+
+
+# Posted constantly by a kitchen screen, and none of them writes to the
+# users or cafes rows that are cached.
+# NOT timezone_guess: it writes cafes.timezone, which is on the cached
+# row. Left in here it kept the old clock alive and printed tickets in
+# UTC - caught by the suite, which is the whole reason an exclusion
+# list is a thing to keep short and justify line by line.
+_CACHE_KEEPERS = {
+    "kitchen_heartbeat", "kitchen_claim", "kitchen_item_made",
+    "order_status_feed", "kitchen_board", "kitchen_pending",
+    # Taking an order writes orders, order_items, inventory and bills,
+    # and flips a food's availability when its stock hits zero. None of
+    # that is cached - stock deliberately is not - so clearing the user
+    # and cafe rows after every order only made the next screen pay to
+    # read them again, which on a busy till is every few seconds.
+    "add_order", "public_place_order",
+    "cancel_order", "complete_order", "mark_bill_paid",
+}
+
+# Every name above is checked, not trusted: the suite takes a real order
+# through each one and fails if any statement touches users or cafes.
+# That check is what would have caught timezone_guess sitting in this
+# list and quietly printing tickets in UTC.
+
+
+@app.context_processor
+def inject_phone_field():
+    """
+    What the mobile-number field needs, wherever one is drawn.
+
+    Three forms ask for a number and they now share one partial, so the
+    country list and the cafe's own country are put in reach of all of
+    them rather than threaded through three routes by hand.
+    """
+    return {
+        "phone_countries": phone_country_choices(),
+        "chosen_country": default_phone_country(),
+        "dial_code_of": countries.dial_code_of,
+    }
+
+
 @app.context_processor
 def inject_back_url():
     """Where Back and Cancel go on a settings screen."""
@@ -431,6 +496,27 @@ _PERMISSIONS_POLICY = ", ".join([
 ])
 
 
+def _reached_over_https():
+    """
+    Whether the browser's own leg of this request was encrypted.
+
+    request.is_secure describes the last hop, which behind two proxies
+    is one server talking to another inside a private network. The
+    browser's leg is the first entry in X-Forwarded-Proto, and any https
+    in the chain means the request was not carried in the open.
+
+    A client can write this header itself, and it does not matter: a
+    browser ignores HSTS that arrives over plain HTTP, so the worst a
+    forged value earns is a header its sender will throw away.
+    """
+    if request.is_secure:
+        return True
+
+    forwarded = request.headers.get("X-Forwarded-Proto", "")
+    return any(hop.strip().lower() == "https"
+               for hop in forwarded.split(","))
+
+
 @app.after_request
 def _security_headers(response):
     """
@@ -472,8 +558,22 @@ def _security_headers(response):
     # HTTPS only, and only where there is HTTPS to insist on. Sending
     # this from a development server on http would pin a browser to a
     # scheme that machine does not serve, which is a memorable way to
-    # lose an afternoon.
-    if IS_PRODUCTION and request.is_secure:
+    # lose an afternoon. RFC 6797 says the same: a host must not send
+    # this over plain HTTP, and a browser must ignore it if it does.
+    #
+    # `request.is_secure` alone was not enough to tell. There are two
+    # proxies in front of this app - Cloudflare, then Render - and
+    # ProxyFix is set to trust one hop, so it reads the LAST value of
+    # X-Forwarded-Proto. The last hop is Render handing the request to
+    # gunicorn over plain HTTP inside its own network, so is_secure came
+    # out false on a request the browser made over HTTPS, and the header
+    # was silently never sent. A scan found it missing; nothing in the
+    # app did, because the logic was right and its input was not.
+    #
+    # Raising the trusted hop count to two would fix today and break the
+    # day a hop is added or taken away. Asking whether ANY hop in the
+    # chain was HTTPS does not care how long the chain is.
+    if IS_PRODUCTION and _reached_over_https():
         headers.setdefault(
             "Strict-Transport-Security",
             "max-age=31536000; includeSubDomains")
@@ -1153,12 +1253,17 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult,
     row = cursor.fetchone()
     daily_no = (row["next_no"] if row and row["next_no"] else 1)
 
+    # Its own address for the customer's phone, unrelated to the id.
+    # Counter orders get one too: it costs nothing, and it means the
+    # column is never half full if an order is ever handed over.
+    public_ref = secrets.token_urlsafe(12)
+
     cursor.execute(
         "INSERT INTO orders (total_amount, order_status, user_id, cafe_id, "
-        "source, order_day, daily_no, order_date) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        "source, order_day, daily_no, order_date, public_ref) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (total, "Pending", owner_id, cafe_id, source, today, daily_no,
-         utc_now())
+         utc_now(), public_ref)
     )
     order_id = cursor.lastrowid
 
@@ -1214,7 +1319,8 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult,
             WHERE f.food_id = %s AND f.user_id = %s
         """, (line["food_id"], owner_id))
 
-    return dict(totals, order_id=order_id, daily_no=daily_no)
+    return dict(totals, order_id=order_id, daily_no=daily_no,
+                public_ref=public_ref)
 
 
 
@@ -1270,6 +1376,11 @@ _CORE_TABLES = [
             role ENUM('admin','manager','cashier','staff') NOT NULL DEFAULT 'staff',
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             phone_number VARCHAR(20) NULL,
+            -- Signing in works with this or the username. Unique across
+            -- everyone, like the username, because sign-in is how you
+            -- find out which cafe you are in rather than something that
+            -- happens once you are already there.
+            email VARCHAR(190) NULL,
             cafe_id INT NULL,
             photo_mime VARCHAR(80) NULL,
             photo_blob MEDIUMBLOB NULL,
@@ -1345,8 +1456,13 @@ _CORE_TABLES = [
             order_day DATE NULL,
             daily_no INT NULL,
             kot_printed TINYINT(1) NOT NULL DEFAULT 0,
+            -- The address a customer's own phone uses to follow this
+            -- order. Random, because the id next to it is sequential
+            -- and the page holding it needs no sign-in.
+            public_ref VARCHAR(32) NULL,
             user_id INT NULL,
             cafe_id INT NULL,
+            UNIQUE KEY uq_orders_public_ref (public_ref),
             INDEX idx_orders_user_id (user_id),
             INDEX idx_orders_cafe_id (cafe_id),
             INDEX idx_orders_day (user_id, order_day),
@@ -1416,6 +1532,23 @@ _CORE_TABLES = [
             INDEX idx_login_attempt_locked (locked_until)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """),
+    ("order_attempts", """
+        CREATE TABLE IF NOT EXISTS order_attempts (
+            attempt_id INT AUTO_INCREMENT PRIMARY KEY,
+            -- The cafe's public token, and who is asking. Two rows per
+            -- cafe matter: one per address, and one for the cafe as a
+            -- whole under the address '*'. Either limit alone is wrong
+            -- - the cafe-wide one alone lets one person stop a cafe
+            -- taking orders at all, and the per-address one alone does
+            -- nothing about a flood spread over a few proxies.
+            token VARCHAR(40) NOT NULL,
+            source VARCHAR(45) NOT NULL,
+            hits INT NOT NULL DEFAULT 0,
+            window_start DATETIME NOT NULL,
+            UNIQUE KEY uq_order_attempt (token, source),
+            INDEX idx_order_attempt_window (window_start)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """),
     ("login_otp_codes", """
         CREATE TABLE IF NOT EXISTS login_otp_codes (
             otp_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1437,11 +1570,13 @@ _CORE_TABLES = [
 # ALTER TABLE; fresh ones already have them from the CREATE statements above.
 _COLUMN_MIGRATIONS = [
     ("users", "phone_number", "VARCHAR(20) NULL"),
+    ("users", "email", "VARCHAR(190) NULL"),
     ("users", "cafe_id", "INT NULL"),
     # Whether this person has been shown round. Everyone who already had
     # an account reads as not yet shown, which is right: they have never
     # been offered it.
     ("users", "tutorial_seen", "TINYINT(1) NOT NULL DEFAULT 0"),
+    ("orders", "public_ref", "VARCHAR(32) NULL"),
     ("categories", "user_id", "INT NULL"),
     ("categories", "cafe_id", "INT NULL"),
     ("categories", "description", "TEXT NULL"),
@@ -2012,9 +2147,140 @@ def require_cafe_session():
 # and shown on-screen with a "development mode" notice instead of being
 # texted out, so the flow can still be exercised end-to-end locally.
 
-OTP_EXPIRY_SECONDS = int(os.environ.get("OTP_EXPIRY_SECONDS", "300"))
+# Ten minutes. Five was not enough for a code that may be sitting in a
+# spam folder, or on a phone face-down on a counter while somebody
+# serves. After that the code is dead and the Resend button issues a
+# fresh one.
+OTP_EXPIRY_SECONDS = int(os.environ.get("OTP_EXPIRY_SECONDS", "600"))
 OTP_MAX_ATTEMPTS = int(os.environ.get("OTP_MAX_ATTEMPTS", "5"))
 OTP_RESEND_COOLDOWN_SECONDS = 30
+
+
+class EmailError(ValueError):
+    """An email address that is not one. Shown to whoever typed it."""
+
+
+# Deliberately loose. The only thing worth refusing here is something
+# that cannot be an address at all; anything stricter starts rejecting
+# real addresses, and the only test that settles it is sending to it.
+_EMAIL_SHAPE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def clean_email(typed, required=False):
+    """One address, lowercased, or "" when none was given."""
+    address = (typed or "").strip().lower()
+
+    if not address:
+        if required:
+            raise EmailError("Please enter an email address.")
+        return ""
+
+    if len(address) > 190 or not _EMAIL_SHAPE.match(address):
+        raise EmailError("That does not look like an email address.")
+
+    return address
+
+
+def looks_like_email(typed):
+    """Whether what was typed into the sign-in box is an address."""
+    return "@" in (typed or "")
+
+
+def find_sign_in(cursor, typed, columns):
+    """
+    The account behind a username or an email address.
+
+    Which one it is needs no guessing: a username may not contain an @
+    and an address must. So this is one lookup, not a fallback chain
+    that would tell an attacker which spelling exists by how long it
+    took to answer.
+    """
+    field = "email" if looks_like_email(typed) else "username"
+    cursor.execute(
+        "SELECT %s FROM users WHERE %s = %%s" % (columns, field),
+        ((typed or "").strip().lower()
+         if field == "email" else (typed or "").strip(),))
+    return cursor.fetchone()
+
+
+class PhoneError(ValueError):
+    """A mobile number that is not one. Shown to whoever typed it."""
+
+
+def phone_country_choices():
+    """Every country, its dial code, and the lengths it uses."""
+    return countries.DIAL_CODES
+
+
+def default_phone_country():
+    """
+    Which country the picker starts on.
+
+    The cafe's own clock says where it is better than a guess does, and
+    it is already set by the time anybody adds a member of staff.
+    """
+    try:
+        zone = cafe_timezone_name()
+    except Exception:
+        # No cafe in the session yet - this is also the registration
+        # form, where there is no cafe at all so far.
+        zone = None
+    if zone:
+        for country, zones in countries.COUNTRY_ZONES:
+            if zone in zones:
+                return country
+    return "India"
+
+
+def _spoken_lengths(lengths):
+    """(10,) -> "10".  (9, 10) -> "9 or 10"."""
+    numbers = [str(n) for n in sorted(set(lengths))]
+    if len(numbers) == 1:
+        return numbers[0]
+    return ", ".join(numbers[:-1]) + " or " + numbers[-1]
+
+
+def clean_phone(country, typed, required=False):
+    """
+    One number, stored the way the whole world writes it: +<code><number>.
+
+    Everything that is not a digit goes first - people type spaces,
+    brackets and dashes, and none of it is part of the number.
+
+    Two things are then forgiven, because both are how a number is
+    written rather than what it is: the trunk zero some countries put in
+    front at home, and a dial code the person has typed again because
+    the example showed one.
+    """
+    digits = re.sub(r"\D", "", typed or "")
+
+    if not digits:
+        if required:
+            raise PhoneError("Please enter a mobile number.")
+        return ""
+
+    code = countries.dial_code_of(country)
+    if code is None:
+        raise PhoneError(
+            "Please choose the country this number is in.")
+
+    lengths = countries.number_lengths(country)
+
+    # A number pasted in full, with its country code on the front.
+    if digits.startswith(code) and (len(digits) - len(code)) in lengths:
+        digits = digits[len(code):]
+
+    # The zero people dial at home and never write abroad.
+    elif digits.startswith("0") and (len(digits) - 1) in lengths:
+        digits = digits[1:]
+
+    if len(digits) not in lengths:
+        raise PhoneError(
+            "A mobile number in %s has %s digits after the +%s. "
+            "That one has %d."
+            % (country, _spoken_lengths(lengths), code, len(digits)))
+
+    return "+" + code + digits
 
 
 def mask_phone_number(phone_number):
@@ -2050,14 +2316,162 @@ LOGIN_FAILURE_WINDOW = int(os.environ.get("LOGIN_FAILURE_WINDOW", "900"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "900"))
 
 
+# How many orders a QR code may produce in one window, per address
+# and for the whole cafe. A phone places one order and then eats; a
+# whole cafe behind one router at its busiest is nowhere near thirty a
+# minute, and a hundred and twenty a minute is a cafe nobody has. A
+# flood is thousands, so the gap between real use and an attack is wide
+# enough that these can sit comfortably in the middle of it.
+QR_ORDER_WINDOW = int(os.environ.get("QR_ORDER_WINDOW", "60"))
+QR_ORDER_MAX_PER_SOURCE = int(os.environ.get("QR_ORDER_MAX_PER_SOURCE", "30"))
+QR_ORDER_MAX_PER_CAFE = int(os.environ.get("QR_ORDER_MAX_PER_CAFE", "120"))
+
+# The address the cafe-wide row is filed under. Not a valid address, so
+# it can never collide with a real one.
+_WHOLE_CAFE = "*"
+
+
+def qr_orders_over_limit(cursor, token, source):
+    """
+    Whether this order is one too many, and the count of it if not.
+
+    One SELECT decides it, for both buckets at once - so a request that
+    is turned away costs a single query and takes none of the locks that
+    the order itself would. That is what keeps a flood from standing on
+    the kitchen's own orders: the rejected ones never reach the lock.
+
+    Returns the seconds to wait, or 0 to go ahead. Counting happens in
+    note_qr_order() afterwards, so an order that fails for its own
+    reasons - nothing in stock - is not also counted against the table.
+    """
+    now = utc_now()
+    cut = now - timedelta(seconds=QR_ORDER_WINDOW)
+
+    cursor.execute(
+        "SELECT source, hits, window_start FROM order_attempts "
+        "WHERE token = %s AND source IN (%s, %s)",
+        (token, source, _WHOLE_CAFE))
+
+    for row in cursor.fetchall():
+        started = row["window_start"]
+        if isinstance(started, str):
+            started = datetime.fromisoformat(started)
+
+        # A window that has run out is not a window. The row is reset
+        # when the order is counted, not here - this only reads.
+        if started < cut:
+            continue
+
+        ceiling = (QR_ORDER_MAX_PER_CAFE if row["source"] == _WHOLE_CAFE
+                   else QR_ORDER_MAX_PER_SOURCE)
+        if row["hits"] >= ceiling:
+            wait = (started + timedelta(seconds=QR_ORDER_WINDOW) - now)
+            return max(1, int(wait.total_seconds()))
+
+    return 0
+
+
+def note_qr_order(cursor, token, source):
+    """
+    Count one order against this address and against the cafe.
+
+    Both rows move together in one statement, each restarting its own
+    window if it has run out - so a quiet cafe never carries an hour-old
+    count into its next order.
+    """
+    now = utc_now()
+    cut = now - timedelta(seconds=QR_ORDER_WINDOW)
+
+    cursor.execute(
+        "UPDATE order_attempts "
+        "SET hits = CASE WHEN window_start < %s THEN 1 ELSE hits + 1 END, "
+        "    window_start = CASE WHEN window_start < %s THEN %s "
+        "                        ELSE window_start END "
+        "WHERE token = %s AND source IN (%s, %s)",
+        (cut, cut, now, token, source, _WHOLE_CAFE))
+
+    # Both rows there already is the ordinary case, and it costs this
+    # one statement. A missing row only happens the first time an
+    # address orders from a cafe.
+    if cursor.rowcount >= 2:
+        return
+
+    cursor.execute(
+        "SELECT source FROM order_attempts "
+        "WHERE token = %s AND source IN (%s, %s)",
+        (token, source, _WHOLE_CAFE))
+    present = {row["source"] for row in cursor.fetchall()}
+
+    for who in (source, _WHOLE_CAFE):
+        if who in present:
+            continue
+        try:
+            cursor.execute(
+                "INSERT INTO order_attempts (token, source, hits, "
+                "window_start) VALUES (%s, %s, 1, %s)",
+                (token, who, now))
+        except mysql.connector.Error:
+            # Two first orders from the same address at the same moment.
+            # The other one created the row; its count stands.
+            pass
+
+
+def database_error(error, doing):
+    """
+    What to put on screen when the database refuses, and what to keep.
+
+    The driver's own message names tables, columns and itself. That is
+    the operator's to read, in the log, where a deploy can be diagnosed
+    from it - not the visitor's, where it is a free map of the schema
+    for anybody holding the page and trying things.
+    """
+    app.logger.exception("database error while %s", doing)
+    return ("Something went wrong on our side and that was not saved. "
+            "Please try again.")
+
+
+# How many proxies stand between a visitor and this app, each adding
+# itself to the right of X-Forwarded-For. Cloudflare, then Render, is
+# two. Putting a load balancer in front makes it three - and that is
+# the whole of what has to change for one.
+TRUSTED_PROXY_HOPS = int(os.environ.get("TRUSTED_PROXY_HOPS", "2"))
+
+
 def request_source():
     """
     Where a request came from, as well as it can be known.
 
-    ProxyFix has already put the real client address in remote_addr from
-    X-Forwarded-For, so this is that - trimmed to fit an IPv6 address
-    and never empty, because it is half of a unique key.
+    Not request.remote_addr. ProxyFix is set to trust one hop, so that
+    is the LAST entry of X-Forwarded-For - and behind two proxies the
+    last entry is the nearer proxy, not the visitor. Every visitor in
+    the world came out as one address, which quietly turned the login
+    lockout into one keyed on the username alone.
+
+    Cloudflare sets CF-Connecting-IP itself, overwriting whatever
+    arrived with it, so where there is one it is the visitor and cannot
+    be forged from outside.
+
+    Otherwise, counted from the right of X-Forwarded-For. The right is
+    the only trustworthy end: a client can send whatever it likes and
+    that arrives on the LEFT, while each real proxy appends itself on
+    the right. So somebody writing "1.2.3.4" into their own header ends
+    up with it sitting harmlessly to the left of their real address.
     """
+    stamped = request.headers.get("CF-Connecting-IP", "").strip()
+    if stamped:
+        return stamped[:45]
+
+    chain = [hop.strip() for hop
+             in request.headers.get("X-Forwarded-For", "").split(",")
+             if hop.strip()]
+
+    if chain:
+        # One entry per proxy that appended, plus the visitor at the
+        # far left. Never off the front of the list: a chain shorter
+        # than expected means fewer proxies than configured, and the
+        # leftmost is then the best answer there is.
+        return chain[max(0, len(chain) - TRUSTED_PROXY_HOPS)][:45]
+
     return (request.remote_addr or "unknown")[:45]
 
 
@@ -2154,6 +2568,116 @@ def issue_login_otp(cursor, connection, user_id):
     return code
 
 
+def mask_email(address):
+    """
+    An address somebody can recognise but a stranger cannot use.
+
+    ida@cafe.com -> i••@cafe.com. The domain stays, because "which of my
+    addresses was it" is the question this answers.
+    """
+    address = (address or "").strip()
+    if "@" not in address:
+        return address
+    name, _, domain = address.partition("@")
+    if len(name) <= 1:
+        return "•@" + domain
+    return name[0] + ("•" * (len(name) - 1)) + "@" + domain
+
+
+def send_login_otp_email(address, code):
+    """
+    Email the OTP to an admin's address.
+
+    smtplib is in the standard library, so this adds no dependency. Any
+    SMTP server will do - a Gmail app password, a work mailbox, or a
+    transactional provider's relay - because they all speak the same
+    protocol. Without one configured the code goes to the log, exactly
+    as the SMS path does, so signing in still works on a laptop.
+    """
+    host = os.environ.get("SMTP_HOST", "").strip()
+    user = os.environ.get("SMTP_USER", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    sender = (os.environ.get("SMTP_FROM", "").strip() or user)
+    port = int(os.environ.get("SMTP_PORT", "587"))
+
+    cafe_name = os.environ.get("CAFE_OTP_SENDER_NAME", "Cafe Manager")
+    minutes = OTP_EXPIRY_SECONDS // 60
+
+    if host and sender and address:
+        try:
+            import smtplib
+            from email.message import EmailMessage
+
+            note = EmailMessage()
+            note["Subject"] = "%s sign-in code: %s" % (cafe_name, code)
+            note["From"] = sender
+            note["To"] = address
+            note.set_content(
+                "Your %s sign-in code is %s.\n\n"
+                "It expires in %d minutes and can be used once.\n\n"
+                "If you did not just try to sign in, somebody else has "
+                "your password. Change it as soon as you can.\n"
+                % (cafe_name, code, minutes))
+
+            # Port 465 is TLS from the first byte; 587 starts plain and
+            # is upgraded. Getting these the wrong way round is the
+            # usual reason a working mailbox refuses to send.
+            if port == 465:
+                with smtplib.SMTP_SSL(host, port, timeout=10) as server:
+                    if user:
+                        server.login(user, password)
+                    server.send_message(note)
+            else:
+                with smtplib.SMTP(host, port, timeout=10) as server:
+                    server.starttls()
+                    if user:
+                        server.login(user, password)
+                    server.send_message(note)
+            return True
+        except Exception as error:
+            app.logger.warning(
+                "Could not send the sign-in code by email, falling back "
+                "to the log: %s", error)
+
+    app.logger.info("[LOGIN OTP] Code for %s: %s",
+                    address or "unknown address", code)
+    return False
+
+
+def deliver_login_otp(user, code):
+    """
+    Send the code wherever this person can be reached.
+
+    Email first when there is an address and a mail server to send it
+    with: it costs nothing, and an admin reading a till is far more
+    likely to have their email open than to be holding their phone.
+    Otherwise the SMS gateway, and otherwise the log.
+
+    Hands back what to tell them - "sent to i••@cafe.com" is worth
+    saying, because somebody with two addresses needs to know which one
+    to go and look at.
+    """
+    address = (user.get("email") or "").strip()
+    number = (user.get("phone_number") or "").strip()
+
+    if address and os.environ.get("SMTP_HOST", "").strip():
+        if send_login_otp_email(address, code):
+            return True, "email", mask_email(address)
+
+    if number:
+        if send_login_otp_sms(number, code):
+            return True, "mobile", mask_phone_number(number)
+
+    # Nothing configured. The code is in the log, which is how a laptop
+    # signs in and how a misconfigured deploy stays diagnosable.
+    if address:
+        send_login_otp_email(address, code)
+        return False, "email", mask_email(address)
+
+    send_login_otp_sms(number, code)
+    return False, "mobile", mask_phone_number(number)
+
+
 def send_login_otp_sms(phone_number, code):
     """
     Text the OTP to the admin's mobile number.
@@ -2197,6 +2721,241 @@ def send_login_otp_sms(phone_number, code):
     return False
 
 
+# How long a cached row may be out of date in a worker that did not
+# make the change. Short enough that nobody notices a stale cafe name,
+# long enough that the row is not re-read on every page.
+CACHE_SECONDS = int(os.environ.get("CACHE_SECONDS", "30"))
+
+# Where a shared cache lives, if there is one. Without this the
+# in-process cache below is used, which is what a laptop and the test
+# suite get and what a deployment with no Redis gets.
+REDIS_URL = os.environ.get("REDIS_URL", "").strip()
+
+# Everything this app writes is prefixed, so one Redis can hold more
+# than one deployment without them reading each other's rows.
+CACHE_PREFIX = os.environ.get("CACHE_PREFIX", "cafe").strip() or "cafe"
+
+_CACHE = {}
+_CACHE_LOCK = threading.Lock()
+
+
+def _encode(value):
+    """
+    A cached value as bytes, without pickle.
+
+    Pickle would be shorter. It also executes whatever it is given, and
+    a cache is exactly the sort of thing that ends up shared, moved or
+    pointed at the wrong server one day. JSON cannot do that, and the
+    two types this app actually stores that JSON does not know - the
+    money Decimals and the timestamps - are written out by name so they
+    come back as themselves rather than as strings that look right
+    until something does arithmetic on them.
+    """
+    def plain(item):
+        if isinstance(item, Decimal):
+            return {"__decimal__": str(item)}
+        if isinstance(item, (datetime, date)):
+            return {"__when__": item.isoformat(),
+                    "__kind__": type(item).__name__}
+        if isinstance(item, bytes):
+            return {"__bytes__": base64.b64encode(item).decode("ascii")}
+        raise TypeError("not cacheable: %r" % type(item))
+
+    return json.dumps(value, default=plain).encode("utf-8")
+
+
+def _decode(raw):
+    def rebuild(item):
+        if "__decimal__" in item:
+            return Decimal(item["__decimal__"])
+        if "__when__" in item:
+            built = datetime.fromisoformat(item["__when__"])
+            return built.date() if item.get("__kind__") == "date" else built
+        if "__bytes__" in item:
+            return base64.b64decode(item["__bytes__"])
+        return item
+
+    return json.loads(raw.decode("utf-8"), object_hook=rebuild)
+
+
+class _SharedCache:
+    """
+    The cache in Redis, seen by every worker at once.
+
+    Every call is wrapped: a Redis that is down, slow or misconfigured
+    must never reach a customer. It falls back to the in-process cache,
+    which is the behaviour with no Redis at all, and says so once in
+    the log rather than on every request.
+    """
+
+    def __init__(self, url):
+        import redis                       # noqa: F401  (optional)
+        self._redis = redis.from_url(
+            url, socket_timeout=0.5, socket_connect_timeout=0.5,
+            retry_on_timeout=False, health_check_interval=30)
+        self._complained = False
+
+    def _key(self, key):
+        return "%s:%s" % (CACHE_PREFIX, key)
+
+    def _shrug(self, error):
+        if not self._complained:
+            app.logger.warning(
+                "Cache is falling back to this worker's own memory: %s",
+                error)
+            self._complained = True
+
+    def get(self, key):
+        try:
+            raw = self._redis.get(self._key(key))
+            return _decode(raw) if raw else None
+        except Exception as error:
+            self._shrug(error)
+            return _memory_get(key)
+
+    def put(self, key, value):
+        try:
+            self._redis.setex(self._key(key), CACHE_SECONDS, _encode(value))
+        except Exception as error:
+            self._shrug(error)
+            _memory_put(key, value)
+
+    def drop(self, keys):
+        try:
+            if keys:
+                self._redis.delete(*[self._key(k) for k in keys])
+        except Exception as error:
+            self._shrug(error)
+        _memory_drop(keys)
+
+    def drop_cafe(self, cafe_id):
+        try:
+            # SCAN rather than KEYS: KEYS walks the whole keyspace in
+            # one go and blocks the server while it does it. There are
+            # only a handful of keys per cafe, so this is cheap.
+            pattern = "%s:*:%s" % (CACHE_PREFIX, cafe_id)
+            doomed = list(self._redis.scan_iter(match=pattern, count=100))
+            if doomed:
+                self._redis.delete(*doomed)
+        except Exception as error:
+            self._shrug(error)
+        _memory_drop_cafe(cafe_id)
+
+    def clear(self):
+        try:
+            doomed = list(self._redis.scan_iter(
+                match="%s:*" % CACHE_PREFIX, count=500))
+            if doomed:
+                self._redis.delete(*doomed)
+        except Exception as error:
+            self._shrug(error)
+        _memory_clear()
+
+
+def _memory_get(key):
+    with _CACHE_LOCK:
+        found = _CACHE.get(key)
+        if not found:
+            return None
+        value, stored_at = found
+        if time.time() - stored_at > CACHE_SECONDS:
+            _CACHE.pop(key, None)
+            return None
+        return value
+
+
+def _memory_put(key, value):
+    with _CACHE_LOCK:
+        _CACHE[key] = (value, time.time())
+
+
+def _memory_drop(keys):
+    with _CACHE_LOCK:
+        for key in keys:
+            _CACHE.pop(key, None)
+
+
+def _memory_drop_cafe(cafe_id):
+    with _CACHE_LOCK:
+        for key in [k for k in _CACHE if k.endswith(":%s" % cafe_id)]:
+            _CACHE.pop(key, None)
+
+
+def _memory_clear():
+    with _CACHE_LOCK:
+        _CACHE.clear()
+
+
+def _open_cache():
+    """The shared cache if one is configured and reachable, else memory."""
+    if not REDIS_URL:
+        return None
+    try:
+        shared = _SharedCache(REDIS_URL)
+        shared._redis.ping()
+        return shared
+    except Exception as error:
+        # Said at start-up, where somebody deploying will see it.
+        app.logger.warning(
+            "REDIS_URL is set but the cache could not be opened, so each "
+            "worker will use its own memory: %s", error)
+        return None
+
+
+_SHARED = _open_cache()
+
+
+def cache_get(key):
+    """A cached value, or None if there is none or it has aged out."""
+    if _SHARED is not None:
+        return _SHARED.get(key)
+    return _memory_get(key)
+
+
+def cache_put(key, value):
+    if _SHARED is not None:
+        _SHARED.put(key, value)
+        return
+    _memory_put(key, value)
+
+
+def cache_drop(*keys):
+    """
+    Forget these, now.
+
+    With a shared cache that means for every worker at once. Without
+    one it means this worker, and the others let their copies age out -
+    which is why nothing with a short fuse is cached in the first place.
+    """
+    if _SHARED is not None:
+        _SHARED.drop(keys)
+        return
+    _memory_drop(keys)
+
+
+def cache_drop_cafe(cafe_id):
+    """Everything remembered about one cafe."""
+    if not cafe_id:
+        return
+    if _SHARED is not None:
+        _SHARED.drop_cafe(cafe_id)
+        return
+    _memory_drop_cafe(cafe_id)
+
+
+def cache_clear():
+    """Used by the tests, and by anything that changes the schema."""
+    if _SHARED is not None:
+        _SHARED.clear()
+        return
+    _memory_clear()
+
+
+def cache_backend_name():
+    """Which cache is in use, for the health endpoint to report."""
+    return "redis" if _SHARED is not None else "memory"
+
+
 def get_current_user():
     """
     The signed-in user, or None.
@@ -2218,6 +2977,20 @@ def get_current_user():
     cafe_id = get_current_cafe_id()
     if not cafe_id:
         return None
+
+    # The same row, on every page, for a person whose name and role
+    # change about once. Half a second of the wait before any screen
+    # appears was this one query.
+    #
+    # Cached as the raw row, before anything is derived from it, so the
+    # theme, the rates, the branding and the print settings are all
+    # worked out from the same answer whether it came from the database
+    # or from here.
+    remembered = "userrow:%s:%s" % (user_id, cafe_id)
+    row = cache_get(remembered)
+
+    if row is not None:
+        return _shape_current_user(dict(row), cafe_id)
 
     connection = None
     cursor = None
@@ -2251,6 +3024,22 @@ def get_current_user():
         if connection:
             connection.close()
 
+    if row:
+        cache_put(remembered, dict(row))
+
+    return _shape_current_user(row, cafe_id)
+
+
+def _shape_current_user(row, cafe_id):
+    """
+    Turn the row into what the rest of the app expects of it.
+
+    Split out from the query so the cached copy goes through exactly
+    the same shaping - otherwise a page served from the cache and the
+    same page served from the database would disagree about the theme
+    or the tax rate, which is the sort of difference nobody finds for
+    a fortnight.
+    """
     # Café columns carried on this row for the shell to use. They are kept
     # out of the user dict so nothing mistakes a café's name for a person's.
     PRINTING_KEYS = ("auto_kot_enabled", "auto_kot_delay",
@@ -2342,7 +3131,7 @@ STAFF_ALLOWED_ENDPOINTS = {
     "add_order", "order_details",
     # Printing a bill or a kitchen ticket is counter work, not admin work.
     "print_bill", "print_kot",
-    "cancel_order", "complete_order", "delete_order",
+    "cancel_order", "complete_order",
     "foods", "add_food", "edit_food", "delete_food",
     # Categories sit alongside food management, which staff already run.
     "categories", "add_category", "edit_category", "delete_category",
@@ -2838,6 +3627,16 @@ def get_cafe_rates(cafe_id=None):
     if not target:
         return fallback
 
+    # A customer ordering from the QR code has no session, so the rates
+    # cannot come off the user row the way they do at the counter -
+    # and both multipliers ask for them, so one order asked the same
+    # question twice. Remembered here instead, and dropped whenever
+    # anything is saved, like every other cached row.
+    remembered = "rates:%s" % target
+    held = cache_get(remembered)
+    if held is not None:
+        return held
+
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
     try:
@@ -2854,6 +3653,8 @@ def get_cafe_rates(cafe_id=None):
     finally:
         cursor.close()
         connection.close()
+
+    cache_put(remembered, rates)
 
     if cafe_id is None and has_request_context():
         g.cafe_rates = rates
@@ -3046,7 +3847,7 @@ def home():
         )
 
     except mysql.connector.Error as error:
-        flash(f"Dashboard database error: {error}")
+        flash(database_error(error, "loading the dashboard"))
         return "Dashboard database error", 500
 
     finally:
@@ -3092,7 +3893,7 @@ def categories():
         category_list = cursor.fetchall()
     except mysql.connector.Error as error:
         app.logger.exception("categories listing failed")
-        flash(f"Could not load categories: {error.msg}")
+        flash(database_error(error, "loading categories"))
         return redirect(url_for("home"))
     finally:
         if cursor:
@@ -3153,7 +3954,7 @@ def add_category():
             if connection:
                 connection.rollback()
             app.logger.exception("add_category failed")
-            flash(f"Could not create the category: {error.msg}")
+            flash(database_error(error, "creating a category"))
             return redirect(url_for("add_category"))
         finally:
             if cursor:
@@ -3227,7 +4028,7 @@ def edit_category(category_id):
         if connection:
             connection.rollback()
         app.logger.exception("edit_category failed")
-        flash(f"Could not update the category: {error.msg}")
+        flash(database_error(error, "updating a category"))
         return redirect(url_for("categories"))
     finally:
         if cursor:
@@ -3280,7 +4081,7 @@ def delete_category(category_id):
         if connection:
             connection.rollback()
         app.logger.exception("delete_category failed")
-        flash(f"Could not delete the category: {error.msg}")
+        flash(database_error(error, "deleting a category"))
         return redirect(url_for("categories"))
     finally:
         if cursor:
@@ -3344,7 +4145,7 @@ def foods():
             )
 
     except mysql.connector.Error as error:
-        flash(f"Database error: {error}")
+        flash(database_error(error, "foods"))
         return redirect(url_for("home"))
 
     finally:
@@ -3483,7 +4284,7 @@ def add_food():
         if connection:
             connection.rollback()
         app.logger.exception("add_food failed")
-        flash(f"Could not save the food item: {error.msg}")
+        flash(database_error(error, "saving a food item"))
         return redirect(url_for("foods"))
 
     finally:
@@ -3643,7 +4444,7 @@ def edit_food(food_id):
         if connection:
             connection.rollback()
         app.logger.exception("edit_food failed")
-        flash(f"Could not update the food item: {error.msg}")
+        flash(database_error(error, "updating a food item"))
         return redirect(url_for("foods"))
 
     finally:
@@ -3707,7 +4508,7 @@ def delete_food(food_id):
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
-        flash(f"Database error: {error}")
+        flash(database_error(error, "delete food"))
 
     finally:
         if cursor:
@@ -3791,7 +4592,7 @@ def inventory():
         inventory_list = cursor.fetchall()
 
     except mysql.connector.Error as error:
-        flash(f"Database error: {error}")
+        flash(database_error(error, "inventory"))
         return redirect(url_for("home"))
 
     finally:
@@ -3873,7 +4674,7 @@ def update_stock(food_id):
             if connection:
                 connection.rollback()
 
-            flash(f"Error updating stock: {error}")
+            flash(database_error(error, "updating stock"))
 
         finally:
 
@@ -3914,7 +4715,7 @@ def update_stock(food_id):
         item = cursor.fetchone()
 
     except mysql.connector.Error as error:
-        flash(f"Database error: {error}")
+        flash(database_error(error, "update stock"))
         return redirect(url_for("inventory"))
 
     finally:
@@ -4267,7 +5068,8 @@ def order_status_feed():
         }
 
     except mysql.connector.Error as error:
-        return jsonify({"orders": [], "pending_count": 0, "error": str(error)}), 500
+        return jsonify({"orders": [], "pending_count": 0,
+                        "error": "Could not load orders."}), 500
 
     finally:
         if cursor:
@@ -4702,7 +5504,7 @@ def add_order():
         if connection:
             connection.rollback()
 
-        message = f"Database error: {error}"
+        message = database_error(error, "creating an order")
 
         if wants_json_response():
             return jsonify({"success": False, "message": message}), 500
@@ -4719,7 +5521,7 @@ def add_order():
         if connection:
             connection.rollback()
 
-        message = f"Order could not be created: {error}"
+        message = database_error(error, "creating an order")
 
         if wants_json_response():
             return jsonify({"success": False, "message": message}), 500
@@ -4809,7 +5611,7 @@ def print_bill(order_id):
             **data
         )
     except mysql.connector.Error as error:
-        flash(f"Database error: {error}")
+        flash(database_error(error, "print bill"))
         return redirect(url_for("kitchen_display"))
     finally:
         if cursor:
@@ -4842,7 +5644,7 @@ def print_kot(order_id):
             items=data["items"],
         )
     except mysql.connector.Error as error:
-        flash(f"Database error: {error}")
+        flash(database_error(error, "print kot"))
         return redirect(url_for("kitchen_display"))
     finally:
         if cursor:
@@ -4958,9 +5760,7 @@ def order_details(order_id):
 
     except mysql.connector.Error as error:
 
-        flash(
-            f"Database error: {error}"
-        )
+        flash(database_error(error, "cancelling an order"))
 
         return redirect(
             url_for("kitchen_display")
@@ -5096,7 +5896,7 @@ def cancel_order(order_id):
 
         return order_action_result(
             False,
-            f"Database error: {error}")
+            database_error(error, "completing an order"))
 
     except Exception as error:
 
@@ -5105,7 +5905,7 @@ def cancel_order(order_id):
 
         return order_action_result(
             False,
-            f"Order could not be cancelled: {error}")
+            database_error(error, "cancelling an order"))
 
     finally:
 
@@ -5117,9 +5917,14 @@ def cancel_order(order_id):
 
 # Backward-compatible old delete URL.
 # It now cancels instead of physically deleting, so billing history is safe.
-@app.route("/orders/delete/<int:order_id>", methods=["GET", "POST"])
-def delete_order(order_id):
-    return cancel_order(order_id)
+# /orders/delete/<id> used to live here, accepting GET and handing
+# straight to cancel_order. CSRF is checked on POST, PUT, PATCH and
+# DELETE, so a GET that changes something sits outside it completely:
+# <img src="/orders/delete/5"> on any page a signed-in member of staff
+# opened would cancel order 5 and put its stock back, with no token and
+# no click. It was an alias nothing linked to - the Cancel button posts
+# to /orders/cancel/<id>, which is POST-only and carries a token - so
+# the fix is that it is gone rather than merely locked down.
 
 
 @app.route("/orders/complete/<int:order_id>", methods=["POST"])
@@ -5183,7 +5988,7 @@ def complete_order(order_id):
 
         return order_action_result(
             False,
-            f"Database error: {error}")
+            database_error(error, "marking a bill paid"))
 
     finally:
 
@@ -5253,7 +6058,8 @@ def mark_bill_paid(bill_id):
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
-        return result(False, f"Payment status update failed: {error}", 500)
+        return result(
+            False, database_error(error, "updating a payment"), 500)
     finally:
         if cursor:
             cursor.close()
@@ -5401,7 +6207,7 @@ def start_online_payment(bill_id):
     except Exception as error:
         if "connection" in locals() and connection:
             connection.rollback()
-        flash(f"Online payment could not be started: {error}")
+        flash(database_error(error, "starting an online payment"))
         return redirect(url_for("billing"))
     finally:
         if "cursor" in locals() and cursor:
@@ -5435,7 +6241,7 @@ def verify_online_payment():
         return redirect(url_for("billing"))
 
     except Exception as error:
-        flash(f"Payment verification error: {error}")
+        flash(database_error(error, "verifying a payment"))
         return redirect(url_for("billing"))
 
 
@@ -5446,7 +6252,30 @@ def razorpay_webhook():
     signature = request.headers.get("X-Razorpay-Signature", "")
 
     if not RAZORPAY_WEBHOOK_SECRET:
-        return "Webhook secret is not configured.", 500
+        # Nothing is broken: this deployment has not been given online
+        # payment, so there is no webhook here to receive. It used to
+        # answer 500, which told every scanner on the internet that the
+        # server was failing - and that is exactly how it was reported.
+        #
+        # 404 is the truth. The log line is for the other case, where
+        # the keys ARE set and only the webhook secret was missed: then
+        # real payments would stop being marked, quietly, and the only
+        # sign would be here.
+        if RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET:
+            app.logger.error(
+                "Razorpay is configured but RAZORPAY_WEBHOOK_SECRET is "
+                "not set, so payment confirmations cannot be verified "
+                "and are being refused.")
+        else:
+            app.logger.info(
+                "Razorpay webhook called on a deployment with no online "
+                "payment configured.")
+        # Returned rather than raised: abort(404) goes through the
+        # app's own not-found handler, which redirects a page request
+        # to the dashboard. This is not a page - it is one server
+        # talking to another - and a redirect is a strange thing to
+        # hand a payment provider.
+        return "", 404
 
     expected = hmac.new(
         RAZORPAY_WEBHOOK_SECRET.encode("utf-8"),
@@ -5511,7 +6340,7 @@ def razorpay_webhook():
     except Exception as error:
         if "connection" in locals() and connection:
             connection.rollback()
-        return f"Webhook processing error: {error}", 500
+        return database_error(error, "processing a webhook"), 500
     finally:
         if "cursor" in locals() and cursor:
             cursor.close()
@@ -5762,7 +6591,7 @@ def billing():
 
     except mysql.connector.Error as error:
 
-        flash(f"Database error: {error}")
+        flash(database_error(error, "billing"))
         return redirect(url_for("home"))
 
     finally:
@@ -6151,7 +6980,7 @@ def reports():
     except mysql.connector.Error as error:
 
         flash(
-            f"Reports database error: {error}"
+            database_error(error, "building a report")
         )
 
         return redirect(
@@ -6229,9 +7058,9 @@ def login():
         ensure_auth_schema()
         ensure_payment_schema()
     except mysql.connector.Error as error:
-        return f"Authentication database setup error: {error}", 500
+        return database_error(error, "preparing the database"), 500
     except RuntimeError as error:
-        return f"Application setup error: {error}", 500
+        return database_error(error, "starting up"), 500
 
     if session.get("user_id"):
         return redirect(url_for("home"))
@@ -6252,20 +7081,28 @@ def login():
             # computed - which also stops a flood of guesses costing the
             # server the work of hashing every one of them.
             source = request_source()
-            waiting = login_lock_remaining(cursor, username, source)
+
+            # Found first, so the lockout can be counted against the
+            # account rather than against the spelling. Keyed on what
+            # was typed, somebody locked out as "sam" would walk
+            # straight past it by typing sam@cafe.com instead, and the
+            # lock would be decoration.
+            user = find_sign_in(
+                cursor, username,
+                "user_id, username, email, password_hash, full_name, "
+                "role, is_active, phone_number, cafe_id")
+
+            # An account that does not exist is still counted, under
+            # what was typed. Skipping it here would answer "no such
+            # user" instantly and "wrong password" slowly, which is a
+            # way of listing who banks here.
+            locked_as = user["username"] if user else (username or "").strip()
+
+            waiting = login_lock_remaining(cursor, locked_as, source)
             if waiting:
                 flash("Too many failed sign-in attempts. Try again in %s."
                       % describe_lockout(waiting))
                 return redirect(url_for("login"))
-
-            cursor.execute("""
-                SELECT user_id, username, password_hash,
-                       full_name, role, is_active, phone_number, cafe_id
-                FROM users
-                WHERE username = %s
-            """, (username,))
-
-            user = cursor.fetchone()
 
             if (
                 user
@@ -6274,7 +7111,7 @@ def login():
             ):
                 # A right answer wipes the slate, so a busy counter that
                 # mistyped twice this morning starts from nothing.
-                clear_login_failures(cursor, username, source)
+                clear_login_failures(cursor, locked_as, source)
                 connection.commit()
                 next_page = request.args.get("next", "")
                 next_is_safe = (
@@ -6286,9 +7123,18 @@ def login():
                 # one-time code before the session is actually created.
                 # Managers/cashiers, and admins without a number yet, sign
                 # in immediately as before.
-                if user["role"] == "admin" and user["phone_number"]:
+                # Everybody, not just admins. A password on its own
+                # is a password on its own whoever holds it, and the
+                # account that takes the money is the cashier's.
+                #
+                # Somebody with neither an address nor a number on file
+                # cannot be sent anything, and signs in on their
+                # password as before - a gap to close by filling in
+                # their details, not a reason to lock them out.
+                if user["phone_number"] or user.get("email"):
                     code = issue_login_otp(cursor, connection, user["user_id"])
-                    sent_live = send_login_otp_sms(user["phone_number"], code)
+                    sent_live, channel, shown_to = deliver_login_otp(
+                        user, code)
 
                     session.clear()
                     session["otp_user_id"] = user["user_id"]
@@ -6300,16 +7146,17 @@ def login():
                     if next_is_safe:
                         session["otp_next"] = next_page
 
+                    session["otp_sent_to"] = shown_to
+                    session["otp_channel"] = channel
+
                     if sent_live:
-                        flash(
-                            "Enter the verification code sent to your "
-                            "registered mobile number."
-                        )
+                        flash("Enter the code just sent to %s." % shown_to)
                     else:
                         flash(
-                            "Development mode — SMS is not configured, so "
-                            f"here is your code: {code}"
-                        )
+                            "Development mode — no %s is configured, "
+                            "so here is your code: %s"
+                            % ("mail server" if channel == "email"
+                               else "SMS gateway", code))
 
                     return redirect(url_for("login_verify_otp"))
 
@@ -6326,10 +7173,11 @@ def login():
                 settle_cafe_clock(user.get("cafe_id"),
                                   request.form.get("timezone"))
 
-                if user["role"] == "admin" and not user["phone_number"]:
+                if not user["phone_number"] and not user.get("email"):
                     flash(
-                        "Add a mobile number for this account in User "
-                        "Management to turn on one-time code login."
+                        "Add an email address or mobile number for this "
+                        "account in User Management to turn on one-time "
+                        "code sign-in."
                     )
 
                 if next_is_safe:
@@ -6346,7 +7194,7 @@ def login():
             # message stays the same for all three on purpose: telling
             # somebody which of the three it was hands them a way to
             # find out whose usernames exist.
-            failures = note_login_failure(cursor, username, source)
+            failures = note_login_failure(cursor, locked_as, source)
             connection.commit()
 
             if failures >= LOGIN_MAX_FAILURES:
@@ -6356,7 +7204,7 @@ def login():
                 flash("Invalid username or password.")
 
         except mysql.connector.Error as error:
-            flash(f"Login database error: {error}")
+            flash(database_error(error, "signing in"))
         finally:
             if cursor:
                 cursor.close()
@@ -6387,7 +7235,7 @@ def login_verify_otp():
         """, (pending_user_id,))
         user = cursor.fetchone()
 
-        if not user or not user["is_active"] or user["role"] != "admin":
+        if not user or not user["is_active"]:
             session.pop("otp_user_id", None)
             session.pop("otp_next", None)
             session.pop("otp_last_sent", None)
@@ -6456,6 +7304,13 @@ def login_verify_otp():
                 if next_page.startswith("/") and not next_page.startswith("//"):
                     return redirect(next_page)
 
+                # Where the password-only path already sent people.
+                # The dashboard is an admin page, and a cashier landing
+                # on it is bounced straight back out with a permission
+                # message - a strange thing to meet on the way in.
+                if user["role"] != "admin":
+                    return redirect(url_for("add_order"))
+
                 return redirect(url_for("home"))
 
             cursor.execute("""
@@ -6467,13 +7322,17 @@ def login_verify_otp():
             remaining = max(0, OTP_MAX_ATTEMPTS - (otp_row["attempts"] + 1))
             flash(f"Incorrect code. {remaining} attempt(s) left.")
 
+        # Whatever it was actually sent to, which is not always the
+        # phone any more.
         return render_template(
             "verify_otp.html",
-            masked_phone=mask_phone_number(user["phone_number"])
+            sent_to=session.get("otp_sent_to")
+                    or mask_phone_number(user["phone_number"]),
+            channel=session.get("otp_channel", "mobile"),
         )
 
     except mysql.connector.Error as error:
-        flash(f"Verification error: {error}")
+        flash(database_error(error, "verifying a code"))
         return redirect(url_for("login_verify_otp"))
     finally:
         if cursor:
@@ -6502,13 +7361,14 @@ def login_resend_otp():
         cursor = connection.cursor(dictionary=True)
 
         cursor.execute("""
-            SELECT user_id, role, is_active, phone_number
+            SELECT user_id, role, is_active, phone_number, email
             FROM users
             WHERE user_id = %s
         """, (pending_user_id,))
         user = cursor.fetchone()
 
-        if not user or not user["is_active"] or user["role"] != "admin" or not user["phone_number"]:
+        if (not user or not user["is_active"]
+                or not (user["phone_number"] or user.get("email"))):
             session.pop("otp_user_id", None)
             session.pop("otp_next", None)
             session.pop("otp_last_sent", None)
@@ -6516,19 +7376,23 @@ def login_resend_otp():
             return redirect(url_for("login"))
 
         code = issue_login_otp(cursor, connection, pending_user_id)
-        sent_live = send_login_otp_sms(user["phone_number"], code)
+        sent_live, channel, shown_to = deliver_login_otp(user, code)
         session["otp_last_sent"] = time.time()
+        session["otp_sent_to"] = shown_to
+        session["otp_channel"] = channel
 
         if sent_live:
-            flash("A new code has been sent to your mobile number.")
+            flash("A new code has been sent to %s." % shown_to)
         else:
             flash(
-                "Development mode — SMS is not configured, so here is "
-                f"your new code: {code}"
+                "Development mode — no %s is configured, so here is "
+                "your new code: %s"
+                % ("mail server" if channel == "email" else "SMS gateway",
+                   code)
             )
 
     except mysql.connector.Error as error:
-        flash(f"Could not send a new code: {error}")
+        flash(database_error(error, "sending a code"))
     finally:
         if cursor:
             cursor.close()
@@ -6548,7 +7412,8 @@ def logout():
 def register():
     """Public SaaS signup: one new cafe plus its first admin owner."""
     try: ensure_auth_schema()
-    except mysql.connector.Error as error: return f'Authentication database setup error: {error}',500
+    except mysql.connector.Error as error:
+        return database_error(error, "preparing the database"), 500
     if session.get('user_id'): return redirect(url_for('home'))
     if request.method=='POST':
         cafe_name=request.form.get('cafe_name','').strip(); full_name=request.form.get('full_name','').strip()
@@ -6556,15 +7421,28 @@ def register():
         password=request.form.get('password',''); confirm=request.form.get('confirm_password','')
         if not cafe_name or not full_name or not username: flash('Café name, full name and username are required.'); return redirect(url_for('register'))
         if len(password)<8: flash('Password must be at least 8 characters.'); return redirect(url_for('register'))
+        # The number is what a forgotten password is reset through, so a
+        # mistyped one is found out at the worst possible moment. It is
+        # optional here, and checked when it is given.
+        try:
+            phone = clean_phone(
+                request.form.get('phone_country', default_phone_country()),
+                phone)
+            email = clean_email(request.form.get('email', ''))
+        except (PhoneError, EmailError) as wrong:
+            flash(str(wrong)); return redirect(url_for('register'))
         if password!=confirm: flash('Password and confirm password do not match.'); return redirect(url_for('register'))
         c=None; cur=None
         try:
             c=get_db_connection(); cur=c.cursor()
             cur.execute('SELECT user_id FROM users WHERE username=%s',(username,))
             if cur.fetchone(): flash('That username is already in use.'); return redirect(url_for('register'))
+            if email:
+                cur.execute('SELECT user_id FROM users WHERE email=%s',(email,))
+                if cur.fetchone(): flash('That email address is already in use.'); return redirect(url_for('register'))
             cur.execute('INSERT INTO cafes(cafe_name) VALUES(%s)',(cafe_name,)); cid=cur.lastrowid
-            cur.execute("""INSERT INTO users(username,password_hash,full_name,role,is_active,phone_number,cafe_id)
-                         VALUES(%s,%s,%s,'admin',1,%s,%s)""",(username,generate_password_hash(password),full_name,phone or None,cid))
+            cur.execute("""INSERT INTO users(username,password_hash,full_name,role,is_active,phone_number,email,cafe_id)
+                         VALUES(%s,%s,%s,'admin',1,%s,%s,%s)""",(username,generate_password_hash(password),full_name,phone or None,email or None,cid))
             uid=cur.lastrowid; cur.execute('UPDATE cafes SET owner_user_id=%s WHERE cafe_id=%s',(uid,cid)); c.commit()
             session.clear(); session.permanent=True; session['user_id']=uid; session['username']=username; session['role']='admin'; session['cafe_id']=cid
 
@@ -6579,7 +7457,7 @@ def register():
             return redirect(url_for('home'))
         except mysql.connector.Error as error:
             if c: c.rollback()
-            flash(f'Registration error: {error}')
+            flash(database_error(error, "registering a cafe"))
         finally:
             if cur: cur.close()
             if c: c.close()
@@ -6592,7 +7470,7 @@ def forgot_password():
     try:
         ensure_auth_schema()
     except mysql.connector.Error as error:
-        return f"Authentication database setup error: {error}", 500
+        return database_error(error, "preparing the database"), 500
 
     if session.get("user_id"):
         return redirect(url_for("home"))
@@ -6601,11 +7479,20 @@ def forgot_password():
         username = request.form.get("username", "").strip()
         full_name = request.form.get("full_name", "").strip()
         phone_number = request.form.get("phone_number", "").strip()
+        phone_country = request.form.get(
+            "phone_country", default_phone_country())
         new_password = request.form.get("new_password", "")
         confirm = request.form.get("confirm_password", "")
 
         if not username or not full_name:
-            flash("Please enter your username and full name.")
+            flash("Please enter your username or email, and your full name.")
+            return redirect(url_for("forgot_password"))
+
+        try:
+            phone_number = clean_phone(phone_country, phone_number,
+                                       required=True)
+        except PhoneError as wrong:
+            flash(str(wrong))
             return redirect(url_for("forgot_password"))
 
         if len(new_password) < 8:
@@ -6622,13 +7509,12 @@ def forgot_password():
             connection = get_db_connection()
             cursor = connection.cursor(dictionary=True)
 
-            cursor.execute("""
-                SELECT user_id, full_name, is_active, phone_number
-                FROM users
-                WHERE username = %s
-            """, (username,))
-
-            user = cursor.fetchone()
+            # The same box takes either, the same way the sign-in
+            # page does - somebody who has forgotten a password is not
+            # in a mood to also remember which of the two they chose.
+            user = find_sign_in(
+                cursor, username,
+                "user_id, full_name, is_active, phone_number")
 
             # Username + full name alone was NOT a security check: full names
             # are displayed throughout the UI (order lists, user management),
@@ -6673,7 +7559,7 @@ def forgot_password():
             return redirect(url_for("login"))
 
         except mysql.connector.Error as error:
-            flash(f"Password reset error: {error}")
+            flash(database_error(error, "resetting a password"))
             return redirect(url_for("forgot_password"))
         finally:
             if cursor:
@@ -6715,7 +7601,7 @@ def require_login():
     try:
         ensure_auth_schema()
     except mysql.connector.Error as error:
-        return f"Authentication database setup error: {error}", 500
+        return database_error(error, "preparing the database"), 500
 
     if not session.get("user_id"):
         return redirect(url_for("login", next=request.path))
@@ -6868,9 +7754,18 @@ def add_user():
         password = request.form.get("password", "")
         role = request.form.get("role", "cashier")
         phone_number = request.form.get("phone_number", "").strip()
+        phone_country = request.form.get(
+            "phone_country", default_phone_country())
 
         if not username or not full_name or len(password) < 8:
             flash("Username, full name and a password of at least 8 characters are required.")
+            return redirect(url_for("add_user"))
+
+        try:
+            phone_number = clean_phone(phone_country, phone_number)
+            email = clean_email(request.form.get("email", ""))
+        except (PhoneError, EmailError) as wrong:
+            flash(str(wrong))
             return redirect(url_for("add_user"))
 
         if role not in {"admin", "manager", "cashier", "staff"}:
@@ -6888,14 +7783,15 @@ def add_user():
             cursor.execute("""
                 INSERT INTO users
                     (username, password_hash, full_name, role,
-                     is_active, phone_number, cafe_id)
-                VALUES (%s, %s, %s, %s, 1, %s, %s)
+                     is_active, phone_number, email, cafe_id)
+                VALUES (%s, %s, %s, %s, 1, %s, %s, %s)
             """, (
                 username,
                 generate_password_hash(password),
                 full_name,
                 role,
                 phone_number or None,
+                email or None,
                 require_cafe_session(),
             ))
             connection.commit()
@@ -6937,7 +7833,8 @@ def edit_user(user_id):
         # admin could edit - and reset the password of - any user in any
         # other café just by changing the id in the URL.
         cursor.execute("""
-            SELECT user_id, username, full_name, role, is_active, phone_number
+            SELECT user_id, username, full_name, role, is_active,
+                   phone_number, email
             FROM users
             WHERE user_id = %s AND cafe_id = %s
         """, (user_id, require_cafe_session()))
@@ -6953,9 +7850,18 @@ def edit_user(user_id):
             is_active = 1 if request.form.get("is_active") else 0
             new_password = request.form.get("password", "")
             phone_number = request.form.get("phone_number", "").strip()
+            phone_country = request.form.get(
+                "phone_country", default_phone_country())
 
             if not full_name or role not in {"admin", "manager", "cashier", "staff"}:
                 flash("Please provide valid user details.")
+                return redirect(url_for("edit_user", user_id=user_id))
+
+            try:
+                phone_number = clean_phone(phone_country, phone_number)
+                email = clean_email(request.form.get("email", ""))
+            except (PhoneError, EmailError) as wrong:
+                flash(str(wrong))
                 return redirect(url_for("edit_user", user_id=user_id))
 
             if user_id == session.get("user_id") and not is_active:
@@ -6985,21 +7891,24 @@ def edit_user(user_id):
                 cursor.execute("""
                     UPDATE users
                     SET full_name=%s, role=%s, is_active=%s,
-                        phone_number=%s, password_hash=%s
+                        phone_number=%s, email=%s, password_hash=%s
                     WHERE user_id=%s AND cafe_id=%s
                 """, (
                     full_name, role, is_active,
                     phone_number or None,
+                    email or None,
                     generate_password_hash(new_password),
                     user_id, require_cafe_session()
                 ))
             else:
                 cursor.execute("""
                     UPDATE users
-                    SET full_name=%s, role=%s, is_active=%s, phone_number=%s
+                    SET full_name=%s, role=%s, is_active=%s,
+                        phone_number=%s, email=%s
                     WHERE user_id=%s AND cafe_id=%s
                 """, (
                     full_name, role, is_active, phone_number or None,
+                    email or None,
                     user_id, require_cafe_session()
                 ))
 
@@ -7162,7 +8071,7 @@ def delete_user(user_id):
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
-        flash(f"Could not delete that user: {error}")
+        flash(database_error(error, "deleting a user"))
         return redirect(url_for("users"))
     finally:
         if cursor:
@@ -7497,7 +8406,8 @@ def kitchen_heartbeat():
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
-        return jsonify({"ok": False, "error": str(error)}), 500
+        return jsonify({"ok": False,
+                        "error": "Could not save that."}), 500
     finally:
         if cursor:
             cursor.close()
@@ -7660,7 +8570,8 @@ def kitchen_board():
             ],
         })
     except mysql.connector.Error as error:
-        return jsonify({"orders": [], "error": str(error)}), 500
+        return jsonify({"orders": [],
+                        "error": "Could not load orders."}), 500
     finally:
         if cursor:
             cursor.close()
@@ -7737,7 +8648,8 @@ def kitchen_pending():
                 cursor, session.get("cafe_id")),
         })
     except mysql.connector.Error as error:
-        return jsonify({"orders": [], "error": str(error)}), 500
+        return jsonify({"orders": [],
+                        "error": "Could not load orders."}), 500
     finally:
         if cursor:
             cursor.close()
@@ -7771,7 +8683,8 @@ def kitchen_claim(order_id):
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
-        return jsonify({"claimed": False, "error": str(error)}), 500
+        return jsonify({"claimed": False,
+                        "error": "Could not claim that ticket."}), 500
     finally:
         if cursor:
             cursor.close()
@@ -7977,7 +8890,8 @@ def timezone_guess():
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
-        return jsonify({"ok": False, "reason": str(error)}), 500
+        return jsonify({"ok": False,
+                        "reason": "Could not save that."}), 500
     finally:
         if cursor:
             cursor.close()
@@ -8013,7 +8927,8 @@ def tutorial_seen():
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
-        return jsonify({"ok": False, "reason": str(error)}), 500
+        return jsonify({"ok": False,
+                        "reason": "Could not save that."}), 500
     finally:
         if cursor:
             cursor.close()
@@ -8089,7 +9004,8 @@ def kitchen_item_made(order_item_id):
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
-        return jsonify({"ok": False, "reason": str(error)}), 500
+        return jsonify({"ok": False,
+                        "reason": "Could not save that."}), 500
     finally:
         if cursor:
             cursor.close()
@@ -8307,6 +9223,29 @@ def public_place_order(token):
         if cafe is None:
             return render_template("public_gone.html"), 404
 
+        # Before the menu is read, before stock is touched, and before
+        # anything takes the per-cafe lock that orders queue on. This
+        # route has no session and no CSRF token to slow anybody down -
+        # it cannot have, because a customer never signs in - so the
+        # count is the only thing standing between one script and every
+        # order this cafe can process.
+        #
+        # A refusal costs one query and holds no lock, which is the
+        # whole point: the kitchen's own orders keep moving through
+        # while a flood bounces off this line.
+        waiting = qr_orders_over_limit(cursor, token, request_source())
+        if waiting:
+            connection.rollback()
+            flash("That is a lot of orders at once. Please wait about "
+                  "%s and try again, or ask a member of staff."
+                  % describe_lockout(waiting))
+            # A plain redirect, not a 429. A browser does not follow a
+            # redirect it was given with 429, so the customer would get
+            # a blank page instead of the sentence explaining why - and
+            # the person being turned away here is far more often a
+            # customer at a busy table than anybody attacking anything.
+            return redirect(url_for("public_menu", token=token))
+
         wanted = {}
         for field, value in request.form.items():
             if field.startswith("quantity_"):
@@ -8324,6 +9263,11 @@ def public_place_order(token):
                 source="qr",
                 discount_mult=discount_multiplier(cafe["cafe_id"]),
             )
+            # Counted only once the order is real. An order that fails
+            # for its own reasons - the last sandwich went while the
+            # customer was deciding - is not also held against the
+            # table that tried.
+            note_qr_order(cursor, token, request_source())
             connection.commit()
         except OrderError as error:
             connection.rollback()
@@ -8331,7 +9275,7 @@ def public_place_order(token):
             return redirect(url_for("public_menu", token=token))
 
         return redirect(url_for("public_order_placed", token=token,
-                                order_id=result["order_id"]))
+                                ref=result["public_ref"]))
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
@@ -8346,14 +9290,16 @@ def public_place_order(token):
             connection.close()
 
 
-@app.route("/m/<token>/placed/<int:order_id>")
-def public_order_placed(token, order_id):
+@app.route("/m/<token>/placed/<ref>")
+def public_order_placed(token, ref):
     """
     The number to quote at the counter, and what was ordered.
 
-    The order is looked up by cafe as well as by id, so one cafe's code
-    cannot be used to read another's orders by changing the number in the
-    address.
+    Addressed by the order's own random reference rather than its id.
+    The id is sequential, and this page needs no sign-in, so anybody at
+    a table could otherwise count upwards and read what every other
+    table had ordered. The cafe is still checked underneath, so this is
+    a second lock and not a replacement for the first.
     """
     connection = None
     cursor = None
@@ -8367,10 +9313,10 @@ def public_order_placed(token, order_id):
 
         cursor.execute("""
             SELECT order_id, order_date, total_amount, order_status,
-                   daily_no
+                   daily_no, public_ref
             FROM orders
-            WHERE order_id = %s AND user_id = %s AND source = 'qr'
-        """, (order_id, cafe["owner_user_id"]))
+            WHERE public_ref = %s AND user_id = %s AND source = 'qr'
+        """, (ref, cafe["owner_user_id"]))
         order = cursor.fetchone()
 
         if order is None:
@@ -8381,7 +9327,7 @@ def public_order_placed(token, order_id):
             FROM order_items
             WHERE order_id = %s
             ORDER BY order_item_id
-        """, (order_id,))
+        """, (order["order_id"],))
         items = cursor.fetchall()
 
         # A finished order reads as all made, whatever the lines say. An
@@ -8407,8 +9353,8 @@ def public_order_placed(token, order_id):
             connection.close()
 
 
-@app.route("/m/<token>/status/<int:order_id>")
-def public_order_status(token, order_id):
+@app.route("/m/<token>/status/<ref>")
+def public_order_status(token, ref):
     """
     Whether the kitchen has finished a customer's order yet.
 
@@ -8416,9 +9362,10 @@ def public_order_status(token, order_id):
     it answers with as little as will do the job: the order's status, and
     which of its lines have been made. No names, no prices, no totals -
     the page already has those, and nothing else needs them. Looked up by
-    cafe as well as by id, the same way the page itself is, so one cafe's
-    code cannot be used to watch another's orders by changing the number
-    in the address.
+    cafe as well as by its own random reference, the same way the page
+    itself is - the id beside it is sequential, and this answers without
+    a sign-in, so a number in the address would let one table watch
+    every other table's order.
     """
     connection = None
     cursor = None
@@ -8431,9 +9378,9 @@ def public_order_status(token, order_id):
             return jsonify({"status": "gone"}), 404
 
         cursor.execute(
-            "SELECT order_status FROM orders "
-            "WHERE order_id = %s AND user_id = %s AND source = 'qr'",
-            (order_id, cafe["owner_user_id"])
+            "SELECT order_id, order_status FROM orders "
+            "WHERE public_ref = %s AND user_id = %s AND source = 'qr'",
+            (ref, cafe["owner_user_id"])
         )
         order = cursor.fetchone()
         if order is None:
@@ -8444,7 +9391,7 @@ def public_order_status(token, order_id):
         cursor.execute(
             "SELECT order_item_id, made FROM order_items "
             "WHERE order_id = %s ORDER BY order_item_id",
-            (order_id,))
+            (order["order_id"],))
 
         return jsonify({
             "status": order["order_status"],
@@ -9011,10 +9958,16 @@ def healthz():
             "database": "ok",
             "connect_ms": round((acquired - started) * 1000, 1),
             "query_ms": round((queried - acquired) * 1000, 1),
+            # Which cache is actually in use. Setting REDIS_URL and
+            # having it quietly not connect looks exactly like having
+            # set it and it working, right up until two workers
+            # disagree about a cafe's name.
+            "cache": cache_backend_name(),
         }), 200
     except Exception as error:
         app.logger.exception("health check failed")
-        return jsonify({"status": "error", "database": str(error)}), 503
+        return jsonify({"status": "error",
+                        "database": "unavailable"}), 503
 
 
 @app.errorhandler(TenantSessionError)

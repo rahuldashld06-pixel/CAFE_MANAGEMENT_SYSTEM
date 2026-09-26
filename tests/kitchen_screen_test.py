@@ -334,10 +334,16 @@ try:
     waiting = guest.post("/m/%s/order" % token,
                          data={"quantity_%s" % food_ids[0]: "1"},
                          follow_redirects=False)
-    theirs = int(waiting.headers["Location"].rstrip("/").split("/")[-1])
+    # The redirect ends in the order's own reference now. The page a
+    # customer holds is addressed by that; the kitchen routes below
+    # still want the number, so both are kept.
+    theirs_ref = waiting.headers["Location"].rstrip("/").split("/")[-1]
+    theirs = mysql_shim._DB.execute(
+        "SELECT order_id FROM orders WHERE public_ref = ?",
+        (theirs_ref,)).fetchone()[0]
 
     browser.call("Page.navigate",
-                 url=BASE + "/m/%s/placed/%d" % (token, theirs))
+                 url=BASE + "/m/%s/placed/%s" % (token, theirs_ref))
     wait_for("!!document.getElementById('orderStateText')",
              "the customer's page")
 
@@ -384,7 +390,10 @@ try:
                      data={"quantity_%s" % food_ids[0]: "1",
                            "quantity_%s" % food_ids[1]: "1"},
                      follow_redirects=False)
-    two_id = int(two.headers["Location"].rstrip("/").split("/")[-1])
+    two_id = mysql_shim._DB.execute(
+        "SELECT order_id FROM orders WHERE public_ref = ?",
+        (two.headers["Location"].rstrip("/").split("/")[-1],)
+    ).fetchone()[0]
 
     browser.call("Page.navigate", url=BASE + "/kitchen")
     wait_for("!!document.querySelector('.kitchen-tick')",

@@ -1269,6 +1269,27 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
             }, 5000);
         }
 
+        /* What the stock will be once the order lands, worked out
+           from what was ordered. A guess, and replaced by the real
+           figures the moment the server answers - but without it the
+           screen would show the old counts for five seconds and look
+           like nothing had happened. */
+        function optimisticStock(held) {
+            return held.map(function (line) {
+                const id = line.id.replace("quantity_", "");
+                /* The count already on screen, read back off the same
+                   element applyStockUpdates writes it to, so the two
+                   cannot drift apart. */
+                const shown = document.getElementById("food_status_" + id);
+                const now = shown
+                    ? Number((shown.textContent || "").replace(/\D/g, ""))
+                    : NaN;
+                if (!isFinite(now)) return null;
+                return { food_id: Number(id),
+                         quantity: Math.max(0, now - Number(line.value)) };
+            }).filter(Boolean);
+        }
+
         function applyStockUpdates(foods) {
 
             if (!Array.isArray(foods)) return;
@@ -1304,6 +1325,59 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
 
             // Stock just moved; carry it onto the Hot Selling copies.
             syncHotMirrors();
+        }
+
+        /* What is in the basket right now, so that if the order does
+           not go through it can be put back exactly as it was rather
+           than the cashier having to remember it. */
+        function basketSnapshot() {
+            const held = [];
+            getQuantityInputs().forEach(function (input) {
+                if (Number(input.value) > 0) {
+                    held.push({ id: input.id, value: input.value });
+                }
+            });
+            return held;
+        }
+
+        function restoreBasket(held) {
+            if (!held || !held.length) return;
+            held.forEach(function (line) {
+                const input = document.getElementById(line.id);
+                if (input) input.value = line.value;
+            });
+            syncHotMirrors();
+            updateFloatingOrderSummary();
+        }
+
+        /* A failure after the screen has already said "sent" has to be
+           impossible to walk past. The success toast clears itself in a
+           second; this one stays until somebody dismisses it, because
+           the person it is for has already turned to the next
+           customer. */
+        function showStuckWarning(message) {
+            const existing = document.getElementById("orderFailedBanner");
+            if (existing) existing.remove();
+
+            const banner = document.createElement("div");
+            banner.id = "orderFailedBanner";
+            banner.className = "order-failed-banner";
+            banner.setAttribute("role", "alert");
+
+            const words = document.createElement("div");
+            words.textContent = message;
+            banner.appendChild(words);
+
+            const dismiss = document.createElement("button");
+            dismiss.type = "button";
+            dismiss.className = "order-failed-banner__close";
+            dismiss.textContent = "Got it";
+            dismiss.addEventListener("click", function () {
+                banner.remove();
+            });
+            banner.appendChild(dismiss);
+
+            document.body.appendChild(banner);
         }
 
         function resetAllQuantities() {
@@ -1346,14 +1420,30 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
                 const createButton = document.getElementById("popupCreateOrder");
                 const originalLabel = createButton ? createButton.innerHTML : "";
 
-                if (createButton) {
-                    createButton.disabled = true;
-                    createButton.innerHTML = "Creating…";
-                }
-
-                showStatus("loading", "Creating your order…");
-
+                /* Taken before the basket is emptied, so a failure can
+                   put it back. */
+                const held = basketSnapshot();
                 const formData = new FormData(orderForm);
+
+                /* The screen moves on now. The order is still being
+                   written - eleven round trips to a database half a
+                   second away - and none of that is anything the person
+                   at the till can do something about, so none of it is
+                   anything they should be made to watch.
+
+                   Everything below this point either confirms what has
+                   already been said or takes it back loudly. */
+                applyStockUpdates(optimisticStock(held));
+                resetAllQuantities();
+                updateFloatingOrderSummary();
+                hideStatus();
+                closeSummary();
+                showPageToast("Order sent to the kitchen.");
+
+                if (createButton) {
+                    createButton.disabled = false;
+                    createButton.innerHTML = originalLabel;
+                }
 
                 fetch(orderForm.action || window.location.href, {
                     method: "POST",
@@ -1374,12 +1464,11 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
 
                         if (result.ok && data.success) {
 
+                            /* The screen said this already. What it did
+                               not have was the real stock counts, which
+                               only the database knows - the guess made
+                               a moment ago is replaced here. */
                             applyStockUpdates(data.foods);
-                            resetAllQuantities();
-                            updateFloatingOrderSummary();
-                            hideStatus();
-                            closeSummary();
-                            showPageToast(data.message || "Order has been placed.");
 
                             // Kitchen ticket, if the café has asked for
                             // it. The delay is its own setting: a few
@@ -1400,18 +1489,26 @@ document.addEventListener('DOMContentLoaded', syncHotMirrors);
 
                         } else {
 
-                            showStatus("error", data.message || "Could not create the order. Please try again.");
+                            /* Said "sent" a moment ago and it was not.
+                               The items go back in the basket and the
+                               message stays up until it is dismissed. */
+                            restoreBasket(held);
                             if (data.foods) applyStockUpdates(data.foods);
+                            showStuckWarning(
+                                (data.message
+                                 || "That order did not go through.")
+                                + " It is back in the basket - please "
+                                + "send it again.");
                         }
                     })
                     .catch(function () {
-                        showStatus("error", "Could not reach the server. Please check your connection and try again.");
+                        restoreBasket(held);
+                        showStuckWarning(
+                            "That order did not reach the till system. "
+                            + "It is back in the basket - check the "
+                            + "connection and send it again.");
                     })
                     .finally(function () {
-                        if (createButton) {
-                            createButton.disabled = false;
-                            createButton.innerHTML = originalLabel;
-                        }
                         updateFloatingOrderSummary();
                     });
             });

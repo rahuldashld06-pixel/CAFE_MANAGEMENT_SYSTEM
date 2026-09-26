@@ -212,11 +212,15 @@
     <h2>Verify it's you</h2>
 
     <p class="subtitle">
-        Enter the 6-digit code sent to the mobile number on file
-        {% if masked_phone %}
-            ending in <strong>{{ masked_phone }}</strong>
+        {# Says which address or number it went to, because somebody
+           with two of either needs to know where to go and look. #}
+        Enter the 6-digit code sent
+        {% if sent_to and channel == "email" %}
+            to <strong>{{ sent_to }}</strong>
+        {% elif sent_to %}
+            to the mobile number ending in <strong>{{ sent_to }}</strong>
         {% else %}
-            for this account
+            to the contact details on file for this account
         {% endif %}.
         The code expires a few minutes after it's sent.
     </p>
