@@ -38,6 +38,20 @@ branding, fully isolated from the others.
   that day, and every order on it is still checked against the cafe
   before it is shown - an address will not do it, because a cafe's
   tables sit behind one router.
+- **The counter's New Order screen.** The menu reads the way the
+  customer's does - every section as a tab across the top, All first -
+  and each card has the price beside the quantity. On a laptop, desktop
+  or TV the order is written beside it like a receipt, always open: a
+  line per dish with its own - and +, Clear all, the totals, and a
+  button that says what it will charge. On a phone or tablet it is the
+  sheet behind the Order Summary button, as before.
+- **No bar across the top of a large screen.** On a laptop, desktop or
+  TV the profile, the full-screen button and Order Status sit at the
+  foot of the sidebar, with the menu opening upwards, and every page's
+  title takes the top of the screen. Phones and tablets, where the
+  sidebar is a drawer, keep the bar. One of each element is moved
+  between the two places rather than drawn twice, so every id, handler
+  and tour step is the one there has always been.
 - **Categories and menu.** Categories, food items with photos, prices.
 - **Inventory.** Stock levels drive availability automatically — an item
   at zero stock disappears from the order screen.
@@ -335,7 +349,7 @@ tests/print_test.py  Printable bill and kitchen ticket test suite
 tests/staff_access_test.py Non-admin permission test suite
 tests/billing_paid_test.py Bill settlement test suite
 tests/browser_nav_test.py Real-browser navigation test suite
-tests/menu_search_test.py Real-browser New Order menu/search test suite
+tests/menu_search_test.py Real-browser New Order menu, tabs, search and docked order suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
 tests/mobile_nav_test.py Real-browser mobile drawer test suite
 tests/tutorial_test.py First-sign-in tour test suite
@@ -526,9 +540,9 @@ python tests/print_test.py        # expect PASSED: 56   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 33   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 44   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
-python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
+python tests/menu_search_test.py  # expect PASSED: 31   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 84   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 86   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0

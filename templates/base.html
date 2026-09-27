@@ -200,6 +200,18 @@
 
             <!--nav:end--></nav>
 
+            {# On a laptop, desktop or TV there is no top bar. What it held -
+               the profile and the full-screen button - lives down here
+               where the sidebar ends, with Order Status above it. They are
+               moved in by the script after the Order Status popup, and back
+               out on a phone or tablet, where the sidebar is a drawer that
+               is usually shut. Empty in the markup on purpose: one of each,
+               moved, rather than two copies with two sets of ids. #}
+            <div class="sidebar-foot" id="sidebarFoot">
+                <div class="sidebar-foot__status"></div>
+                <div class="sidebar-foot__me"></div>
+            </div>
+
         </aside>
 
         <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
@@ -424,6 +436,62 @@
     </div>
     {% endif %}
 
+    <script>
+    // ---- Where the profile lives ----
+    // A large screen has no top bar: the profile, the full-screen button
+    // and Order Status go to the foot of the sidebar. A phone or tablet
+    // keeps them where they were - the bar at the top and the corner of
+    // the screen - because there the sidebar is a drawer that is shut.
+    //
+    // Run here, straight after the last of the three is in the page and
+    // before the rest of the shell's script, so on a large screen the
+    // first paint already has them in the sidebar. The query is the same
+    // one style.css uses for "not a drawer", so the two cannot disagree.
+    (function () {
+        var LARGE = "(min-width: 1401px), (min-width: 1025px) and (pointer: fine)";
+        var foot = document.getElementById("sidebarFoot");
+        if (!foot || !window.matchMedia) return;
+
+        var status = foot.querySelector(".sidebar-foot__status");
+        var me = foot.querySelector(".sidebar-foot__me");
+        var moving = [
+            [document.getElementById("orderStatusFab"), status],
+            [document.getElementById("profileMenu"), me],
+            [document.getElementById("fullscreenBtn"), me]
+        ].filter(function (pair) { return pair[0]; });
+
+        // A marker where each one sits on a small screen, to go back to.
+        moving.forEach(function (pair) {
+            var home = document.createComment("home of #" + pair[0].id);
+            pair[0].parentNode.insertBefore(home, pair[0]);
+            pair.push(home);
+        });
+
+        var query = window.matchMedia(LARGE);
+
+        function place() {
+            var large = query.matches;
+            document.documentElement.classList.toggle("shell-large", large);
+            moving.forEach(function (pair) {
+                var el = pair[0];
+                if (large) {
+                    if (el.parentNode !== pair[1]) pair[1].appendChild(el);
+                } else if (el.previousSibling !== pair[2]) {
+                    pair[2].parentNode.insertBefore(el, pair[2].nextSibling);
+                }
+            });
+            // An open menu that has just changed places would be hanging
+            // off the wrong edge.
+            var menu = document.getElementById("profileMenu");
+            if (menu) menu.classList.remove("open");
+        }
+
+        place();
+        if (query.addEventListener) query.addEventListener("change", place);
+        else if (query.addListener) query.addListener(place);
+    }());
+    </script>
+
 
     {% if tutorial_steps %}
     {# The tour. Out here in the shell rather than inside the page, so
@@ -609,6 +677,15 @@ window.CafeShell = {
 
         // A swapped-in page can carry a taller or shorter bar with it.
         document.addEventListener("instant:load", measure);
+
+        // And the bar itself changing size for any other reason: a laptop
+        // window narrowed past the point where the profile comes back from
+        // the sidebar makes the bar taller after the resize event has been
+        // and gone, and the title would sit at the old height until the
+        // next one.
+        if (window.ResizeObserver) {
+            new ResizeObserver(measure).observe(topbar);
+        }
     }
 
     // ---- Remembering where the profile menu was opened from ----

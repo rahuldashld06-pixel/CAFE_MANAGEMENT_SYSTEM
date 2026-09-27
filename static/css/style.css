@@ -4490,3 +4490,126 @@ body.tour-open { overflow: hidden; }
 .draft-note__discard:focus-visible {
     background: rgba(255, 255, 255, .08);
 }
+
+/* ============================================================
+   A large screen has no top bar
+
+   On a laptop, desktop or TV the bar across the top held the
+   full-screen button and the profile, and cost every page 64px.
+   Both now sit at the foot of the sidebar with Order Status
+   above them (moved there by a script in base.html), and every
+   page's own title bar takes the top of the screen.
+
+   Colours are untouched: everything here reuses the rules the
+   same elements already had, and changes only where they sit.
+   Phones and tablets - the drawer layout - are left exactly as
+   they were.
+   ============================================================ */
+.sidebar-foot { display: none; }
+
+@media (min-width: 1401px),
+       (min-width: 1025px) and (pointer: fine) {
+
+    .topbar { display: none; }
+
+    /* The page title bar sticks at the very top now, and brings its own
+       breathing room rather than borrowing the bar's. */
+    .main { padding-top: 0; }
+
+    .page-header {
+        top: 0;
+        padding-top: 22px;
+    }
+
+    /* A notice above a page's title would otherwise touch the top of the
+       screen. */
+    #page-view > .flash-stack:first-child { margin-top: 18px; }
+
+    /* ---- The foot of the sidebar ---- */
+    .sidebar-foot {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        flex: 0 0 auto;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--espresso-800);
+    }
+
+    .sidebar-foot__me {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .sidebar-foot__status:empty { display: none; }
+
+    /* Order Status: the same copper pill, at the full width of the
+       sidebar instead of floating over the corner of it. */
+    .sidebar-foot .order-status-fab {
+        position: static;
+        width: 100%;
+        justify-content: flex-start;
+        transform: none;
+        box-shadow: none;
+        border-radius: var(--radius-md);
+        padding: 11px 14px;
+    }
+
+    .sidebar-foot .order-status-fab:hover { transform: none; }
+
+    .sidebar-foot .order-status-fab__badge { margin-left: auto; }
+
+    /* The profile: avatar, name and role across the sidebar, with the
+       menu opening upwards from it. */
+    .sidebar-foot .profile-menu {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .sidebar-foot .profile-trigger {
+        width: 100%;
+        border-radius: var(--radius-md);
+        padding: 7px 10px 7px 7px;
+    }
+
+    .sidebar-foot .profile-id {
+        flex: 1 1 auto;
+        min-width: 0;
+        text-align: left;
+    }
+
+    .sidebar-foot .profile-name,
+    .sidebar-foot .profile-role {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Upwards, and no wider than the sidebar: the sidebar clips what
+       hangs outside it, and a menu cut off at its edge is worse than a
+       narrower one. */
+    .sidebar-foot .profile-dropdown {
+        top: auto;
+        bottom: calc(100% + 10px);
+        left: 0;
+        right: auto;
+        width: calc(100% + 48px);
+        max-width: 224px;
+        max-height: calc(100vh - 150px);
+        overflow-y: auto;
+        transform: translateY(6px);
+    }
+
+    .sidebar-foot .profile-menu.open .profile-dropdown {
+        transform: translateY(0);
+    }
+
+    .sidebar-foot .fullscreen-btn {
+        flex: 0 0 auto;
+        margin-left: 0;
+    }
+}

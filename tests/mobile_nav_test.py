@@ -605,8 +605,8 @@ try:
 
     print("\n=== The page's own title stays while the page scrolls ===")
     # Scrolling a long list used to leave nothing on screen saying which
-    # page you were on. Two bars stack now: the profile bar, then the
-    # page title under it, with the content passing underneath.
+    # page you were on. The page's title stays at the top while the
+    # content passes underneath it.
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=680,
            deviceScaleFactor=1, mobile=False)
     b.call("Emulation.setTouchEmulationEnabled", enabled=False)
@@ -630,21 +630,55 @@ try:
     check("the page actually scrolled", scrolled > 100,
           "only reached %dpx - the checks below would prove nothing"
           % scrolled)
-    check("the top bar is still at the top", -2 <= box(".topbar", "top") <= 2,
-          "it moved to %dpx" % box(".topbar", "top"))
-    check("the page title is still on screen",
-          box(".page-header", "top") >= -2
+    # A large screen has no bar across the top any more: what it held -
+    # the profile and the full-screen button - sits at the foot of the
+    # sidebar with Order Status, and the page's own title takes the top.
+    check("there is no bar across the top of a large screen",
+          b.evaluate("getComputedStyle(document.querySelector('.topbar'))"
+                     ".display") == "none",
+          "the top bar is still drawn on a 1440px screen")
+    check("the page title is still on screen, at the very top",
+          -2 <= box(".page-header", "top") <= 2
           and box(".page-header", "bottom") < 680,
           "the title is at %dpx" % box(".page-header", "top"))
     check("and it still says which page this is",
           "Food Management" in title, "it reads %r" % title)
 
-    # The title's offset is measured from the real bar rather than
-    # guessed, so the two must meet exactly - no overlap, no gap.
-    gap = box(".page-header", "top") - box(".topbar", "bottom")
-    check("the two bars meet exactly, with no overlap and no gap",
-          -1 <= gap <= 1,
-          "there is a %dpx gap between them" % gap)
+    foot = b.evaluate("""
+        (function () {
+            var foot = document.getElementById('sidebarFoot');
+            var me = document.getElementById('profileTrigger');
+            var box = me.getBoundingClientRect();
+            var side = document.getElementById('appSidebar')
+                               .getBoundingClientRect();
+            return JSON.stringify({
+                inFoot: foot.contains(me),
+                inside: box.left >= side.left - 1 && box.right <= side.right + 1,
+                low: box.bottom > window.innerHeight - 120,
+                full: foot.contains(document.getElementById('fullscreenBtn')),
+                status: foot.contains(document.getElementById('orderStatusFab'))
+            });
+        }())
+    """)
+    import json as _json
+    foot = _json.loads(foot)
+    check("the profile is at the foot of the sidebar",
+          foot["inFoot"] and foot["inside"] and foot["low"],
+          "the profile is not where the sidebar ends: %s" % foot)
+    check("with the full-screen button and Order Status beside it",
+          foot["full"] and foot["status"],
+          "one of them was left behind: %s" % foot)
+
+    # Narrowed to a phone, all three go back to the bar and the corner -
+    # there the sidebar is a drawer that is shut - and the title's offset
+    # is the bar's real, measured height.
+    b.call("Emulation.setDeviceMetricsOverride", width=390, height=780,
+           deviceScaleFactor=2, mobile=True)
+    time.sleep(0.8)
+    check("on a phone the profile is back in the top bar",
+          b.evaluate("document.querySelector('.topbar')"
+                     ".contains(document.getElementById('profileTrigger'))"),
+          "the profile stayed in the drawer, out of sight")
 
     check("the measured bar height is what the title uses",
           b.evaluate("""
@@ -654,10 +688,14 @@ try:
                       .getPropertyValue('--topbar-h'), 10);
                   var real = Math.round(document.querySelector('.topbar')
                       .getBoundingClientRect().height);
-                  return Math.abs(declared - real) <= 1;
+                  return real > 0 && Math.abs(declared - real) <= 1;
               }())
           """),
           "the title is offset by a guess rather than the bar's real height")
+
+    b.call("Emulation.setDeviceMetricsOverride", width=1440, height=680,
+           deviceScaleFactor=1, mobile=False)
+    time.sleep(0.5)
 
     print("\n=== Nothing draws a scrollbar, and everything still scrolls ===")
     for label, selector in (("the page", "document.documentElement"),

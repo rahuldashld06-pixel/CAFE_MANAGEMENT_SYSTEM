@@ -273,6 +273,172 @@ try:
           visible_names() == ["Samosa"], "got %s" % visible_names())
     check("no full page reload happened",
           b.evaluate("performance.getEntriesByType('navigation').length") == 1)
+    type_query("")
+
+    print("\n=== Sections as tabs, the way the customer's menu reads ===")
+    tabs = b.evaluate("""
+        Array.prototype.map.call(
+            document.querySelectorAll('#menuTabs [data-tab]'),
+            function (t) { return t.textContent.replace(/\\s+/g, ' ').trim(); })
+    """)
+    check("every section is a tab, All first",
+          len(tabs) == 4 and tabs[0].startswith("All items"),
+          "the tabs read %s" % tabs)
+
+    b.evaluate("""
+        Array.prototype.filter.call(
+            document.querySelectorAll('#menuTabs [data-tab]'),
+            function (t) { return t.textContent.indexOf('Snacks') !== -1; }
+        )[0].click()
+    """)
+    time.sleep(0.2)
+    check("choosing a tab shows only that section",
+          visible_sections() == ["Snacks"]
+          and sorted(visible_names()) == ["Samosa", "Veg Puff"],
+          "showing %s: %s" % (visible_sections(), visible_names()))
+
+    type_query("puff")
+    check("and a search looks inside the chosen tab",
+          visible_names() == ["Veg Puff"], "got %s" % visible_names())
+    type_query("")
+
+    b.evaluate("document.querySelector('#menuTabs [data-tab=\"all\"]').click()")
+    time.sleep(0.2)
+    check("All brings the whole menu back",
+          len(visible_names()) == 6, "got %s" % visible_names())
+
+    print("\n=== On a large screen the order is written beside the menu ===")
+    b.call("Emulation.setDeviceMetricsOverride", width=1440, height=900,
+           deviceScaleFactor=1, mobile=False)
+    b.call("Page.navigate", url=BASE + "/orders/add")
+    wait("document.readyState === 'complete' && "
+         "!!document.getElementById('orderForm')", "new order")
+    time.sleep(0.8)
+
+    import json as _json
+    layout = _json.loads(b.evaluate("""
+        (function () {
+            var menu = document.querySelector('.order-menu').getBoundingClientRect();
+            var sheet = document.querySelector('.order-summary-popup');
+            var box = sheet.getBoundingClientRect();
+            var trigger = document.getElementById('orderSummaryTrigger');
+            return JSON.stringify({
+                beside: box.left >= menu.right - 1 && box.width > 250,
+                shown: box.height > 150,
+                fixed: getComputedStyle(document.getElementById(
+                    'orderSummaryOverlay')).position === 'fixed',
+                trigger: trigger ? getComputedStyle(trigger).display : 'none',
+                modal: sheet.getAttribute('aria-modal'),
+                hidden: document.getElementById('orderSummaryOverlay')
+                                .getAttribute('aria-hidden')
+            });
+        }())
+    """))
+    check("the order sits beside the menu, always open",
+          layout["beside"] and layout["shown"] and not layout["fixed"],
+          "the order is not docked beside the menu: %s" % layout)
+    check("so there is no floating button to open it",
+          layout["trigger"] == "none",
+          "the Order Summary button still floats over the menu")
+    check("and it is part of the page, not a hidden dialog",
+          layout["modal"] == "false" and layout["hidden"] == "false",
+          "a screen reader is told it is a modal, or not there: %s" % layout)
+
+    def basket():
+        return b.evaluate("""
+            Array.prototype.reduce.call(
+                document.querySelectorAll('.quantity-input'),
+                function (n, box) { return n + (Number(box.value) || 0); }, 0)
+        """)
+
+    # The sections above left dishes in the basket, and the page brings a
+    # basket back after a reload on purpose - so start from an empty one.
+    b.evaluate("""
+        (function () {
+            var clear = document.getElementById('receiptClear');
+            if (clear && !clear.disabled) clear.click();
+            var note = document.querySelector('.draft-note__discard');
+            if (note) note.click();
+            return true;
+        }())
+    """)
+    time.sleep(0.4)
+
+    b.evaluate("""
+        (function () {
+            var plus = document.querySelector(
+                '.food-card:not(.food-card--mirror) .quantity-plus');
+            plus.click(); plus.click();
+            return true;
+        }())
+    """)
+    time.sleep(0.5)
+    check("a dish added on its card is a line on the order",
+          b.evaluate("document.querySelectorAll('#selectedOrderItems "
+                     ".selected-order-item').length") == 1
+          and b.evaluate("document.querySelector('#selectedOrderItems "
+                         ".receipt-step__qty').textContent") == "2",
+          "the order does not show the dish")
+
+    b.evaluate("document.querySelector('#selectedOrderItems "
+               "[data-receipt-step=\"1\"]').click()")
+    time.sleep(0.4)
+    check("its own + on the order adds one more",
+          basket() == 3, "the basket holds %s" % basket())
+
+    b.evaluate("document.querySelector('#selectedOrderItems "
+               "[data-receipt-step=\"-1\"]').click()")
+    time.sleep(0.4)
+    check("and its - takes one away",
+          basket() == 2, "the basket holds %s" % basket())
+
+    check("the button says what it will charge",
+          b.evaluate("document.getElementById('placeTotal').textContent")
+          == b.evaluate("document.getElementById('popupTotal').textContent")
+          and b.evaluate("document.getElementById('placeTotal').textContent")
+          != "0.00",
+          "the button's total and the order's total disagree")
+
+    b.evaluate("window.scrollTo(0, 700)")
+    time.sleep(0.5)
+    kept = _json.loads(b.evaluate("""
+        (function () {
+            var sheet = document.querySelector('.order-summary-popup')
+                                .getBoundingClientRect();
+            var head = document.querySelector('.page-header')
+                               .getBoundingClientRect();
+            return JSON.stringify({top: Math.round(sheet.top),
+                                   headBottom: Math.round(head.bottom),
+                                   bottom: Math.round(sheet.bottom)});
+        }())
+    """))
+    check("the order stays in view while the menu scrolls",
+          kept["top"] >= kept["headBottom"] - 1 and kept["bottom"] <= 900,
+          "the order scrolled away or under the title: %s" % kept)
+    b.evaluate("window.scrollTo(0, 0)")
+
+    b.evaluate("document.getElementById('receiptClear').click()")
+    time.sleep(0.4)
+    check("Clear all empties the order",
+          basket() == 0 and b.evaluate(
+              "!!document.querySelector('#selectedOrderItems "
+              ".order-summary-empty')"),
+          "the basket still holds %s" % basket())
+
+    b.call("Emulation.setDeviceMetricsOverride", width=390, height=780,
+           deviceScaleFactor=2, mobile=True)
+    time.sleep(0.6)
+    phone = _json.loads(b.evaluate("""
+        JSON.stringify({
+            trigger: getComputedStyle(document.getElementById(
+                'orderSummaryTrigger')).display,
+            overlay: getComputedStyle(document.getElementById(
+                'orderSummaryOverlay')).display
+        })
+    """))
+    check("on a phone the order is the sheet behind a button again",
+          phone["trigger"] != "none" and phone["overlay"] == "none",
+          "on a phone: %s" % phone)
 
 
 finally:

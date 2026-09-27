@@ -91,13 +91,14 @@ print("\n=== 1b. The swap region carries every script its page needs ===")
 # What this checks is the other half of the contract: that base.html really
 # does keep every page script between the markers.
 #
-# These are the shell's own scripts, the same five on every page and the
+# These are the shell's own scripts, the same six on every page and the
 # only ones allowed outside the markers: instant.js, password-view.js,
-# fullscreen.js and drafts.js in <head>, and the shell block at the end
-# of <body>. Adding another to base.html means raising this number - a
+# fullscreen.js and drafts.js in <head>, the one that places the profile
+# in the sidebar or the top bar, and the shell block at the end of
+# <body>. Adding another to base.html means raising this number - a
 # page's own script appearing out there is the thing being guarded
 # against.
-SHELL_SCRIPTS = 5
+SHELL_SCRIPTS = 6
 
 missing_markers, stranded = [], []
 for path in PAGES:

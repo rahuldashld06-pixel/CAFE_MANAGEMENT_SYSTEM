@@ -514,6 +514,267 @@
     }
 }
 
+/* ============================================================
+   The menu as tabs, and the order written beside it
+
+   Every colour here is one the theme already has, used the way
+   the rest of the app uses it.
+   ============================================================ */
+
+/* ---- Sections as tabs, as on the customer's menu ---- */
+.menu-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 18px;
+    padding-bottom: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.menu-tabs::-webkit-scrollbar { display: none; }
+
+.menu-tab {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--espresso-700);
+    background: var(--espresso-850);
+    color: var(--cream-dim);
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.menu-tab span {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--espresso-800);
+    color: var(--cream-faint);
+    font-size: 11.5px;
+}
+
+.menu-tab:hover { border-color: var(--copper); color: var(--cream); }
+
+.menu-tab.is-on {
+    background: var(--copper);
+    border-color: var(--copper);
+    color: #fff;
+}
+
+.menu-tab.is-on span {
+    background: rgba(0, 0, 0, .18);
+    color: #fff;
+}
+
+/* ---- The card: category and stock above, price beside the stepper ---- */
+.food-card { border-radius: 14px; }
+
+.food-card-meta { margin: 2px 0 0; }
+
+.food-card-meta .food-card-category {
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.food-card-footer {
+    flex-wrap: wrap;
+    row-gap: 8px;
+}
+
+/* ---- The order, like a receipt ---- */
+.receipt-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.receipt-head h2 { margin: 0; }
+
+.receipt-count {
+    font-size: 12.5px;
+    color: var(--cream-faint);
+}
+
+.receipt-clear {
+    margin-left: auto;
+    margin-right: 10px;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--copper-light);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.receipt-clear:hover:not(:disabled) { background: var(--espresso-800); }
+
+.receipt-clear:disabled {
+    color: var(--cream-faint);
+    opacity: .5;
+    cursor: default;
+}
+
+.selected-order-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 12px;
+}
+
+.selected-order-item__main { min-width: 0; }
+
+/* Two lines rather than an ellipsis: on a receipt the whole name is
+   what is being checked. */
+.selected-order-item__name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.3;
+}
+
+.selected-order-item__amount {
+    min-width: 76px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.receipt-step {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--espresso-700);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--espresso-850);
+}
+
+.receipt-step button {
+    width: 30px;
+    height: 30px;
+    border: 0;
+    background: transparent;
+    color: var(--cream);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.receipt-step button:hover:not(:disabled) {
+    background: var(--copper);
+    color: #fff;
+}
+
+.receipt-step button:disabled {
+    opacity: .35;
+    cursor: default;
+}
+
+.receipt-step__qty {
+    min-width: 24px;
+    text-align: center;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.order-summary-empty small {
+    display: block;
+    margin-top: 6px;
+    font-size: 12.5px;
+    opacity: .8;
+}
+
+.receipt-place {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.receipt-place__total {
+    font-variant-numeric: tabular-nums;
+    opacity: .9;
+}
+
+.receipt-place__total::before {
+    content: "\00B7";
+    margin-right: 8px;
+}
+
+/* ---- A large screen: two columns, the order always open ---- */
+@media (min-width: 1401px),
+       (min-width: 1025px) and (pointer: fine) {
+
+    .order-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(300px, 25vw, 380px);
+        gap: 20px;
+    }
+
+    .order-layout > .order-menu {
+        min-width: 0;
+        margin: 0;
+    }
+
+    /* Three to a row beside the order on a laptop, more on a wider
+       screen. */
+    .food-grid {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
+
+    .food-card-image,
+    .food-card-placeholder { height: 120px; }
+
+    .quantity-btn { width: 34px; height: 34px; font-size: 19px; }
+
+    .quantity-input { width: 40px; height: 34px; }
+
+    /* The sheet, docked: in the second column, stopping just under the
+       title bar while the menu scrolls past it. */
+    .order-summary-trigger { display: none !important; }
+
+    .order-summary-overlay,
+    .order-summary-overlay.open {
+        position: static;
+        inset: auto;
+        z-index: auto;
+        display: block;
+        background: none;
+    }
+
+    .order-summary-popup {
+        position: sticky;
+        top: calc(var(--order-head-h, 110px) + 16px);
+        width: auto;
+        max-height: calc(100vh - var(--order-head-h, 110px) - 32px);
+        margin: 0;
+        box-shadow: none;
+    }
+
+    .order-summary-popup__body { max-height: none; }
+
+    .order-summary-close,
+    #closeSummaryButton { display: none; }
+
+    .order-summary-actions .receipt-place {
+        width: 100%;
+        justify-content: center;
+        padding-top: 13px;
+        padding-bottom: 13px;
+        font-size: 15px;
+    }
+}
+
 </style>
 
 <div class="order-page">
@@ -547,7 +808,12 @@
         <span id="orderPlacedToastText">Order has been placed.</span>
     </div>
 
-    <div class="panel">
+    {# Two columns on a large screen: the menu, and the order being
+       written beside it. On a phone or tablet the order is the sheet
+       behind the Order Summary button, and this is just the menu. #}
+    <div class="order-layout" id="orderLayout">
+
+    <div class="panel order-menu">
         <div class="panel-header">
             <div>
                 <h2><i class="bi bi-grid-3x3-gap"></i> Food Menu</h2>
@@ -571,6 +837,31 @@
                 <span class="badge" id="foodCount">{{ foods|length }} Food Items</span>
             </div>
         </div>
+
+        {# Every section as a tab, All first - the way the customer's menu
+           reads. The whole menu is already on the page, so choosing one
+           is a matter of what is hidden, not a trip to the server. #}
+        {% if food_groups or hot_foods %}
+        <div class="menu-tabs" id="menuTabs" aria-label="Menu sections">
+            <button type="button" class="menu-tab is-on" data-tab="all"
+                    aria-pressed="true">
+                All items <span>{{ foods|length }}</span>
+            </button>
+            {% if hot_foods %}
+            <button type="button" class="menu-tab" data-tab="hot"
+                    aria-pressed="false">
+                <i class="bi bi-fire" aria-hidden="true"></i>
+                Hot selling <span>{{ hot_foods|length }}</span>
+            </button>
+            {% endif %}
+            {% for group in food_groups %}
+            <button type="button" class="menu-tab" data-tab="{{ loop.index0 }}"
+                    aria-pressed="false">
+                {{ group.name }} <span>{{ group.foods|length }}</span>
+            </button>
+            {% endfor %}
+        </div>
+        {% endif %}
 
         {# One definition of a food card, used by the hot-selling shelf and by
            every category section, so the two can never drift apart.
@@ -603,16 +894,18 @@
                         </div>
                     {% endif %}
 
+                    {# The price sits beside the quantity it is multiplied
+                       by, the way the customer's own menu has it; what the
+                       dish is and how many are left read above them. #}
                     <div class="food-card-body">
                         <div class="food-card-name">{{ food.food_name }}</div>
-                        <div class="food-card-category">{{ food.category_name or "Other" }}</div>
                         <div class="food-card-meta">
-                            <span class="food-card-price">₹{{ food.price }}</span>
+                            <span class="food-card-category">{{ food.category_name or "Other" }}</span>
                             <span class="food-card-stock" id="food_stock_note_{{ uid }}">Max {{ food.quantity }}</span>
                         </div>
 
                         <div class="food-card-footer">
-                            <span class="quantity-help">Qty</span>
+                            <span class="food-card-price">₹{{ food.price }}</span>
                             <div class="quantity-control">
                                 <button type="button" class="quantity-btn quantity-minus" onclick="changeQuantity({{ food.food_id }}, -1)">−</button>
                                 {# The mirror deliberately has no `name`, so the browser
@@ -642,7 +935,8 @@
                card carries the quantity input, and two copies of the same
                food would mean two elements sharing one input id and name. #}
             {% if hot_foods %}
-            <section class="food-group food-group--hot" data-category="hot selling popular best">
+            <section class="food-group food-group--hot" data-category="hot selling popular best"
+                     data-tab="hot">
 
                 <h3 class="food-group__title">
                     <i class="bi bi-fire food-group__flame"></i>
@@ -661,7 +955,8 @@
             {% endif %}
 
             {% for group in food_groups %}
-            <section class="food-group" data-category="{{ group.name|lower }}">
+            <section class="food-group" data-category="{{ group.name|lower }}"
+                     data-tab="{{ loop.index0 }}">
 
                 <h3 class="food-group__title">
                     <span class="food-group__name">{{ group.name }}</span>
@@ -695,141 +990,6 @@
             </div>
         {% endif %}
     </div>
-</div>
-
-
-<script>
-// Menu search. Filters the category sections in place: matching on a food
-// name or on its category, hiding sections that end up empty, and leaving
-// every quantity alone - a filter narrows what is on screen, it never
-// clears what the cashier has already picked. Those selections stay in the
-// form and in the floating summary even while hidden.
-//
-// Wrapped in an IIFE because instant.js re-runs this script each time the
-// page is swapped back in; a top-level const/let would throw on the second
-// visit.
-(function () {
-
-    var input = document.getElementById("foodSearch");
-    if (!input) return;
-
-    var clearButton = document.getElementById("foodSearchClear");
-    var resetButton = document.getElementById("foodSearchReset");
-    var emptyState = document.getElementById("foodSearchEmpty");
-    var termLabel = document.getElementById("foodSearchTerm");
-    var countBadge = document.getElementById("foodCount");
-
-    var groups = Array.prototype.slice.call(document.querySelectorAll(".food-group"));
-
-    // A best seller is on screen twice - once on the shelf, once under its
-    // category - so the counts below tally the real cards only. Mirrors are
-    // still shown and hidden with everything else.
-    var REAL_CARD = ".food-card:not(.food-card--mirror)";
-    var total = document.querySelectorAll(REAL_CARD).length;
-
-    // Each section's heading badge counts what is on screen, so it cannot sit
-    // there claiming "2" while a search has narrowed the section to one.
-    groups.forEach(function (group) {
-        var badge = group.querySelector(".food-group__count");
-        if (badge) badge.setAttribute("data-total", badge.textContent.trim());
-    });
-
-    function applyFilter() {
-        var query = input.value.trim().toLowerCase();
-        var visible = 0;
-
-        groups.forEach(function (group) {
-            // Typing a category name keeps that whole section, so "coffee"
-            // shows the section even for items that are not named "coffee".
-            var wholeSection =
-                query !== "" &&
-                (group.getAttribute("data-category") || "").indexOf(query) !== -1;
-
-            var cards = group.querySelectorAll(".food-card");
-            var shownHere = 0;
-            var realShownHere = 0;
-
-            for (var i = 0; i < cards.length; i++) {
-                var haystack = cards[i].getAttribute("data-search") || "";
-                var match = query === "" || wholeSection || haystack.indexOf(query) !== -1;
-                cards[i].hidden = !match;
-                if (match) {
-                    shownHere++;
-                    if (!cards[i].classList.contains("food-card--mirror")) realShownHere++;
-                }
-            }
-
-            group.hidden = shownHere === 0;
-            visible += realShownHere;
-
-            var badge = group.querySelector(".food-group__count");
-            if (badge) {
-                badge.textContent = query === ""
-                    ? badge.getAttribute("data-total")
-                    : shownHere;
-            }
-        });
-
-        if (clearButton) clearButton.hidden = query === "";
-
-        if (emptyState) {
-            emptyState.hidden = visible !== 0;
-            if (termLabel) termLabel.textContent = input.value.trim();
-        }
-
-        if (countBadge) {
-            countBadge.textContent = query === ""
-                ? total + " Food Items"
-                : visible + " of " + total + " Food Items";
-        }
-    }
-
-    function clearSearch() {
-        input.value = "";
-        applyFilter();
-        input.focus();
-    }
-
-    input.addEventListener("input", applyFilter);
-
-    input.addEventListener("keydown", function (event) {
-        if (event.key === "Escape") {
-            event.preventDefault();
-            clearSearch();
-        }
-    });
-
-    if (clearButton) clearButton.addEventListener("click", clearSearch);
-    if (resetButton) resetButton.addEventListener("click", clearSearch);
-
-    // The browser can restore a typed value on a back-navigation, so start
-    // from whatever is actually in the box rather than assuming it is empty.
-    applyFilter();
-
-})();
-</script>
-
-
-<!-- ==========================================
-     FLOATING ORDER SUMMARY
-     ========================================== -->
-
-<button
-    type="button"
-    id="orderSummaryTrigger"
-    class="order-summary-trigger"
-    aria-label="Open order summary">
-
-    <span class="order-summary-badge" id="selectedItemCount">0</span>
-
-    <span>🛒 Order Summary</span>
-
-    <span class="summary-total">
-        ₹<span id="floatingTotal">0.00</span>
-    </span>
-
-</button>
-
 
 <div
     id="orderSummaryOverlay"
@@ -844,9 +1004,15 @@
 
         <div class="order-summary-popup__header">
 
-            <h2 id="orderSummaryTitle">
-                🧾 Order Summary
-            </h2>
+            <div class="receipt-head">
+                <h2 id="orderSummaryTitle">Your order</h2>
+                <span class="receipt-count" id="receiptCount">No items yet</span>
+            </div>
+
+            <button type="button" class="receipt-clear" id="receiptClear"
+                    disabled>
+                Clear all
+            </button>
 
             <button
                 type="button"
@@ -870,6 +1036,7 @@
 
             <div class="order-summary-empty">
                 No food selected yet.
+                <small>Press + on a dish to add it here.</small>
             </div>
 
         </div>
@@ -920,10 +1087,11 @@
                     type="submit"
                     form="orderForm"
                     id="popupCreateOrder"
-                    class="btn btn--primary"
+                    class="btn btn--primary receipt-place"
                     disabled>
                     <i class="bi bi-check-lg"></i>
-                    Create Order
+                    <span>Create Order</span>
+                    <span class="receipt-place__total">₹<span id="placeTotal">0.00</span></span>
                 </button>
 
             </div>
@@ -933,6 +1101,166 @@
     </div>
 
 </div>
+
+    </div>
+</div>
+
+
+<script>
+// Menu search. Filters the category sections in place: matching on a food
+// name or on its category, hiding sections that end up empty, and leaving
+// every quantity alone - a filter narrows what is on screen, it never
+// clears what the cashier has already picked. Those selections stay in the
+// form and in the floating summary even while hidden.
+//
+// Wrapped in an IIFE because instant.js re-runs this script each time the
+// page is swapped back in; a top-level const/let would throw on the second
+// visit.
+(function () {
+
+    var input = document.getElementById("foodSearch");
+    if (!input) return;
+
+    var clearButton = document.getElementById("foodSearchClear");
+    var resetButton = document.getElementById("foodSearchReset");
+    var emptyState = document.getElementById("foodSearchEmpty");
+    var termLabel = document.getElementById("foodSearchTerm");
+    var countBadge = document.getElementById("foodCount");
+
+    var groups = Array.prototype.slice.call(document.querySelectorAll(".food-group"));
+    var tabs = document.getElementById("menuTabs");
+    var tab = "all";
+
+    // A best seller is on screen twice - once on the shelf, once under its
+    // category - so the counts below tally the real cards only. Mirrors are
+    // still shown and hidden with everything else.
+    var REAL_CARD = ".food-card:not(.food-card--mirror)";
+    var total = document.querySelectorAll(REAL_CARD).length;
+
+    // Each section's heading badge counts what is on screen, so it cannot sit
+    // there claiming "2" while a search has narrowed the section to one.
+    groups.forEach(function (group) {
+        var badge = group.querySelector(".food-group__count");
+        if (badge) badge.setAttribute("data-total", badge.textContent.trim());
+    });
+
+    function applyFilter() {
+        var query = input.value.trim().toLowerCase();
+        var visible = 0;
+
+        groups.forEach(function (group) {
+            // The chosen tab first: anything outside it is simply hidden.
+            var inTab = tab === "all" || group.getAttribute("data-tab") === tab;
+
+            // Typing a category name keeps that whole section, so "coffee"
+            // shows the section even for items that are not named "coffee".
+            var wholeSection =
+                query !== "" &&
+                (group.getAttribute("data-category") || "").indexOf(query) !== -1;
+
+            var cards = group.querySelectorAll(".food-card");
+            var shownHere = 0;
+            var realShownHere = 0;
+
+            for (var i = 0; i < cards.length; i++) {
+                var haystack = cards[i].getAttribute("data-search") || "";
+                var match = inTab &&
+                    (query === "" || wholeSection || haystack.indexOf(query) !== -1);
+                cards[i].hidden = !match;
+                if (match) {
+                    shownHere++;
+                    // The Hot selling tab is nothing but the shelf's copies,
+                    // so there they are what is being counted.
+                    if (tab === "hot" || !cards[i].classList.contains("food-card--mirror")) realShownHere++;
+                }
+            }
+
+            group.hidden = shownHere === 0;
+            visible += realShownHere;
+
+            var badge = group.querySelector(".food-group__count");
+            if (badge) {
+                badge.textContent = query === ""
+                    ? badge.getAttribute("data-total")
+                    : shownHere;
+            }
+        });
+
+        if (clearButton) clearButton.hidden = query === "";
+
+        if (emptyState) {
+            emptyState.hidden = visible !== 0;
+            if (termLabel) termLabel.textContent = input.value.trim();
+        }
+
+        if (countBadge) {
+            countBadge.textContent = query === ""
+                ? total + " Food Items"
+                : visible + " of " + total + " Food Items";
+        }
+    }
+
+    function clearSearch() {
+        input.value = "";
+        applyFilter();
+        input.focus();
+    }
+
+    input.addEventListener("input", applyFilter);
+
+    input.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+            event.preventDefault();
+            clearSearch();
+        }
+    });
+
+    if (clearButton) clearButton.addEventListener("click", clearSearch);
+    if (resetButton) resetButton.addEventListener("click", clearSearch);
+
+    if (tabs) {
+        tabs.addEventListener("click", function (event) {
+            var button = event.target.closest("[data-tab]");
+            if (!button) return;
+            tab = button.getAttribute("data-tab");
+            Array.prototype.forEach.call(
+                tabs.querySelectorAll("[data-tab]"), function (each) {
+                    var on = each === button;
+                    each.classList.toggle("is-on", on);
+                    each.setAttribute("aria-pressed", on ? "true" : "false");
+                });
+            applyFilter();
+        });
+    }
+
+    // The browser can restore a typed value on a back-navigation, so start
+    // from whatever is actually in the box rather than assuming it is empty.
+    applyFilter();
+
+})();
+</script>
+
+
+<!-- ==========================================
+     FLOATING ORDER SUMMARY
+     ========================================== -->
+
+<button
+    type="button"
+    id="orderSummaryTrigger"
+    class="order-summary-trigger"
+    aria-label="Open order summary">
+
+    <span class="order-summary-badge" id="selectedItemCount">0</span>
+
+    <span>🛒 Order Summary</span>
+
+    <span class="summary-total">
+        ₹<span id="floatingTotal">0.00</span>
+    </span>
+
+</button>
+
 
 <script>
 // The café's own rates, set under Profile -> Tax & Discount. `var`, not
@@ -999,6 +1327,36 @@ function changeQuantity(foodId, change) {
 
 document.addEventListener('DOMContentLoaded', syncHotMirrors);
 
+// On a large screen the order is docked beside the menu rather than a
+// sheet that opens: part of the page, so not hidden from a screen reader
+// and not a modal dialog, and stopping just under the title bar as the
+// menu scrolls past it.
+(function () {
+    var LARGE = "(min-width: 1401px), (min-width: 1025px) and (pointer: fine)";
+    var page = document.querySelector(".order-page");
+    var overlay = document.getElementById("orderSummaryOverlay");
+    var sheet = overlay && overlay.querySelector(".order-summary-popup");
+    if (!page || !overlay || !sheet || !window.matchMedia) return;
+
+    var query = window.matchMedia(LARGE);
+
+    function dock() {
+        var docked = query.matches;
+        overlay.setAttribute("aria-hidden",
+            docked || overlay.classList.contains("open") ? "false" : "true");
+        sheet.setAttribute("aria-modal", docked ? "false" : "true");
+
+        var head = page.querySelector(".page-header");
+        if (head) {
+            page.style.setProperty("--order-head-h", head.offsetHeight + "px");
+        }
+    }
+
+    dock();
+    window.addEventListener("resize", dock);
+    if (query.addEventListener) query.addEventListener("change", dock);
+}());
+
 // A basket brought back after the page closed. The quantities are put
 // back on the real cards; the copies on the Hot Selling shelf follow.
 document.addEventListener('draft:restored', syncHotMirrors);
@@ -1033,9 +1391,11 @@ document.addEventListener('draft:restored', syncHotMirrors);
                 const name = input.dataset.foodName || "Food Item";
 
                 selected.push({
+                    id: input.dataset.foodId,
                     name: name,
                     quantity: quantity,
                     price: price,
+                    max: parseInt(input.max, 10) || 0,
                     amount: quantity * price
                 });
             }
@@ -1069,36 +1429,75 @@ document.addEventListener('draft:restored', syncHotMirrors);
             createButton.disabled = itemCount === 0;
         }
 
+        const placeTotalEl = document.getElementById("placeTotal");
+        if (placeTotalEl) placeTotalEl.textContent = total.toFixed(2);
+
+        const receiptCountEl = document.getElementById("receiptCount");
+        if (receiptCountEl) {
+            receiptCountEl.textContent = itemCount === 0
+                ? "No items yet"
+                : itemCount + (itemCount === 1 ? " item" : " items");
+        }
+
+        const clearEl = document.getElementById("receiptClear");
+        if (clearEl) clearEl.disabled = itemCount === 0;
+
         if (itemsEl) {
 
-            if (selected.length === 0) {
+            // Drawn again only when what is on it has changed. This runs
+            // every 300ms, and redrawing the lines each time would take a
+            // line's + away from under a finger half way through a tap.
+            const drawn = selected.map(function (item) {
+                return item.id + ":" + item.quantity;
+            }).join(",");
 
-                itemsEl.innerHTML =
-                    '<div class="order-summary-empty">' +
-                    'No food selected yet.' +
-                    '</div>';
+            if (itemsEl.getAttribute("data-drawn") !== drawn) {
+                itemsEl.setAttribute("data-drawn", drawn);
 
-            } else {
+                if (selected.length === 0) {
 
-                itemsEl.innerHTML = selected.map(function (item) {
+                    itemsEl.innerHTML =
+                        '<div class="order-summary-empty">' +
+                        'No food selected yet.' +
+                        '<small>Press + on a dish to add it here.</small>' +
+                        '</div>';
 
-                    return (
-                        '<div class="selected-order-item">' +
-                            '<div>' +
-                                '<div class="selected-order-item__name">' +
-                                    escapeHtml(item.name) + ' × ' + item.quantity +
+                } else {
+
+                    // A line per dish, with its own - and + so the
+                    // quantity can be changed where the order is being
+                    // read, not only back on the card.
+                    itemsEl.innerHTML = selected.map(function (item) {
+                        const name = escapeHtml(item.name);
+                        return (
+                            '<div class="selected-order-item" data-food-id="' +
+                                    escapeHtml(item.id) + '">' +
+                                '<div class="selected-order-item__main">' +
+                                    '<div class="selected-order-item__name">' +
+                                        name +
+                                    '</div>' +
+                                    '<div class="selected-order-item__meta">' +
+                                        '₹' + item.price.toFixed(2) + ' each' +
+                                    '</div>' +
                                 '</div>' +
-                                '<div class="selected-order-item__meta">' +
-                                    '₹' + item.price.toFixed(2) + ' each' +
+                                '<div class="receipt-step">' +
+                                    '<button type="button" data-receipt-step="-1"' +
+                                        ' aria-label="One fewer ' + name + '">−</button>' +
+                                    '<span class="receipt-step__qty">' +
+                                        item.quantity + '</span>' +
+                                    '<button type="button" data-receipt-step="1"' +
+                                        ' aria-label="One more ' + name + '"' +
+                                        (item.max && item.quantity >= item.max
+                                            ? ' disabled' : '') +
+                                        '>+</button>' +
                                 '</div>' +
-                            '</div>' +
-                            '<div class="selected-order-item__amount">' +
-                                '₹' + item.amount.toFixed(2) +
-                            '</div>' +
-                        '</div>'
-                    );
-
-                }).join("");
+                                '<div class="selected-order-item__amount">' +
+                                    '₹' + item.amount.toFixed(2) +
+                                '</div>' +
+                            '</div>'
+                        );
+                    }).join("");
+                }
             }
         }
     }
@@ -1191,6 +1590,36 @@ document.addEventListener('draft:restored', syncHotMirrors);
 
         });
 
+
+        // A line's own - and +, and Clear all. Delegated: the lines are
+        // drawn again whenever the order changes.
+        const receiptItems = document.getElementById("selectedOrderItems");
+        if (receiptItems) {
+            receiptItems.addEventListener("click", function (event) {
+                const button = event.target.closest("[data-receipt-step]");
+                if (!button || button.disabled) return;
+                const line = button.closest("[data-food-id]");
+                if (!line) return;
+                changeQuantity(Number(line.getAttribute("data-food-id")),
+                               Number(button.getAttribute("data-receipt-step")));
+            });
+        }
+
+        const receiptClear = document.getElementById("receiptClear");
+        if (receiptClear) {
+            receiptClear.addEventListener("click", function () {
+                // Each box told, the way a tap on - would, so the running
+                // total and the copy kept against a closed browser both
+                // hear about it.
+                getQuantityInputs().forEach(function (input) {
+                    if ((parseInt(input.value, 10) || 0) === 0) return;
+                    input.value = 0;
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                });
+                syncHotMirrors();
+                updateFloatingOrderSummary();
+            });
+        }
 
         // Watch all quantity changes, including + / - buttons.
         getQuantityInputs().forEach(function (input) {
