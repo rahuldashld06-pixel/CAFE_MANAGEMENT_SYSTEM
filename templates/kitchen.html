@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Kitchen · Cafe Manager{% endblock %}
+{% block title %}Kitchen{% endblock %}
 
 {% block content %}
 
@@ -16,11 +16,6 @@
             <span class="kitchen-state__dot"></span>
             <span id="kitchenStateText">Watching</span>
         </span>
-        <button type="button" class="btn btn--ghost btn--sm" id="printToggle"
-                aria-pressed="true">
-            <i class="bi bi-printer"></i>
-            <span id="printToggleText">Printing on</span>
-        </button>
     </div>
 </div>
 
@@ -45,77 +40,14 @@ function startKitchenScreen() {
         return (window.CafeShell && window.CafeShell.csrfToken) || "";
     }
 
-    var BEAT_EVERY = 20000;                 // three missed and we are stale
     var LOOK_EVERY = 6000;
-    var STALE_AFTER = {{ stale_after }};
 
     var stateText = document.getElementById("kitchenStateText");
     var state = document.getElementById("kitchenState");
-    var toggle = document.getElementById("printToggle");
-    var toggleText = document.getElementById("printToggleText");
-
-    var printing = true;
-    try {
-        printing = window.localStorage.getItem("cafe.kitchenPrint") !== "0";
-    } catch (error) { /* private window */ }
-
-    function paintToggle() {
-        toggle.setAttribute("aria-pressed", printing ? "true" : "false");
-        toggleText.textContent = printing ? "Printing on" : "Printing off";
-    }
-
-    toggle.addEventListener("click", function () {
-        printing = !printing;
-        try {
-            window.localStorage.setItem("cafe.kitchenPrint",
-                                        printing ? "1" : "0");
-        } catch (error) { /* nothing to do */ }
-        paintToggle();
-    });
-
-    paintToggle();
 
     function say(text, ok) {
         stateText.textContent = text;
         state.classList.toggle("kitchen-state--lost", !ok);
-    }
-
-    // ---- Saying we are here ----
-    // The counter screens read this and leave the printing alone. If this
-    // stops - tablet asleep, browser closed - they take it back.
-    function beat() {
-        fetch("/api/kitchen/heartbeat", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: {
-                "X-Requested-With": "XMLHttpRequest",
-                "X-CSRFToken": csrfToken()
-            }
-        }).then(function (response) {
-            say(response.ok ? "Watching" : "Not reaching the server",
-                response.ok);
-        }).catch(function () {
-            say("Not reaching the server", false);
-        });
-    }
-
-    // ---- Printing ----
-    function claimAndPrint(orderId) {
-        return fetch("/api/kitchen/claim/" + orderId, {
-            method: "POST",
-            credentials: "same-origin",
-            headers: {
-                "X-Requested-With": "XMLHttpRequest",
-                "X-CSRFToken": csrfToken()
-            }
-        }).then(function (response) {
-            return response.json();
-        }).then(function (data) {
-            if (!data || !data.claimed) return;   // somebody else had it
-            if (window.CafeShell && window.CafeShell.autoPrint) {
-                window.CafeShell.autoPrint("/orders/" + orderId + "/kot");
-            }
-        }).catch(function () { });
     }
 
     // ---- Drawing ----
@@ -222,26 +154,19 @@ function startKitchenScreen() {
             credentials: "same-origin",
             headers: { "X-Requested-With": "XMLHttpRequest" }
         }).then(function (response) {
+            // The board answering is what says this screen is live. It
+            // used to be a heartbeat of its own, whose job was telling
+            // the counter screens to leave the printing to this one -
+            // and nothing prints by itself any more.
+            say(response.ok ? "Watching" : "Not reaching the server",
+                response.ok);
             return response.json();
         }).then(function (data) {
             var orders = (data && data.orders) || [];
             draw(orders);
-
-            if (!printing) return;
-
-            // The server decides what is waiting to be printed -
-            // pending, unprinted, and past the delay this cafe asked for -
-            // so this screen and the counter screens cannot disagree and
-            // print one ticket twice between them. Counter orders are in
-            // that list too now: the food is made here, not at the till.
-            return orders.filter(function (order) {
-                return order.printable;
-            }).reduce(function (chain, order) {
-                return chain.then(function () {
-                    return claimAndPrint(order.order_id);
-                });
-            }, Promise.resolve());
-        }).catch(function () { });
+        }).catch(function () {
+            say("Not reaching the server", false);
+        });
     }
 
     function send(button, url) {
@@ -288,14 +213,12 @@ function startKitchenScreen() {
         send(cancel, "/orders/cancel/" + cancel.dataset.cancel);
     });
 
-    beat();
     look();
-    window.setInterval(beat, BEAT_EVERY);
     window.setInterval(look, LOOK_EVERY);
 
     // A tablet that went to sleep wakes up behind; catch up at once.
     document.addEventListener("visibilitychange", function () {
-        if (!document.hidden) { beat(); look(); }
+        if (!document.hidden) { look(); }
     });
 
     // Ask the device not to dim. Widely ignored, and harmless when it is.

@@ -177,6 +177,12 @@ def submit(selector, fill):
     """
     Fill a form and submit it the way a person would.
 
+    The button is found as a submit button and never as "any button":
+    the show-password eye is a <button type="button"> that sits ahead of
+    the real one wherever there is a password, and once its deferred
+    script has run a looser selector clicks that instead - revealing the
+    password and submitting nothing, on whichever run loses the race.
+
     Returns whether the browser considered it complete. A form with an
     unfilled required field never fires a submit event at all, so a test
     that ignored this would be checking nothing.
@@ -186,7 +192,7 @@ def submit(selector, fill):
             var form = document.querySelector('%s');
             %s
             if (!form.checkValidity()) return false;
-            form.querySelector('[type=submit], button').click();
+            form.querySelector('[type=submit], button:not([type])').click();
             return true;
         }())
     """ % (selector, fill))
@@ -208,7 +214,7 @@ try:
             var f = document.querySelector('form');
             f.querySelector('[name=username]').value = 'sam';
             f.querySelector('[name=password]').value = 'password123';
-            f.querySelector('[type=submit], button').click();
+            f.querySelector('[type=submit], button:not([type])').click();
         }())
     """)
     wait_for("location.pathname !== '/login'", "the app")
@@ -307,7 +313,7 @@ try:
             var data = new DataTransfer();
             data.items.add(file);
             form.querySelector('[name=logo]').files = data.files;
-            form.querySelector('[type=submit], button').click();
+            form.querySelector('[type=submit], button:not([type])').click();
         }())
     """)
 

@@ -1,5 +1,5 @@
 /*
- * Instant navigation for Cafe Manager.
+ * Instant navigation for Cafora.
  *
  * The app is server rendered, so every sidebar click used to throw away the
  * whole document and rebuild it: re-parse style.css, re-fetch the icon font,
@@ -170,17 +170,13 @@
     // page and take the cache with them; the in-page fetch() posts (creating
     // an order, marking a bill paid) have to say so themselves.
     //
-    // But only a write somebody made. The app talks to itself all day: the
-    // kitchen screen says it is still switched on every twenty seconds, a
-    // till claims a ticket nobody has printed, the tour records that it has
-    // been seen. Not one of those changes anything a page shows, and
-    // throwing every cached page away for them is why switching pages went
-    // back to costing a round trip within seconds of the warm-up finishing.
-    // Measured: a page that painted in 1ms took 258ms after one of them,
-    // and that was with the database next door.
-    var HOUSEKEEPING = new RegExp(
-        "^/api/(kitchen/(heartbeat|claim)|tutorial/seen)(/|$)"
-    );
+    // But only a write somebody made. The tour recording that it has been
+    // seen changes nothing a page shows, and throwing every cached page
+    // away for it is why switching pages once went back to costing a round
+    // trip within seconds of the warm-up finishing. Measured: a page that
+    // painted in 1ms took 258ms after one such post, and that was with the
+    // database next door.
+    var HOUSEKEEPING = new RegExp("^/api/tutorial/seen(/|$)");
 
     function pathOf(input) {
         var href = typeof input === "string"
@@ -756,6 +752,13 @@
                 hardNavigate(result.url);
                 return;
             }
+
+            // Answered. Said before the new page goes in, so that what
+            // listens - drafts.js deciding whether a copy of the form can
+            // go - has settled that before the page it landed on starts.
+            document.dispatchEvent(new CustomEvent("instant:posted", {
+                detail: { url: result.url }
+            }));
 
             apply(result.html, result.url, {});
         }).catch(function () {

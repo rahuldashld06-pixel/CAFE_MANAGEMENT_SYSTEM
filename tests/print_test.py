@@ -260,7 +260,7 @@ check("the bill says who served it",
       "Served by" in bill_html and "Bean Scene" in bill_html,
       "the cafe is not named as the server")
 check("and what it was run on",
-      "Cafe Manager" in bill_html,
+      "Cafora" in bill_html,
       "the system is not credited")
 check("it carries the time it was printed",
       'class="receipt__printed"' in bill_html,
@@ -289,80 +289,71 @@ check("the symbol behind it survives an actual printer",
       "print-color-adjust: exact" in print_css,
       "the watermark would be dropped when printed")
 
-print("\n=== 12. Every address a screen asks to print actually exists ===")
-# This section exists because it did not. The kitchen screen and the
-# counter screens both asked to print "/print/kot/<id>", which was never
-# a route in this app - the ticket that was meant to come out by itself
-# came out as the dashboard, silently, in a hidden frame nobody looks at.
+print("\n=== 12. Nothing prints unless somebody presses Print ===")
+# There used to be automatic printing: the kitchen ticket after an order,
+# the bill the moment it was marked paid, a kitchen screen printing each
+# ticket as it arrived, and every counter screen watching for orders from
+# a table to print. All of it is gone. A ticket or a bill comes out when
+# somebody presses the button for it, and at no other time.
 #
-# The test that was supposed to cover it only checked that the page asked
-# to print the string the page itself contained, so it agreed with the
-# bug. Nothing checked the address against the app. This does.
+# The buttons that remain are checked against the app itself, because
+# once they were not: two screens asked to print "/print/kot/<id>", which
+# was never a route, and what came out was the dashboard.
 import werkzeug.routing                                      # noqa: E402
 
 TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "templates")
 
+by_itself = []
+for name in sorted(os.listdir(TEMPLATES)):
+    if not name.endswith(".html"):
+        continue
+    text = io.open(os.path.join(TEMPLATES, name), encoding="utf-8").read()
+    for sign in ("autoPrint", "/api/kitchen/pending", "/api/kitchen/claim",
+                 "auto_kot", "auto_bill"):
+        if sign in text:
+            by_itself.append("%s (%s)" % (name, sign))
 
-def printed_paths():
-    """Every URL handed to autoPrint, with the ids filled in."""
-    found = []
-    for name in sorted(os.listdir(TEMPLATES)):
-        if not name.endswith(".html"):
-            continue
-        body = io.open(os.path.join(TEMPLATES, name),
-                       encoding="utf-8").read()
-        for call in re.findall(r"autoPrint\(\s*(.+?)\)\s*;", body, re.S):
-            if "function" in call:          # the helper's own definition
-                continue
-            # "/orders/" + id + "/kot"  ->  /orders/1/kot
-            path = ""
-            for piece in re.split(r"\s*\+\s*", call.strip()):
-                piece = piece.strip()
-                if piece[:1] in ("'", '"'):
-                    path += piece[1:-1]
-                else:
-                    path += "1"
-            found.append((name, path))
-    return found
+check("no page prints anything by itself",
+      not by_itself,
+      "still printing on its own: %s" % ", ".join(by_itself))
 
+check("and there is no setting left to switch it back on",
+      "print_settings" not in app.view_functions
+      and a.get("/settings/printing").status_code in (302, 404),
+      "the Automatic Printing page is still there")
 
-calls = printed_paths()
-check("the screens do ask to print something",
-      len(calls) >= 3,
-      "found %d autoPrint calls, so this section is checking nothing"
-      % len(calls))
+# An order's own page carries both buttons.
+_billing = a.get("/billing").get_data(as_text=True)
+_order = (re.findall(r'data-print-order="(\d+)"', _billing) or ["1"])[0]
+_details = a.get("/orders/%s" % _order).get_data(as_text=True)
+asked = set(re.findall(r'href="(/orders/\d+/(?:bill|kot))"', _details))
+
+check("an order's page offers the kitchen ticket as a button",
+      any(path.endswith("/kot") for path in asked),
+      "no Print KOT on the order's page: %s" % sorted(asked))
+
+check("and the customer's bill",
+      any(path.endswith("/bill") for path in asked),
+      "no Print Bill on the order's page: %s" % sorted(asked))
 
 adapter = app.url_map.bind("localhost")
 broken = []
-for name, path in calls:
+for path in asked:
     try:
         adapter.match(path)
     except werkzeug.routing.RequestRedirect:
         pass                                 # a real route, just tidier
     except werkzeug.exceptions.HTTPException:
-        broken.append("%s asks for %s" % (name, path))
-
-check("and every one of those addresses is a real route",
-      not broken,
-      "; ".join(broken) or "n/a")
-
-# The two that matter, named outright, so a rename cannot quietly drop
-# them from the list above and still pass.
-asked = {path for _, path in calls}
-check("the kitchen ticket is among them",
-      any(path.endswith("/kot") for path in asked),
-      "nothing asks to print a kitchen ticket at all: %s" % sorted(asked))
-
-check("and so is the customer's bill",
-      any(path.endswith("/bill") for path in asked),
-      "nothing asks to print a bill at all: %s" % sorted(asked))
+        broken.append(path)
+check("and both of those addresses are real routes",
+      asked and not broken,
+      "broken: %s" % broken)
 
 print("\n=== 13. A receipt for the customer who asks for one ===")
-# The kitchen ticket prints by itself, because somebody has to cook the
-# food. The customer's copy does not: most people walk off without one and
-# printing every time burns a roll a day. So it is a button, sitting where
-# the money is already being taken.
+# Most people walk off without a receipt, and printing every time burns a
+# roll a day. So it is a button, sitting where the money is already being
+# taken.
 billing_html = a.get("/billing").get_data(as_text=True)
 
 check("billing offers a print button on the row",
@@ -383,11 +374,9 @@ check("and that order really does have a printable bill",
       and a.get("/orders/%s/bill" % printed[0]).status_code == 200,
       "the button points at something that does not print")
 
-# It opens in a window of its own rather than the hidden frame the
-# automatic printing uses. That frame is 0x0 with opacity 0, and a
-# browser will not print a frame with no rendered area - so the button
-# did nothing and showed no bill either. What matters here is what it
-# always did: the cashier keeps their place in the list.
+# It opens in a window of its own: a browser will not print a frame with
+# no rendered area, and what matters is what it always did - the cashier
+# keeps their place in the list.
 check("pressing it prints rather than leaving the page",
       "window.open('/orders/' + orderId + '/bill', '_blank')"
       in billing_html,

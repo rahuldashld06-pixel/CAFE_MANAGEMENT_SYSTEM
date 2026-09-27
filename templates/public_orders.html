@@ -1,0 +1,99 @@
+{% from "_brand_mark.html" import coffee_mark %}
+{% set SAYS = {"Pending": "In the kitchen",
+               "Completed": "Ready to collect",
+               "Cancelled": "Cancelled"} %}
+{% set STATE = {"Completed": "ready", "Cancelled": "cancelled"} %}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ cafe_theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Your orders · {{ branding.cafe_name }}</title>
+    {% include "_favicon.html" %}
+    <meta name="theme-color" content="#170F0B">
+    <meta name="robots" content="noindex">
+    <meta name="description" content="The orders you have sent to {{ cafe.cafe_name }} today, and the number of each one.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ asset_url('css/theme.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/public.css') }}">
+</head>
+
+<body>
+
+<div class="p-wrap">
+
+    <header class="p-head">
+        <span class="p-head__mark">
+            {% if branding.logo %}
+            <img src="{{ branding.logo }}" alt="">
+            {% else %}
+            {{ coffee_mark() }}
+            {% endif %}
+        </span>
+        <div>
+            <h1 class="p-head__name">{{ branding.cafe_name }}</h1>
+            <p class="p-head__sub">Your orders today</p>
+        </div>
+    </header>
+
+    {% if orders %}
+
+    <p class="p-day">{{ day }}</p>
+
+    <div class="p-mylist">
+        {% for order in orders %}
+        {# Newest at the top, and every row goes to that order's own page -
+           which is where the dishes are, and where the kitchen ticking
+           them off can be watched. #}
+        <a class="p-past"
+           data-state="{{ STATE.get(order.order_status, 'pending') }}"
+           href="{{ url_for('public_order_placed', token=token, ref=order.public_ref) }}">
+            <span class="p-past__no">#{{ order.daily_no or order.order_id }}</span>
+            <span class="p-past__body">
+                <span class="p-past__state">{{ SAYS.get(order.order_status, SAYS["Pending"]) }}</span>
+                <span class="p-past__at">Sent at {{ order.when }}</span>
+            </span>
+            <span class="p-past__sum">&#8377;{{ "%.2f"|format(order.total_amount|float) }}</span>
+        </a>
+        {% endfor %}
+    </div>
+
+    {# Said plainly, because it explains both what the page is for and
+       why it is empty on a different phone: the list belongs to this one.
+       A customer who has just cleared their browser is better off being
+       told that than left wondering. #}
+    <p class="p-note">
+        Quote a number at the counter. This list is kept on this phone, for
+        today only - it does not appear on any other phone.
+    </p>
+
+    {% else %}
+
+    <div class="p-empty">
+        <p>Nothing from this phone today.</p>
+        <p>Every order you send from here is listed on this page, with the
+           number to quote at the counter.</p>
+    </div>
+
+    {% endif %}
+
+    <a class="p-again" href="{{ url_for('public_menu', token=token) }}">
+        {% if orders %}Order something else{% else %}See the menu{% endif %}
+    </a>
+
+    <p class="p-foot">Served by {{ branding.cafe_name }}</p>
+
+    {# The same credit the menu and the order page carry. #}
+    <p class="p-by">
+        <span class="p-by__mark">{{ coffee_mark() }}</span>
+        <span class="p-by__name">{{ platform_name }}</span>
+    </p>
+
+</div>
+
+</body>
+</html>

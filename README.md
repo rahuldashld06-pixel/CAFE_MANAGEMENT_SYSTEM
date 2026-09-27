@@ -19,18 +19,32 @@ branding, fully isolated from the others.
   Profile -> Table QR Code. A customer scans it, sees that cafe's menu with
   no account, sends an order and is given a number to quote at the counter.
   The order lands on the kitchen screen marked as having come from a
-  phone, and its kitchen ticket is claimed and printed by exactly one
-  staff screen. The page the customer is still holding keeps up with the
+  phone. The page the customer is still holding keeps up with the
   kitchen on its own: each dish is marked Ready as it is ticked off, and
   the whole order says so when it is finished. They are sitting at a
   table with no counter to watch.
+- **A minute before it goes.** Send to kitchen opens a window with a
+  countdown rather than sending. Anything added during it goes on the
+  same order, because nothing has been sent yet; confirming ends the
+  minute early and letting it run out sends it anyway. Ordering at a
+  table is not one decision, and without this a coffee and the pastry
+  remembered ten seconds later were two orders, two numbers and two
+  tickets for one table.
+- **What this phone has ordered today.** Every order a phone sends is
+  listed on its own page under that cafe's code, newest first, with the
+  number, the time, the total and a link to each order. A customer who
+  ordered twice can say which order was theirs at the counter. The list
+  is kept in a cookie on the phone, scoped to that cafe's pages and to
+  that day, and every order on it is still checked against the cafe
+  before it is shown - an address will not do it, because a cafe's
+  tables sit behind one router.
 - **Categories and menu.** Categories, food items with photos, prices.
 - **Inventory.** Stock levels drive availability automatically — an item
   at zero stock disappears from the order screen.
 - **Whose name is on it.** A café brands its own sidebar, its own
   printed receipt and the page its customers hold — their name, their
   symbol, their colour. Behind every page inside the app sits one mark
-  that is not theirs to change: the coffee cup and the product's own
+  that is not theirs to change: the Cafora mark and the product's own
   name, faint, fixed, and ignoring both the uploaded symbol and the name
   they chose for their sidebar. Nothing appears on the sign-in, register
   or one-time-code screens, which stand outside the app shell entirely.
@@ -91,11 +105,10 @@ branding, fully isolated from the others.
   that store — it has to, or a screen would go on showing what was true
   before — and the store refills itself straight afterwards, including the
   page the save happened on. What does *not* empty it is the app talking
-  to itself: the kitchen screen saying it is still switched on every
-  twenty seconds, a till claiming a ticket, the tour recording that it was
-  seen. Those used to, and that alone was most of why moving around felt
-  slow: measured with the database next door, one heartbeat turned a page
-  that painted in 1ms into 258ms.
+  to itself - the tour recording that it was seen. Posts like that used
+  to, and that alone was most of why moving around felt slow: measured
+  with the database next door, one of them turned a page that painted in
+  1ms into 258ms.
 - **A tour, once.** The first time somebody signs in they are shown
   round. Each step puts a ring round the thing it is describing and says
   what pressing it does - and pressing that thing is how the tour moves
@@ -130,11 +143,39 @@ branding, fully isolated from the others.
   are restricted to ordering, food, inventory and billing.
 - **Admin OTP login.** Admins with a mobile number on file confirm a
   6-digit code after their password.
+- **Cafora on the tab.** Every page shows the Cafora mark as its browser
+  icon and ends its title with the name - "Kitchen · Cafora" - the way
+  any site reads in a tab. The icon is built from the same shapes as
+  the mark in the sidebar, drawn heavier for sixteen pixels, and
+  /favicon.ico answers with it for bookmarks and history lists.
+- **Remember me.** A sign-in ends once it has gone unused for eight
+  hours, which is right for a till: in use all day it stays signed in,
+  left overnight it is not. Ticking the box on the sign-in page makes
+  that a week instead - closing the browser signs nobody out and neither
+  does working all week, but a week away does. The window is counted
+  from the last request, not from signing in, and enforced on the server
+  as well as in the cookie, so a cookie kept past its expiry is not a way
+  round it. `SESSION_HOURS` and `REMEMBER_DAYS` set the two. Ticking it
+  also keeps the name or email that was typed, so the sign-in page has
+  it filled in from then on; the password is left to the browser's own
+  password manager, because a site that wrote it down would hand it to
+  anybody holding the device.
+- **Nothing typed is lost.** Every form keeps a copy of what has been
+  typed into it on the device, written as it changes. If the page goes
+  before it is saved - the browser closed, the power went, the site fell
+  over in the middle of a save - the form comes back filled in the next
+  time it is opened, and all that is left is to press Save. A copy is
+  thrown away only once the save is known to have landed: every save the
+  server answers says whether it went through, so one that failed keeps
+  its copy, and one that never got an answer comes back with a warning
+  that it may already have gone through. Passwords and files are never
+  kept, copies belong to the person who typed them, and they last a
+  week.
 - **Name and symbol in the top corner.** An admin sets the name, the
   tagline and the symbol the sidebar shows, under Profile -> Name & Symbol.
-  Left alone it reads "Cafe Manager / Food & Service Admin" beside a coffee
-  cup, and clearing a field puts that default back rather than leaving a
-  blank corner. The same name is in the bar that stays at the top on a
+  Left alone it reads "Cafora / Food & Service Admin" beside the Cafora
+  mark - a cup of coffee inside the C it is named for - and clearing a
+  field puts that default back rather than leaving a blank corner. The same name is in the bar that stays at the top on a
   phone.
 - **A customer's bill is dressed for a customer.** The cafe's name in a
   serif, its symbol pale behind the text, a line at the foot chosen from
@@ -176,8 +217,8 @@ count honest.
 
 Anything that changes something drops the cached rows on its way out of
 the request, rather than each write site remembering to. A short list of
-endpoints skips that - the ones a kitchen screen posts to every few
-seconds, and taking an order, which writes only orders, stock and bills.
+endpoints skips that - the ones a kitchen screen uses as it works, and
+taking an order, which writes only orders, stock and bills.
 That list is checked rather than trusted: the suite drives each one and
 fails if any statement changes a column the cached row carries. It has
 already caught one - `timezone_guess` writes `cafes.timezone`, and while
@@ -292,9 +333,7 @@ tests/tablet_layout_test.py Real-browser tablet layout test suite
 tests/stock_alert_test.py Dashboard stock-alert test suite
 tests/print_test.py  Printable bill and kitchen ticket test suite
 tests/staff_access_test.py Non-admin permission test suite
-tests/auto_print_test.py Automatic-printing settings test suite
 tests/billing_paid_test.py Bill settlement test suite
-tests/auto_print_browser_test.py Real-browser automatic-printing suite
 tests/browser_nav_test.py Real-browser navigation test suite
 tests/menu_search_test.py Real-browser New Order menu/search test suite
 tests/stale_banner_test.py Real-browser stale-flash regression suite
@@ -309,6 +348,9 @@ tests/colour_browser_test.py Real-browser colour-picker and page-swap suite
 tests/list_search_test.py Real-browser phone-header, list-search and billing-layout suite
 tests/identity_test.py Phone numbers by country, and signing in by email
 tests/security_test.py Headers, login lockout, upload sniffing and tenant isolation
+tests/page_head_test.py robots.txt, the description a shared link shows, and the tab
+tests/qr_hold_test.py Real-browser suite for the minute before an order is sent
+tests/draft_restore_test.py Real-browser suite for forms that survive a closed browser
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
@@ -480,11 +522,9 @@ python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 104  FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 62   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 30   FAILED: 0
-python tests/print_test.py        # expect PASSED: 55   FAILED: 0
+python tests/print_test.py        # expect PASSED: 56   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 33   FAILED: 0
-python tests/auto_print_test.py   # expect PASSED: 39   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 44   FAILED: 0
-python tests/auto_print_browser_test.py # expect PASSED: 12  FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 17   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
@@ -492,20 +532,23 @@ python tests/mobile_nav_test.py   # expect PASSED: 84   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
-python tests/qr_order_test.py     # expect PASSED: 123  FAILED: 0
-python tests/kitchen_screen_test.py # expect PASSED: 23  FAILED: 0
-python tests/password_view_test.py # expect PASSED: 23  FAILED: 0
+python tests/qr_order_test.py     # expect PASSED: 145  FAILED: 0
+python tests/kitchen_screen_test.py # expect PASSED: 21  FAILED: 0
+python tests/password_view_test.py # expect PASSED: 29  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
-python tests/tutorial_test.py     # expect PASSED: 41   FAILED: 0
+python tests/tutorial_test.py     # expect PASSED: 40   FAILED: 0
 python tests/tour_browser_test.py # expect PASSED: 26  FAILED: 0
-python tests/nav_cache_test.py    # expect PASSED: 8    FAILED: 0
+python tests/nav_cache_test.py    # expect PASSED: 7    FAILED: 0
 python tests/timezone_test.py     # expect PASSED: 41   FAILED: 0
 python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
-python tests/list_search_test.py  # expect PASSED: 108  FAILED: 0
-python tests/identity_test.py     # expect PASSED: 88   FAILED: 0
-python tests/security_test.py     # expect PASSED: 107  FAILED: 0
+python tests/list_search_test.py  # expect PASSED: 109  FAILED: 0
+python tests/identity_test.py     # expect PASSED: 97   FAILED: 0
+python tests/security_test.py     # expect PASSED: 130  FAILED: 0
+python tests/page_head_test.py    # expect PASSED: 89   FAILED: 0
+python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
+python tests/draft_restore_test.py # expect PASSED: 35  FAILED: 0
 ```
 
 All thirty-six run in memory against a SQLite stand-in — no database or
@@ -618,27 +661,15 @@ Billing summary, fixed to today rather than the filtered period, with
 revenue left off. It checks the sidebar and the server guard
 agree, because a link that is hidden but still served is a hole.
 
-`auto_print_test.py` and `auto_print_browser_test.py` cover automatic
-printing: that both switches start off, that the delay is validated, that
-anyone who works at the café can change them, and — in a real browser —
-that the kitchen ticket waits its configured delay while the receipt does
-not, and that nothing prints while a switch is off.
-
-Kitchen tickets are pulled rather than pushed, for counter orders as well
-as ones sent from a table. Whichever screen asks first claims the ticket
-and prints it, so two tills watching print one ticket between them. When a
-kitchen screen is on it takes them all, and the till stands down — the
-till is next to the customer and the food is made in the kitchen. The
-café's delay is applied to counter orders wherever they end up printing,
-because it exists to leave room to catch an order tapped in wrong; an
-order from a table is not held back, because there is no till to have
-slipped and a customer is waiting. An order taken while nothing was going
-to print it is marked dealt with there and then, so turning the setting on
-after lunch does not run off a ticket for every order already served.
-
-Note that a browser always shows its print dialog. To print silently, start
-Chrome or Edge with `--kiosk-printing` and set the till's receipt printer as
-the default.
+Nothing prints by itself. A kitchen ticket comes out when somebody presses
+Print KOT on the order, and a bill when somebody presses Print Bill - on
+Billing or on the order's own page. There used to be automatic printing,
+with a settings page, a kitchen screen that checked in so the tills would
+stand down, and a queue the screens claimed tickets from; all of it is
+gone. `print_test.py` checks that no page prints on its own and that both
+buttons lead to real, printable pages, and `kitchen_screen_test.py` checks
+in a real browser that a ticket arriving on the kitchen screen reaches no
+printer. The old settings columns are left in the database, unread.
 
 `billing_paid_test.py` pins down what settles a bill: only the Paid button.
 Choosing UPI or Card records how a bill will be paid, not that it has been,
@@ -654,11 +685,8 @@ given, not the permanent row id, so the same order is not #47 on one screen
 and #6 on another. The bill keeps its own number: they are different things,
 counted differently, and the bill number is what the bill is filed under.
 
-Billing prints a customer's receipt on request rather than automatically: the
-kitchen ticket has to print because somebody must cook the food, but most
-customers walk off without a receipt, and printing every one burns a roll a
-day. The button sits beside the payment status, where the money is already
-being taken.
+Billing's Print Bill sits beside the payment status, where the money is
+already being taken, and opens the bill where it can be read.
 
 ## Known limitations
 

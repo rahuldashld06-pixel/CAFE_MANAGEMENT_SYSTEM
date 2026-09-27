@@ -193,8 +193,7 @@ for username, role in [("mgr", "manager"), ("cash2", "cashier"),
         "_csrf_token": csrf(admin)}, follow_redirects=True)
 
 PAGES = ["/orders/add", "/kitchen", "/foods", "/inventory", "/categories",
-         "/billing", "/account/password", "/account/photo",
-         "/settings/printing"]
+         "/billing", "/account/password", "/account/photo"]
 
 for username, role in [("mgr", "manager"), ("cash2", "cashier"),
                        ("stf", "staff")]:

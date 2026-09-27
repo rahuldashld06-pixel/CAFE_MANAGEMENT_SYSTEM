@@ -4,433 +4,187 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ cafe_branding.cafe_name }} | Create Account</title>
+    <meta name="description" content="Set up a cafe: take orders at the counter or from a QR code on the table, and keep stock and billing in one place.">
+    {# The picture behind the panel is the biggest thing on this page,
+       so it is what Largest Contentful Paint times. As a CSS background
+       it was invisible to the preload scanner - the browser only learns
+       of it once the styles are matched against the element. Stated
+       here, it starts loading with the page.
 
-    <style>
-        :root {
-            --coffee-dark: #24150f;
-            --coffee: #3b2418;
-            --coffee-mid: #5a3927;
-            --cream: #f7efe3;
-            --cream-dark: #e8d8c5;
-            --gold: #c28b52;
-            --gold-light: #d9ab78;
-            --white: #fffaf3;
-        }
+       Pointed at whichever picture will actually be used: the cafe's
+       own if it has uploaded one, otherwise the stock photo, which
+       lives on another host and needs that host found first. #}
+    {%- if cafe_branding.login_photo %}
+    <link rel="preload" as="image" fetchpriority="high"
+          href="{{ cafe_branding.login_photo }}">
+    {%- else %}
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin>
+    <link rel="preload" as="image" fetchpriority="high"
+          href="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=640&q=70"
+          imagesrcset="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=640&q=70 640w, https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1000&q=85 1600w"
+          imagesizes="(max-width: 900px) 100vw, 50vw">
+    {%- endif %}
+    <title>Create an account · {{ platform_name }}</title>
+    {% include "_favicon.html" %}
 
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            min-height: 100vh;
-            font-family: Georgia, "Times New Roman", serif;
-            background:
-                radial-gradient(circle at 75% 30%, rgba(194,139,82,.22), transparent 28%),
-                linear-gradient(135deg, #24150f 0%, #3b2418 48%, #5a3927 100%);
-            color: var(--cream);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow-x: hidden;
-            padding: 30px 0;
-        }
-
-        .register-shell {
-            width: min(1100px, 94vw);
-            display: grid;
-            grid-template-columns: .92fr 1.08fr;
-            border-radius: 28px;
-            overflow: hidden;
-            background: rgba(36,21,15,.94);
-            border: 1px solid rgba(217,171,120,.35);
-            box-shadow: 0 30px 80px rgba(0,0,0,.45);
-        }
-
-        .register-visual {
-            position: relative;
-            min-height: 100%;
-            background:
-                linear-gradient(90deg, rgba(36,21,15,.82), rgba(36,21,15,.20)),
-                var(--login-photo, url("https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1000&q=85"))
-                center/cover no-repeat;
-            display: flex;
-            align-items: flex-end;
-            padding: 52px;
-        }
-
-        .register-visual::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(0deg, rgba(36,21,15,.85), transparent 60%);
-        }
-
-        .brand-mark {
-            width: 58px;
-            height: 58px;
-            border: 1px solid var(--gold-light);
-            border-radius: 50%;
-            display: grid;
-            place-items: center;
-            font-size: 27px;
-            margin-bottom: 20px;
-            background: rgba(36,21,15,.55);
-        }
-
-        .brand-mark .brand-glyph {
-            display: block;
-            width: 30px;
-            height: 30px;
-            color: var(--gold-light);
-        }
-
-        /* On a button it sits on the line, at the text's own size. */
-        .brand-glyph--btn {
-            display: inline-block;
-            vertical-align: -3px;
-            width: 17px;
-            height: 17px;
-            color: currentColor;
-        }
-
-        .brand-copy {
-            position: relative;
-            z-index: 1;
-            max-width: 440px;
-        }
-
-        .brand-copy h1 {
-            margin: 0 0 12px;
-            font-size: clamp(30px, 4vw, 46px);
-            letter-spacing: 1px;
-        }
-
-        .brand-copy p {
-            margin: 0;
-            color: var(--cream-dark);
-            font-size: 16px;
-            line-height: 1.7;
-        }
-
-        .register-panel {
-            padding: 48px 50px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            background: rgba(255,250,243,.055);
-        }
-
-        .register-panel .eyebrow {
-            color: var(--gold-light);
-            text-transform: uppercase;
-            letter-spacing: 2.5px;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .register-panel h2 {
-            margin: 9px 0 8px;
-            font-size: 30px;
-        }
-
-        .register-panel .subtitle {
-            margin: 0 0 24px;
-            color: #d8c7b4;
-            line-height: 1.5;
-        }
-
-        .flash {
-            padding: 11px 13px;
-            margin-bottom: 16px;
-            border-radius: 9px;
-            background: rgba(166, 72, 50, .18);
-            border: 1px solid rgba(217,130,105,.4);
-            color: #f1c8bd;
-            font-size: 14px;
-        }
-
-        .field-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-
-        .field {
-            margin-bottom: 16px;
-        }
-
-        .field label {
-            display: block;
-            margin-bottom: 7px;
-            color: var(--cream-dark);
-            font-size: 13px;
-            font-weight: 700;
-        }
-
-        .field input,
-        .field select {
-            width: 100%;
-            padding: 12px 14px;
-            border-radius: 10px;
-            border: 1px solid rgba(217,171,120,.35);
-            background: rgba(0,0,0,.20);
-            color: var(--white);
-            font-size: 14px;
-            font-family: inherit;
-            outline: none;
-        }
-
-        .field select {
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%23D9AB78' stroke-width='1.6' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 14px center;
-            padding-right: 34px;
-        }
-
-        .field input:focus,
-        .field select:focus {
-            border-color: var(--gold-light);
-            box-shadow: 0 0 0 3px rgba(217,171,120,.10);
-        }
-
-        .field small {
-            display: block;
-            margin-top: 6px;
-            color: #a8917a;
-            font-size: 12px;
-        }
-
-        .register-button {
-            width: 100%;
-            margin-top: 7px;
-            padding: 14px 18px;
-            border: 0;
-            border-radius: 10px;
-            background: linear-gradient(135deg, var(--gold), var(--gold-light));
-            color: var(--coffee-dark);
-            font-size: 15px;
-            font-weight: 800;
-            cursor: pointer;
-            transition: transform .15s ease, box-shadow .15s ease;
-        }
-
-        .register-button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 8px 22px rgba(194,139,82,.25);
-        }
-
-        .signin-link {
-            text-align: center;
-            margin-top: 20px;
-            color: #ad9a87;
-            font-size: 13px;
-        }
-
-        .signin-link a {
-            color: var(--gold-light);
-            font-weight: 700;
-            text-decoration: none;
-            border-bottom: 1px solid transparent;
-            transition: border-color .15s ease;
-        }
-
-        .signin-link a:hover {
-            border-bottom-color: var(--gold-light);
-        }
-
-        @media (max-width: 800px) {
-            body {
-                overflow-y: auto;
-            }
-
-            .register-shell {
-                grid-template-columns: 1fr;
-            }
-
-            .register-visual {
-                min-height: 220px;
-                padding: 30px;
-            }
-
-            .register-panel {
-                padding: 34px 26px;
-            }
-
-            .field-row {
-                grid-template-columns: 1fr;
-                gap: 0;
-            }
-        }
-    </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/password-view.css', v=asset_version) }}">
-    <script src="{{ url_for('static', filename='js/password-view.js', v=asset_version) }}" defer></script>
+    {% include "_auth_style.html" %}
+    <style>/* password-view.css, inlined: a separate request for 2.7KB
+       held up the first paint by a whole round trip. */
+{{ password_view_css }}</style>
+    <script src="{{ asset_url('js/password-view.js') }}" defer></script>
     {# The app's own stylesheet and scripts, fetched while someone is
        typing their password or a one-time code. None of them are loaded
        by this screen, so without this they are all fetched fresh the
        moment the first real page appears. The pages themselves cannot be
        fetched yet - there is no session until sign-in finishes, so every
        one of them would come back as a redirect to here. #}
-    <link rel="prefetch" as="style" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
-    <link rel="prefetch" as="style" href="{{ url_for('static', filename='css/style.css', v=asset_version) }}">
-    <link rel="prefetch" as="script" href="{{ url_for('static', filename='js/instant.js', v=asset_version) }}">
-    <link rel="prefetch" as="script" href="{{ url_for('static', filename='js/fullscreen.js', v=asset_version) }}">
+    <link rel="prefetch" as="style" href="{{ asset_url('css/theme.css') }}">
+    <link rel="prefetch" as="style" href="{{ asset_url('css/style.css') }}">
+    <link rel="prefetch" as="script" href="{{ asset_url('js/instant.js') }}">
+    <link rel="prefetch" as="script" href="{{ asset_url('js/fullscreen.js') }}">
 </head>
 
 <body>
 
-<div class="register-shell">
+<div class="auth-shell">
 
-    <section class="register-visual"
+    <section class="auth-visual"
         {% if cafe_branding.login_photo %}
         style="--login-photo: url('{{ cafe_branding.login_photo }}');"
         {% endif %}>
+
+        <div class="brand">
+            <span class="brand-mark">
+                {% if cafe_branding.logo %}
+                <img src="{{ cafe_branding.logo }}" alt="">
+                {% else %}
+                {{ coffee_mark() }}
+                {% endif %}
+            </span>
+            <span class="brand-name">
+                <strong>{{ cafe_branding.cafe_name }}</strong>
+                <span>{{ cafe_branding.brand_tagline }}</span>
+            </span>
+        </div>
+
         <div class="brand-copy">
-            {% if cafe_branding.logo %}
-                <img
-                    src="{{ cafe_branding.logo }}"
-                    alt="{{ cafe_branding.cafe_name }} logo"
-                    style="width:64px;height:64px;object-fit:contain;border-radius:50%;margin-bottom:20px;background:rgba(255,250,243,.12);border:1px solid rgba(217,171,120,.45);padding:6px;">
-            {% else %}
-                <div class="brand-mark">{{ coffee_mark() }}</div>
-            {% endif %}
+            <h1>Everything your café runs on, in one place.</h1>
 
-            <h1>{{ cafe_branding.cafe_name }}</h1>
-
-            <p>
-                Create your café and administrator account. Your café data will be private to your organization.
-            </p>
+            {% set tick %}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="8.2" opacity=".45"/><path d="M6.4 10.2l2.4 2.4 4.8-5"/></svg>{% endset %}
+            <ul class="perks">
+                <li>{{ tick }}Orders at the counter, and from a QR code on the table</li>
+                <li>{{ tick }}A kitchen screen that ticks off each dish as it goes out</li>
+                <li>{{ tick }}Stock, bills and reports that always add up</li>
+            </ul>
         </div>
     </section>
 
-    <section class="register-panel">
+    <section class="auth-panel">
 
-        <div class="eyebrow">Cafe Management System</div>
-
+        <p class="eyebrow">Get started</p>
         <h2>Create your account</h2>
-
         <p class="subtitle">
-            Create your café workspace and the first administrator account.
-            You can add managers, cashiers, and staff after signing in.
+            Set up your café and its first administrator. You can add
+            managers, cashiers and staff once you are in.
         </p>
 
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}
-                    <div class="flash">
-                        {{ message }}
-                    </div>
+                    <div class="flash" role="alert">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
-        {# The browser knows what clock this screen is on, and the cafe
-       may not have been asked yet. Carried with the sign-in so the very
-       first page already reads the right time - settling it afterwards
-       meant reloading the page under whoever had just arrived. #}
-    <form method="POST">
+        <form method="POST">
 
             <div class="field">
-                <label for="cafe_name">Café Name</label>
-                <input type="text" id="cafe_name" name="cafe_name" placeholder="e.g. My Coffee House" maxlength="150" required autofocus>
-                <small>This creates a new private café workspace.</small>
-            </div>
-
-            <div class="field">
-                <label for="full_name">Full Name</label>
-                <input
-                    type="text"
-                    id="full_name"
-                    name="full_name"
-                    placeholder="Enter your full name"
-                    maxlength="120"
-                    required>
+                <label for="cafe_name">Café name</label>
+                <input type="text" id="cafe_name" name="cafe_name"
+                       placeholder="e.g. The Coffee House"
+                       maxlength="150" required autofocus>
             </div>
 
             <div class="field-row">
+                <div class="field">
+                    <label for="full_name">Your name</label>
+                    <input type="text" id="full_name" name="full_name"
+                           placeholder="Full name"
+                           autocomplete="name" maxlength="120" required>
+                </div>
+
                 <div class="field">
                     <label for="username">Username</label>
-                    <input
-                        type="text"
-                        id="username"
-                        name="username"
-                        placeholder="Choose a username"
-                        maxlength="80"
-                        autocomplete="username"
-                        required>
-                </div>
-
-                <div class="field">
-                    <label for="phone_number">Mobile Number</label>
-                    {% include "_phone_field.html" %}
+                    <input type="text" id="username" name="username"
+                           placeholder="Choose a username"
+                           autocomplete="username" maxlength="80"
+                           autocapitalize="none" spellcheck="false" required>
                 </div>
             </div>
 
-            <div class="field-row">
-                <div class="field">
-                    <label for="email">Email address</label>
-                    <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        autocomplete="email"
-                        maxlength="190">
-                    <small>You can sign in with this or your username.</small>
-                </div>
+            <div class="field">
+                {# Either this or the username signs in, which the
+                   sign-in page says for itself. #}
+                <label for="email">
+                    Email <span class="optional">Optional</span>
+                </label>
+                <input type="email" id="email" name="email"
+                       placeholder="name@example.com"
+                       autocomplete="email" maxlength="190">
+            </div>
+
+            <div class="field">
+                <label for="phone_number">
+                    Mobile number <span class="optional">Optional</span>
+                </label>
+                {% include "_phone_field.html" %}
             </div>
 
             <div class="field-row">
                 <div class="field">
                     <label for="password">Password</label>
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        placeholder="Create a password"
-                        autocomplete="new-password"
-                        minlength="8"
-                        required>
+                    <input type="password" id="password" name="password"
+                           placeholder="At least 8 characters"
+                           autocomplete="new-password" minlength="8" required>
                 </div>
 
                 <div class="field">
-                    <label for="confirm_password">Confirm Password</label>
-                    <input
-                        type="password"
-                        id="confirm_password"
-                        name="confirm_password"
-                        placeholder="Re-enter password"
-                        autocomplete="new-password"
-                        minlength="8"
-                        required>
+                    <label for="confirm_password">Confirm password</label>
+                    <input type="password" id="confirm_password"
+                           name="confirm_password"
+                           placeholder="Type it again"
+                           autocomplete="new-password" minlength="8" required>
                 </div>
             </div>
 
-
-            <button
-                type="submit"
-                class="register-button">
-
-                {{ coffee_mark('brand-glyph--btn') }} Create Café & Admin Account
-
+            <button type="submit" class="auth-button">
+                {{ coffee_mark('brand-glyph--btn') }}
+                <span>Create your café</span>
             </button>
 
+            <p class="fine-print">
+                Your café's data is private to your café. You become its
+                administrator.
+            </p>
+
+            {# The browser knows what clock this screen is on, and the
+               cafe may not have been asked yet. Carried with the sign-up
+               so the very first page already reads the right time. #}
             <input type="hidden" name="timezone" id="signUpClock">
-    </form>
+        </form>
 
-    <script>
-        (function () {
-            var box = document.getElementById("signUpClock");
-            if (!box) return;
-            try {
-                box.value =
-                    Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-            } catch (error) { /* older browser: the setting still works */ }
-        }());
-    </script>
+        <script>
+            (function () {
+                var box = document.getElementById("signUpClock");
+                if (!box) return;
+                try {
+                    box.value =
+                        Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+                } catch (error) { /* older browser: the setting still works */ }
+            }());
+        </script>
 
-        <div class="signin-link">
+        <div class="auth-foot">
             Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
         </div>
 

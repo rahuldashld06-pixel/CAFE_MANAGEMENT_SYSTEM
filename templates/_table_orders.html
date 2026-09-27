@@ -1,0 +1,30 @@
+{# ------------------------------------------------------------------
+   The numbers this phone has already been given today.
+
+   Shown on the menu and again under a new order, because those are the
+   two places a customer is standing when they need the earlier one: the
+   page that carried it has been replaced by whatever they did next.
+
+   A link to the list rather than the list itself. On the menu a list of
+   past orders is a list between somebody and their lunch, and on the
+   page after an order the order in front of them is the one that
+   matters - the others are a number and a tap away.
+   ------------------------------------------------------------------ #}
+{% macro table_orders_link(token, orders, label) %}
+{% if orders %}
+<a class="p-mine" href="{{ url_for('public_table_orders', token=token) }}">
+    <span class="p-mine__body">
+        <span class="p-mine__label">{{ label }}</span>
+        <span class="p-mine__nos">
+            {%- for order in orders[:6] %}
+            <span class="p-mine__no">#{{ order.daily_no or order.order_id }}</span>
+            {%- endfor %}
+            {%- if orders|length > 6 %}
+            <span class="p-mine__more">and {{ orders|length - 6 }} more</span>
+            {%- endif %}
+        </span>
+    </span>
+    <span class="p-mine__go" aria-hidden="true">&rsaquo;</span>
+</a>
+{% endif %}
+{% endmacro %}

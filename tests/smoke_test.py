@@ -182,7 +182,7 @@ check("Demoting the only admin is refused",
 
 print("\n=== 7. The shell is the product; the cafe name is still per-cafe ===")
 # Branding used to be a single JSON file at the project root, so one cafe
-# renaming itself renamed every cafe. The shell now reads "Cafe Manager"
+# renaming itself renamed every cafe. The shell now reads "Cafora"
 # for everyone, and each cafe's own name reaches only its own pages.
 shell_a = a.get("/orders/add").get_data(as_text=True)
 shell_b = b.get("/orders/add").get_data(as_text=True)

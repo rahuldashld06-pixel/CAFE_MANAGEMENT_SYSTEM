@@ -11,8 +11,11 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 from flask import (
     Flask, render_template, request, redirect, url_for, flash, session, g,
-    jsonify, abort, has_request_context, send_file
+    jsonify, abort, has_request_context, make_response, send_file,
+    send_from_directory, Response, after_this_request
 )
+from flask.sessions import SecureCookieSessionInterface
+from markupsafe import Markup
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -104,7 +107,9 @@ app = Flask(__name__)
 # never sent back.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-app.config["CAFE_NAME"] = os.environ.get("CAFE_NAME", "Coffeehouse")
+# The name on the sign-in, register and reset screens, which belong to
+# no cafe yet. Cafora is the product; a deployment can still set its own.
+app.config["CAFE_NAME"] = os.environ.get("CAFE_NAME", "Cafora")
 app.config["CAFE_LOGO"] = os.environ.get("CAFE_LOGO", "")
 
 # "production" everywhere except your own machine. Controls the fail-fast
@@ -129,15 +134,61 @@ if not _secret_key:
 
 app.secret_key = _secret_key
 
+# How long a sign-in may sit unused. The first is what every sign-in
+# has always had - a till in use all day stays signed in, and one left
+# alone overnight is signed out by morning. The second is what the
+# Remember me box asks for, on a phone or a laptop that belongs to one
+# person: closing the browser does not sign anybody out, and nor does
+# working all week, but a week away does.
+SESSION_HOURS = int(os.environ.get("SESSION_HOURS", "8"))
+REMEMBER_DAYS = int(os.environ.get("REMEMBER_DAYS", "7"))
+
+# The name or email typed at sign-in, kept for the next one when the box
+# was ticked. 400 days is the longest any browser will keep a cookie -
+# Chrome cuts anything longer down to it - and every sign-in with the
+# box ticked starts it again, so for anybody who signs in at least once
+# a year it does not run out.
+REMEMBERED_LOGIN_COOKIE = "cafora_login"
+REMEMBERED_LOGIN_DAYS = 400
+
+
+class SignInSession(SecureCookieSessionInterface):
+    """
+    Two lengths of sign-in, out of Flask's one.
+
+    PERMANENT_SESSION_LIFETIME is used for two things at once: how long
+    the browser is told to keep the cookie, and how long a signature on
+    one is still accepted. It holds the longer window, so that a
+    remembered sign-in is not thrown out by the signature after eight
+    hours - and this hands every other sign-in the short expiry, so an
+    ordinary one still disappears after a shift's worth of nobody using
+    it.
+
+    The expiry here is the browser's to honour. sign_in_is_stale() is
+    the same rule applied where it cannot be edited.
+    """
+
+    def get_expiration_time(self, app, session):
+        if session.permanent and not session.get("remembered"):
+            return datetime.now(timezone.utc) + timedelta(hours=SESSION_HOURS)
+        return super(SignInSession, self).get_expiration_time(app, session)
+
+
+app.session_interface = SignInSession()
+
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get(
         "SESSION_COOKIE_SECURE", "1" if IS_PRODUCTION else "0"
     ) == "1",
-    PERMANENT_SESSION_LIFETIME=timedelta(
-        hours=int(os.environ.get("SESSION_HOURS", "8"))
-    ),
+    # The longer of the two windows below, because Flask keeps one
+    # lifetime for the whole app and uses it for the signature on the
+    # cookie as well as for the cookie's own expiry. A sign-in that was
+    # not remembered is held to the shorter window by the session
+    # interface underneath and by sign_in_is_stale(), which is the one
+    # that cannot be edited by whoever is holding the cookie.
+    PERMANENT_SESSION_LIFETIME=timedelta(days=REMEMBER_DAYS),
     # Uploaded logos/food photos are stored in the database; cap the request
     # body so a large file cannot exhaust a web worker's memory.
     MAX_CONTENT_LENGTH=int(os.environ.get("MAX_UPLOAD_MB", "5")) * 1024 * 1024,
@@ -156,6 +207,9 @@ def _asset_version():
 
     Without it the long SEND_FILE_MAX_AGE_DEFAULT above would pin a stale
     stylesheet in every browser that had already loaded the old one.
+
+    Kept as the fallback for anything asked for by a name that is not on
+    disk; asset_url() below stamps each file with its own time.
     """
     newest = 0.0
     static_root = os.path.join(app.root_path, "static")
@@ -170,12 +224,86 @@ def _asset_version():
     return str(int(newest))
 
 
+def _read_static(filename):
+    """
+    A small static file's contents, read once when the app starts.
+
+    For things small enough that a request of their own costs more than
+    the bytes do. The file stays the only copy anyone edits; it is
+    simply delivered inside the page rather than after it.
+    """
+    try:
+        with io.open(os.path.join(app.root_path, "static", filename),
+                     encoding="utf-8") as handle:
+            body = handle.read()
+    except OSError:
+        app.logger.warning("could not inline %s; it will be missing from "
+                           "the page", filename)
+        return Markup("")
+
+    # A closing tag in here would end the block early and spill the rest
+    # of the file into the page as text. Nothing in this repo does that,
+    # and refusing it keeps that true of whatever gets edited later.
+    lowered = body.lower()
+    if "</style" in lowered or "<!--" in lowered:
+        app.logger.error("refusing to inline %s: it contains markup that "
+                         "would end the block it is placed in", filename)
+        return Markup("")
+
+    # Marked as markup deliberately. Escaping would turn the quotes in
+    # input[type="text"] into entities, which a style block does not
+    # decode, and every attribute selector in the file would quietly
+    # stop matching. Safe because this is a file from this repo read at
+    # start-up - never anything a request supplies.
+    return Markup(body)
+
+
+# 2.7KB, and it was a render-blocking request on every page with a
+# password field - nothing drawn until a whole round trip had fetched
+# it.
+PASSWORD_VIEW_CSS = _read_static("css/password-view.css")
+
+
+_ASSET_STAMPS = {}
+
+
+def asset_url(filename):
+    """
+    A static file's address, stamped with that file's own time.
+
+    One stamp for all of them meant changing a line of CSS re-fetched
+    the stylesheet AND the theme AND both scripts, in every browser that
+    had them. On this host a static file costs a few hundred
+    milliseconds however small it is - the round trip, not the bytes -
+    so six of those on every deploy is most of a second handed to every
+    returning user for nothing.
+
+    Read once per file per process. Static files do not change under a
+    running server; they change with a deploy, and a deploy is a new
+    process.
+    """
+    stamp = _ASSET_STAMPS.get(filename)
+
+    if stamp is None:
+        try:
+            stamp = str(int(os.path.getmtime(
+                os.path.join(app.root_path, "static", filename))))
+        except OSError:
+            # A name that is not on disk still gets a usable address;
+            # the global stamp is the best answer available.
+            stamp = ASSET_VERSION
+        _ASSET_STAMPS[filename] = stamp
+
+    return url_for("static", filename=filename, v=stamp)
+
+
 ASSET_VERSION = _asset_version()
 
 
 @app.context_processor
 def inject_asset_version():
-    return {"asset_version": ASSET_VERSION}
+    return {"asset_version": ASSET_VERSION, "asset_url": asset_url,
+            "password_view_css": PASSWORD_VIEW_CSS}
 
 
 def came_from(fallback=None):
@@ -247,15 +375,14 @@ def _forget_cached_rows(response):
     return response
 
 
-# Posted constantly by a kitchen screen, and none of them writes to the
+# Posted by a kitchen screen and a till, and none of them writes to the
 # users or cafes rows that are cached.
 # NOT timezone_guess: it writes cafes.timezone, which is on the cached
 # row. Left in here it kept the old clock alive and printed tickets in
 # UTC - caught by the suite, which is the whole reason an exclusion
 # list is a thing to keep short and justify line by line.
 _CACHE_KEEPERS = {
-    "kitchen_heartbeat", "kitchen_claim", "kitchen_item_made",
-    "order_status_feed", "kitchen_board", "kitchen_pending",
+    "kitchen_item_made", "order_status_feed", "kitchen_board",
     # Taking an order writes orders, order_items, inventory and bills,
     # and flips a food's availability when its stock hits zero. None of
     # that is cached - stock deliberately is not - so clearing the user
@@ -306,14 +433,6 @@ def inject_home_url():
     if session.get("role") == "admin":
         return {"home_url": url_for("home")}
     return {"home_url": url_for("add_order")}
-
-
-@app.context_processor
-def inject_print_settings():
-    """Every page needs these to decide whether to arm an automatic print."""
-    if not session.get("user_id"):
-        return {"print_settings": dict(DEFAULT_PRINT_SETTINGS)}
-    return {"print_settings": get_print_settings()}
 
 
 def _is_prefetch():
@@ -1112,7 +1231,7 @@ def cafe_for_token(cursor, token):
         return None
 
     cursor.execute("""
-        SELECT cafe_id, cafe_name, owner_user_id, is_active
+        SELECT cafe_id, cafe_name, owner_user_id, is_active, timezone
         FROM cafes
         WHERE public_token = %s
     """, (token,))
@@ -1120,6 +1239,14 @@ def cafe_for_token(cursor, token):
 
     if not row or not row["is_active"] or not row["owner_user_id"]:
         return None
+
+    # The clock these pages read times on. Nobody is signed in here, so
+    # without this a customer would be shown the deployment's default
+    # zone instead of the one the cafe keeps - and the row is already in
+    # hand, so it costs no query to get right.
+    if row.get("timezone") and has_request_context():
+        g.cafe_timezone = row["timezone"]
+
     return row
 
 
@@ -2426,6 +2553,7 @@ def database_error(error, doing):
     for anybody holding the page and trying things.
     """
     app.logger.exception("database error while %s", doing)
+    note_failed_save()
     return ("Something went wrong on our side and that was not saved. "
             "Please try again.")
 
@@ -2600,7 +2728,7 @@ def send_login_otp_email(address, code):
     sender = (os.environ.get("SMTP_FROM", "").strip() or user)
     port = int(os.environ.get("SMTP_PORT", "587"))
 
-    cafe_name = os.environ.get("CAFE_OTP_SENDER_NAME", "Cafe Manager")
+    cafe_name = os.environ.get("CAFE_OTP_SENDER_NAME", "Cafora")
     minutes = OTP_EXPIRY_SECONDS // 60
 
     if host and sender and address:
@@ -2686,7 +2814,7 @@ def send_login_otp_sms(phone_number, code):
     fell back to the development-mode console log (no gateway configured,
     or the gateway request failed).
     """
-    cafe_name = os.environ.get("CAFE_OTP_SENDER_NAME", "Cafe Manager")
+    cafe_name = os.environ.get("CAFE_OTP_SENDER_NAME", "Cafora")
     message = (
         f"Your {cafe_name} login code is {code}. "
         f"It expires in {OTP_EXPIRY_SECONDS // 60} minutes."
@@ -3006,7 +3134,6 @@ def get_current_user():
                    u.tutorial_seen,
                    (u.photo_blob IS NOT NULL) AS has_photo, u.photo_version,
                    c.owner_user_id, c.is_active AS cafe_active,
-                   c.auto_kot_enabled, c.auto_kot_delay, c.auto_bill_enabled,
                    c.theme, c.accent_hex, c.surface_hex, c.timezone,
                    c.tax_percent, c.discount_percent,
                    c.cafe_name, c.branding_version,
@@ -3042,8 +3169,7 @@ def _shape_current_user(row, cafe_id):
     """
     # Café columns carried on this row for the shell to use. They are kept
     # out of the user dict so nothing mistakes a café's name for a person's.
-    PRINTING_KEYS = ("auto_kot_enabled", "auto_kot_delay",
-                     "auto_bill_enabled", "theme",
+    CAFE_KEYS = ("theme",
                      "accent_hex", "surface_hex",
                      "tax_percent", "discount_percent",
                      "cafe_name", "branding_version",
@@ -3053,19 +3179,11 @@ def _shape_current_user(row, cafe_id):
     user = None
     if row:
         user = {key: row[key] for key in row
-                if key not in ("owner_user_id", "cafe_active") + PRINTING_KEYS}
+                if key not in ("owner_user_id", "cafe_active") + CAFE_KEYS}
 
-        # Carried on the same row, so the printing settings cost no query of
-        # their own - every page needs them to decide whether to arm the
-        # automatic print.
         if has_request_context():
-            g.print_settings = {
-                "auto_kot": bool(row["auto_kot_enabled"]),
-                "kot_delay": int(row["auto_kot_delay"] or 0),
-                "auto_bill": bool(row["auto_bill_enabled"]),
-            }
-            # Same idea for the accent colour: every page is painted in
-            # it, so it must not cost a query of its own.
+            # Carried on the same row: every page is painted in the
+            # accent colour, so it must not cost a query of its own.
             g.cafe_theme = normalize_theme(row["theme"])
             # And what this café adds and takes off, for the same
             # reason: the New Order screen and every bill want them.
@@ -3145,13 +3263,8 @@ STAFF_ALLOWED_ENDPOINTS = {
     # The browser saying what clock it is on, for a cafe that has none.
     "timezone_guess",
     "account_photo", "user_media",
-    # Whoever is on the till is the one who notices the tickets are wrong.
-    "print_settings",
-    # A QR order arrives with nobody at the counter, so whichever
-    # staff screen is open has to be able to pull its ticket.
-    "kitchen_pending", "kitchen_claim",
     # The screen that lives in the kitchen, and its own feed.
-    "kitchen_display", "kitchen_board", "kitchen_heartbeat",
+    "kitchen_display", "kitchen_board",
     "kitchen_item_made",
 }
 
@@ -3530,59 +3643,6 @@ def inject_theme():
         "cafe_colours": colours,
         "cafe_colour_style": colour_style(colours),
     }
-
-
-# A kitchen screen checks in every 20 seconds; three missed and the
-# counter screens assume the tablet is off and take the printing
-# back, rather than leaving a customer's ticket unprinted.
-KITCHEN_STALE_SECONDS = 70
-
-
-DEFAULT_PRINT_SETTINGS = {"auto_kot": False, "kot_delay": 5, "auto_bill": False}
-
-# A delay long enough to be useful, short enough that the ticket is still
-# ahead of the food. Zero means print the moment the order is saved.
-MAX_KOT_DELAY = 120
-
-
-def get_print_settings():
-    """
-    Whether this café prints its tickets by itself, and how long it waits.
-
-    get_current_user() already reads these off the café row it joins, so in
-    a normal request this is just a lookup. The fallback query is for the
-    handful of paths that reach here without a user row in hand.
-    """
-    if has_request_context() and "print_settings" in g:
-        return g.print_settings
-
-    cafe_id = session.get("cafe_id")
-    if not cafe_id:
-        return dict(DEFAULT_PRINT_SETTINGS)
-
-    connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT auto_kot_enabled, auto_kot_delay, auto_bill_enabled
-            FROM cafes WHERE cafe_id = %s
-        """, (cafe_id,))
-        row = cursor.fetchone()
-        settings = dict(DEFAULT_PRINT_SETTINGS) if not row else {
-            "auto_kot": bool(row["auto_kot_enabled"]),
-            "kot_delay": int(row["auto_kot_delay"] or 0),
-            "auto_bill": bool(row["auto_bill_enabled"]),
-        }
-    except mysql.connector.Error:
-        # Printing preferences must never take a page down.
-        settings = dict(DEFAULT_PRINT_SETTINGS)
-    finally:
-        cursor.close()
-        connection.close()
-
-    if has_request_context():
-        g.print_settings = settings
-    return settings
 
 
 def format_percent(value):
@@ -5372,16 +5432,11 @@ def add_order():
                 for row in cursor.fetchall()
             ]
 
-        def order_result(success, message, order_id=None, status_code=200,
-                         kitchen_watching=False):
+        def order_result(success, message, order_id=None, status_code=200):
             if wants_json_response():
                 payload = {"success": success, "message": message}
                 if order_id is not None:
                     payload["order_id"] = order_id
-                # Whether a kitchen screen is on. If one is, this till
-                # leaves the ticket to it rather than printing it here,
-                # next to a customer instead of next to the cook.
-                payload["kitchen_watching"] = kitchen_watching
                 payload["foods"] = fetch_food_stock_summary()
                 return jsonify(payload), status_code
 
@@ -5422,22 +5477,6 @@ def add_order():
             return order_result(False, str(error), status_code=400)
 
         order_id = written["order_id"]
-
-        # Is anything going to print this ticket? The cafe may not have
-        # asked for automatic tickets at all, and there may be no kitchen
-        # screen on to pull one.
-        #
-        # If nothing is, the ticket is marked dealt with here rather than
-        # left sitting in the queue. Otherwise every order taken with the
-        # setting off would still be waiting when somebody switched it on
-        # this afternoon, and the printer would run off a ticket for each
-        # one - for food served hours ago.
-        kitchen_watching = kitchen_is_watching(cursor, session.get("cafe_id"))
-        if not get_print_settings()["auto_kot"] and not kitchen_watching:
-            cursor.execute(
-                "UPDATE orders SET kot_printed = 1 "
-                "WHERE order_id = %s AND user_id = %s",
-                (order_id, scope_user_id()))
 
         subtotal = written["subtotal"]
         tax = written["tax"]
@@ -5495,7 +5534,6 @@ def add_order():
             True,
             f"Order #{order_id} created successfully!",
             order_id=order_id,
-            kitchen_watching=kitchen_watching,
         )
 
 
@@ -7117,6 +7155,10 @@ def login():
                 next_is_safe = (
                     next_page.startswith("/")
                     and not next_page.startswith("//")
+                    # Somebody whose sign-in had run out and who pressed
+                    # Log out arrives here with next=/logout. Honouring it
+                    # would sign them out again the moment they signed in.
+                    and next_page.split("?", 1)[0].rstrip("/") != url_for("logout")
                 )
 
                 # Admins with a mobile number on file are challenged for a
@@ -7143,6 +7185,9 @@ def login():
                     # clock anybody is on.
                     session["otp_timezone"] = (
                         request.form.get("timezone") or "")
+                    session["otp_remember"] = bool(
+                        request.form.get("remember"))
+                    session["otp_login_name"] = username
                     if next_is_safe:
                         session["otp_next"] = next_page
 
@@ -7166,6 +7211,16 @@ def login():
                 session["username"] = user["username"]
                 session["role"] = user["role"]
                 session["cafe_id"] = user.get("cafe_id")
+                start_sign_in(request.form.get("remember"))
+
+                # The name kept for next time, or forgotten: a sign-in
+                # without the box is somebody saying not to remember.
+                typed_name = username
+                wanted = request.form.get("remember")
+
+                @after_this_request
+                def _keep_the_name(response):
+                    return remember_login(response, typed_name, wanted)
 
                 # The form carried what clock this screen is on. Settled
                 # here so the first page after signing in already reads
@@ -7211,7 +7266,7 @@ def login():
             if connection:
                 connection.close()
 
-    return render_template("login.html")
+    return render_template("login.html", remembered_login=remembered_login())
 
 
 @app.route("/login/verify", methods=["GET", "POST"])
@@ -7290,12 +7345,21 @@ def login_verify_otp():
 
                 next_page = session.get("otp_next", "")
                 clock = session.get("otp_timezone", "")
+                # Ticked on the sign-in form, two screens ago. The code
+                # screen never asks again, so the answer is carried.
+                remembered = session.get("otp_remember")
+                typed_name = session.get("otp_login_name", "")
                 session.clear()
                 session.permanent = True
                 session["user_id"] = user["user_id"]
                 session["username"] = user["username"]
                 session["role"] = user["role"]
                 session["cafe_id"] = user.get("cafe_id")
+                start_sign_in(remembered)
+
+                @after_this_request
+                def _keep_the_name(response):
+                    return remember_login(response, typed_name, remembered)
 
                 # Carried across from the sign-in form, because the code
                 # screen has no idea where anybody is.
@@ -7445,6 +7509,9 @@ def register():
                          VALUES(%s,%s,%s,'admin',1,%s,%s,%s)""",(username,generate_password_hash(password),full_name,phone or None,email or None,cid))
             uid=cur.lastrowid; cur.execute('UPDATE cafes SET owner_user_id=%s WHERE cafe_id=%s',(uid,cid)); c.commit()
             session.clear(); session.permanent=True; session['user_id']=uid; session['username']=username; session['role']='admin'; session['cafe_id']=cid
+            # Signing up is not a sign-in anybody asked to be remembered:
+            # it gets the same shift-long window a plain sign-in gets.
+            start_sign_in(False)
 
             # The form carried what clock this screen is on. A brand new
             # cafe has none, and this is the earliest anybody can be
@@ -7570,6 +7637,129 @@ def forgot_password():
     return render_template("forgot_password.html")
 
 
+def remember_login(response, name, wanted):
+    """
+    Keep what was typed as the sign-in name for next time, or forget it.
+
+    Only the name or email - never the password. Keeping that is the job
+    of the browser's own password manager, which asks first and locks it
+    away; a site that wrote it into a cookie would be handing it to
+    anybody who picked up the device.
+
+    Scoped to the sign-in pages and unreadable from script: nothing else
+    needs it.
+    """
+    name = (name or "").strip()[:254]
+    if wanted and name:
+        response.set_cookie(
+            REMEMBERED_LOGIN_COOKIE, name,
+            max_age=REMEMBERED_LOGIN_DAYS * 24 * 60 * 60,
+            path=url_for("login"),
+            httponly=True,
+            samesite="Lax",
+            secure=bool(app.config.get("SESSION_COOKIE_SECURE")),
+        )
+    else:
+        response.delete_cookie(REMEMBERED_LOGIN_COOKIE, path=url_for("login"))
+    return response
+
+
+def remembered_login():
+    """The name kept from the last sign-in with the box ticked, if any."""
+    return (request.cookies.get(REMEMBERED_LOGIN_COOKIE) or "").strip()[:254]
+
+
+# ==========================================
+# HOW A SAVE WENT
+# ==========================================
+#
+# drafts.js keeps a copy of every form as it is typed, and has to know
+# when that copy may be thrown away. A save that went through is
+# answered by moving on to another page - but so is a save that fell
+# over, because an unexpected error ends on the dashboard with a message.
+# From the browser the two look the same. So every form save this app
+# answers says which it was, in a cookie that lives for a minute.
+
+SAVE_ANSWER_COOKIE = "cafora_post"
+
+
+def note_failed_save():
+    """This request was meant to change something, and did not."""
+    if has_request_context():
+        g.save_failed = True
+
+
+@app.after_request
+def say_how_a_save_went(response):
+    """
+    "done" or "failed", and which address was posted to.
+
+    Only for a signed-in page's form. Not for the API, which answers in
+    JSON and has its own caller listening - and whose background posts
+    (a kitchen screen claiming a ticket) would otherwise overwrite the
+    answer to the save somebody is waiting on.
+    """
+    if (request.method != "POST" or not g.get("signed_in_on_arrival")
+            or request.path.startswith("/api/")
+            or request.headers.get("X-Requested-With")):
+        return response
+
+    failed = g.get("save_failed") or response.status_code >= 400
+    response.set_cookie(
+        SAVE_ANSWER_COOKIE,
+        "%s|%s" % ("failed" if failed else "done", request.path),
+        max_age=60,
+        path="/",
+        # Read by drafts.js, so not HttpOnly. It holds a word and the
+        # address of a page, and nothing a script could misuse.
+        httponly=False,
+        samesite="Lax",
+        secure=bool(app.config.get("SESSION_COOKIE_SECURE")),
+    )
+    return response
+
+
+def start_sign_in(remembered):
+    """
+    Note whether this sign-in was to be remembered, and that it is in use.
+
+    Both are read on every request after it: the first to know which
+    window this sign-in has, the second to know whether it has sat unused
+    for longer than that.
+    """
+    session["remembered"] = bool(remembered)
+    session["seen_at"] = int(time.time())
+
+
+def sign_in_is_stale():
+    """
+    Whether this sign-in has gone unused for longer than its window.
+
+    Measured from the last request, not from signing in, because that is
+    what a sign-in here has always meant: Flask sends the cookie again
+    with a fresh expiry on every request, so a till used all day stays
+    signed in all day and one left alone overnight does not. Counted from
+    signing in instead, a cafe open twelve hours would have its till
+    signed out in the middle of the evening.
+
+    The cookie's own expiry is the browser's to honour. This is the same
+    rule applied where the person holding the cookie cannot reach it - a
+    cookie kept after the browser was told to drop it carries a signature
+    this app accepts for as long as the longest window, and a shift is
+    not that long.
+
+    Sign-ins from before any of this carry no time and are left alone;
+    their cookies were written with the short expiry regardless.
+    """
+    seen = session.get("seen_at")
+    if not seen:
+        return False
+
+    window = (timedelta(days=REMEMBER_DAYS) if session.get("remembered")
+              else timedelta(hours=SESSION_HOURS))
+    return time.time() - seen > window.total_seconds()
+
+
 @app.before_request
 def require_login():
     # Initialize/migrate authentication schema before protected requests.
@@ -7577,7 +7767,7 @@ def require_login():
     if request.endpoint in {
         "login", "login_verify_otp", "login_resend_otp",
         "register", "forgot_password", "static", "razorpay_webhook",
-        "healthz", "cafe_media",
+        "healthz", "cafe_media", "robots_txt",
         # The manifest is what lets the site be installed as an app.
         # It falls back to the platform name with no session, so it
         # is safe to answer before sign-in.
@@ -7589,6 +7779,9 @@ def require_login():
         # And the one their page asks, over and over, to find out
         # whether the food is ready.
         "public_order_status",
+        # What this phone has ordered here today, which is how somebody
+        # who ordered twice says which order was theirs.
+        "public_table_orders",
         # The browser asks for the icon on the sign-in screen too. Without
         # this it is redirected to /login, and the browser then renders the
         # whole login page again - a wasted database round-trip on every
@@ -7602,6 +7795,19 @@ def require_login():
         ensure_auth_schema()
     except mysql.connector.Error as error:
         return database_error(error, "preparing the database"), 500
+
+    # Run out, whatever the cookie still says for itself.
+    if session.get("user_id") and sign_in_is_stale():
+        session.clear()
+        flash("You were signed out. Please sign in again.")
+        return redirect(url_for("login", next=request.path))
+
+    # Still in use, so the window starts again from now. Costs nothing:
+    # the cookie is sent back on every request whether this changes or
+    # not.
+    if session.get("user_id"):
+        session["seen_at"] = int(time.time())
+        g.signed_in_on_arrival = True
 
     if not session.get("user_id"):
         return redirect(url_for("login", next=request.path))
@@ -8091,9 +8297,10 @@ def delete_user(user_id):
 # Branding now lives on the cafes row for that tenant, images included.
 
 
-# What the sidebar reads when a café has not chosen its own. These are
-# exactly what every café saw before the wording was customisable.
-DEFAULT_BRAND_NAME = "Cafe Manager"
+# What the sidebar reads when a café has not chosen its own: the name
+# of the software, as opposed to the name of anybody's café. A café
+# that has set its own name never sees it.
+DEFAULT_BRAND_NAME = "Cafora"
 
 
 @app.context_processor
@@ -8231,9 +8438,9 @@ def branding():
     page, so it is a decision about the business rather than a personal
     preference.
 
-    Left alone it reads "Cafe Manager / Food & Service Admin", which is
-    what it has always said. Clearing a field puts that default back
-    rather than leaving a blank corner.
+    Left alone it reads "Cafora / Food & Service Admin", which is the
+    software's own name rather than anybody's cafe. Clearing a field
+    puts that default back rather than leaving a blank corner.
     """
     denied = require_role("admin")
     if denied:
@@ -8281,7 +8488,7 @@ def branding():
             # COALESCE rather than a plain assignment: clearing the
             # field means "use the product's default in the sidebar",
             # and it should not also rename somebody's business to
-            # "Cafe Manager".
+            # "Cafora".
             if data is not None:
                 cursor.execute("""
                     UPDATE cafes
@@ -8378,68 +8585,13 @@ def kitchen_display():
     """
     The screen left on in the kitchen.
 
-    Its whole job is to be open. It shows what is waiting, prints the
-    ticket for anything a customer sent from their phone, and says it is
-    there so the counter screens stop trying to print those tickets
-    themselves - otherwise a customer's order comes out of whichever
-    printer somebody happened to leave a tab in front of.
+    Its whole job is to be open and show what is waiting. It prints
+    nothing by itself: a ticket comes out when somebody presses Print
+    KOT on the order.
     """
     return render_template(
         "kitchen.html",
-        stale_after=KITCHEN_STALE_SECONDS,
     )
-
-
-@app.route("/api/kitchen/heartbeat", methods=["POST"])
-def kitchen_heartbeat():
-    """A kitchen screen saying it is still there."""
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute(
-            "UPDATE cafes SET kitchen_seen_at = %s WHERE cafe_id = %s",
-            (utc_now(), require_cafe_session()))
-        connection.commit()
-        return jsonify({"ok": True})
-    except mysql.connector.Error as error:
-        if connection:
-            connection.rollback()
-        return jsonify({"ok": False,
-                        "error": "Could not save that."}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-
-def kitchen_is_watching(cursor, cafe_id):
-    """
-    Whether a kitchen screen has checked in recently enough to trust.
-
-    Stale means the tablet was switched off or the browser closed, and
-    the counter screens should take the printing back rather than leave
-    tickets unprinted.
-    """
-    if not cafe_id:
-        return False
-
-    cursor.execute(
-        "SELECT kitchen_seen_at FROM cafes WHERE cafe_id = %s", (cafe_id,))
-    row = cursor.fetchone()
-    seen = row["kitchen_seen_at"] if row else None
-
-    if not seen:
-        return False
-    if isinstance(seen, str):
-        try:
-            seen = datetime.strptime(seen[:19], "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            return False
-
-    return (utc_now() - seen).total_seconds() <= KITCHEN_STALE_SECONDS
 
 
 # Which day each cafe was last tidied up for, per worker process. The
@@ -8517,15 +8669,9 @@ def kitchen_board():
         if close_yesterdays_orders(cursor, owner, today):
             connection.commit()
 
-        # Worked out here rather than in the browser, so this screen and
-        # the counter screens can never disagree about what is waiting to
-        # be printed and print it twice between them.
-        waiting = set(tickets_waiting(
-            cursor, owner, get_print_settings()["kot_delay"]))
-
         cursor.execute("""
             SELECT order_id, order_date, total_amount, source,
-                   kot_printed, daily_no, order_status
+                   daily_no, order_status
             FROM orders
             WHERE user_id = %s AND order_day = %s
             ORDER BY CASE WHEN order_status = 'Pending' THEN 0 ELSE 1 END,
@@ -8562,8 +8708,6 @@ def kitchen_board():
                     "total": "%.2f" % float(row["total_amount"] or 0),
                     "source": row["source"] or "counter",
                     "status": row["order_status"],
-                    "printed": bool(row["kot_printed"]),
-                    "printable": row["order_id"] in waiting,
                     "items": lines.get(row["order_id"], []),
                 }
                 for row in orders
@@ -8572,119 +8716,6 @@ def kitchen_board():
     except mysql.connector.Error as error:
         return jsonify({"orders": [],
                         "error": "Could not load orders."}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-
-def tickets_waiting(cursor, owner_id, delay_seconds):
-    """
-    Orders whose kitchen ticket nobody has printed yet.
-
-    Counter orders as well as ones sent from a table. A ticket is a
-    ticket: the kitchen has to know to cook it, and whether a member of
-    staff tapped it in at the till or a customer sent it from their phone
-    makes no difference to that. Only phone orders used to be here, on the
-    reasoning that the till prints its own - but the till is at the
-    counter, and the food is made in the kitchen.
-
-    A counter order is held back until the cafe's chosen delay has passed,
-    so that delay means the same thing wherever the ticket ends up coming
-    out. It is there to leave room to catch an order tapped in wrong
-    before the kitchen starts on it, and a kitchen screen printing the
-    instant the order lands would take that room away.
-
-    An order from a table is not held back. The delay is there to catch a
-    slip at the till, and there is no till involved - there is a customer
-    sitting waiting for food instead.
-
-    The cutoff is worked out here rather than with DATE_SUB, the same way
-    the best-seller window is, so the statement stays plain SQL.
-
-    Ten at a time. More than ten tickets waiting means nothing has been
-    printing for a while, and the next poll takes the rest.
-    """
-    # UTC, to match order_date. On a machine an hour ahead of the
-    # database this read every order as long past its delay and printed
-    # the lot the moment they were taken.
-    cutoff = utc_now() - timedelta(seconds=max(0, int(delay_seconds)))
-    cursor.execute("""
-        SELECT order_id
-        FROM orders
-        WHERE user_id = %s
-          AND kot_printed = 0
-          AND order_status = 'Pending'
-          AND (source = 'qr' OR order_date <= %s)
-        ORDER BY order_id
-        LIMIT 10
-    """, (owner_id, cutoff))
-    return [row["order_id"] for row in cursor.fetchall()]
-
-
-@app.route("/api/kitchen/pending")
-def kitchen_pending():
-    """
-    Orders whose kitchen ticket nobody has printed yet.
-
-    Polled by whichever staff screens are open. Nobody is standing at the
-    counter when an order arrives from a table, so the ticket has to be
-    pulled rather than pushed - and a counter order is pulled the same
-    way, so that it prints in the kitchen when there is a screen there
-    rather than on the till that happened to take it.
-    """
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        return jsonify({
-            "orders": tickets_waiting(
-                cursor, scope_user_id(), get_print_settings()["kot_delay"]),
-            # A counter screen reads this and leaves the printing to the
-            # kitchen while one is watching.
-            "kitchen_watching": kitchen_is_watching(
-                cursor, session.get("cafe_id")),
-        })
-    except mysql.connector.Error as error:
-        return jsonify({"orders": [],
-                        "error": "Could not load orders."}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-
-@app.route("/api/kitchen/claim/<int:order_id>", methods=["POST"])
-def kitchen_claim(order_id):
-    """
-    Claim one order's kitchen ticket, so only one screen prints it.
-
-    The claim is the UPDATE itself: whichever request matches the row
-    first flips kot_printed and every other one matches nothing. Two
-    tills watching the same kitchen therefore print one ticket between
-    them, not two.
-    """
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute("""
-            UPDATE orders
-            SET kot_printed = 1
-            WHERE order_id = %s AND user_id = %s AND kot_printed = 0
-        """, (order_id, scope_user_id()))
-        won = cursor.rowcount == 1
-        connection.commit()
-        return jsonify({"claimed": won})
-    except mysql.connector.Error as error:
-        if connection:
-            connection.rollback()
-        return jsonify({"claimed": False,
-                        "error": "Could not claim that ticket."}), 500
     finally:
         if cursor:
             cursor.close()
@@ -8728,8 +8759,8 @@ _PROFILE = _step(
     "bi-person-circle", "Your name, top right", "[data-tour=profile]",
     "Everything about the cafe itself lives behind your name.",
     "It opens your cafe's name, its colours, the clock it keeps, the tax "
-    "and discount, automatic printing, the QR code for your tables - and "
-    "this tour again, under How this works.")
+    "and discount, the QR code for your tables - and this tour again, "
+    "under How this works.")
 
 _COUNTER = [
     _step("bi-tags", "Categories", "[data-tour=categories]",
@@ -9151,6 +9182,168 @@ def timezone_settings():
             connection.close()
 
 
+# ==========================================
+# WHAT THIS PHONE HAS ORDERED TODAY
+# ==========================================
+#
+# A customer who ordered twice was left holding only the second number.
+# The first page had been replaced by the menu, and nothing tied the two
+# together: not the server, where a QR order belongs to nobody, and not
+# the phone, which was asked to remember nothing. At the counter that is
+# the whole difficulty - "I ordered earlier as well" and no way to say
+# which order that was.
+#
+# So the phone keeps the list. Not the address it arrives from: a cafe's
+# tables sit behind one router, and by address every table would be
+# handed every other table's orders. What is kept is each order's own
+# random ref, which is already the thing that opens that order's page -
+# so remembering them adds no way in that the customer did not already
+# have - and the day they were given, so yesterday's numbers fall away
+# on their own.
+#
+# Every ref is looked up against this cafe and against today before
+# anything is shown. What a phone hands back is a claim, not a fact.
+
+TABLE_ORDERS_COOKIE = "table_orders"
+
+# What one phone can collect in a day and still be a customer. Twenty
+# refs is around 350 bytes, sent with every request for this cafe's
+# pages: small enough not to matter, and more than anybody at a table
+# reaches.
+TABLE_ORDERS_KEPT = 20
+
+# The shape secrets.token_urlsafe() writes, and nothing else. These go
+# into the query as parameters rather than as text, so this is not what
+# stands between a cookie and the database - it is what keeps a silly
+# cookie from becoming a twenty-placeholder query about nothing.
+TABLE_ORDERS_REF = re.compile(r"^[A-Za-z0-9_-]{8,32}$")
+
+
+def remembered_refs(token):
+    """
+    The orders this phone has been given for this cafe today, newest first.
+
+    The cookie carries the day it was written for, and a day that is not
+    this one is dropped whole: the kitchen has closed, today's numbers
+    have started again at 1, and yesterday's are not what anybody is
+    being asked for at the counter.
+    """
+    held = request.cookies.get(TABLE_ORDERS_COOKIE, "")
+    parts = [piece for piece in held.split(".") if piece]
+    if not parts or parts[0] != date.today().isoformat():
+        return []
+
+    refs = []
+    for ref in parts[1:]:
+        if TABLE_ORDERS_REF.match(ref) and ref not in refs:
+            refs.append(ref)
+    return refs[:TABLE_ORDERS_KEPT]
+
+
+def remember_ref(response, token, ref):
+    """
+    Add one order to what this phone is holding, newest first.
+
+    Scoped by path to this cafe's own pages, so a phone used at two
+    cafes keeps two lists and neither is sent where it does not belong.
+    HttpOnly because nothing on the page reads it - only the routes here
+    do.
+    """
+    refs = [ref] + [kept for kept in remembered_refs(token) if kept != ref]
+
+    response.set_cookie(
+        TABLE_ORDERS_COOKIE,
+        ".".join([date.today().isoformat()] + refs[:TABLE_ORDERS_KEPT]),
+        # A meal and the evening after it. The day inside the value is
+        # what decides what gets listed; this only stops the cookie
+        # sitting on a phone for weeks with nothing left to say.
+        max_age=18 * 60 * 60,
+        path=url_for("public_menu", token=token),
+        httponly=True,
+        samesite="Lax",
+        secure=bool(app.config.get("SESSION_COOKIE_SECURE")),
+    )
+    return response
+
+
+def ordered_today(order_day):
+    """
+    Whether a stored order_day is this day, in whatever shape it arrives.
+
+    MySQL hands back a date. The SQLite stand-in the offline tests run on
+    hands back the same day as text.
+    """
+    if isinstance(order_day, datetime):
+        order_day = order_day.date()
+    if isinstance(order_day, date):
+        return order_day == date.today()
+    return str(order_day or "")[:10] == date.today().isoformat()
+
+
+def table_orders(cursor, cafe, refs):
+    """
+    Which of those refs are orders of this cafe's today, newest first.
+
+    Every one is checked rather than trusted, so a cookie somebody wrote
+    by hand lists nothing, a ref belonging to another cafe lists nothing,
+    and an order the counter rang up is not a phone's to show either.
+    """
+    if not refs:
+        return []
+
+    holes = ", ".join(["%s"] * len(refs))
+    cursor.execute(
+        "SELECT order_id, daily_no, public_ref, order_status, "
+        "       total_amount, order_date "
+        "FROM orders "
+        "WHERE user_id = %s AND order_day = %s AND source = 'qr' "
+        "  AND public_ref IN (" + holes + ") "
+        "ORDER BY daily_no DESC, order_id DESC",
+        tuple([cafe["owner_user_id"], date.today()] + list(refs)))
+    orders = cursor.fetchall()
+
+    for order in orders:
+        # On the cafe's clock. Not the server's, which is in whichever
+        # region the site happens to run in, and not the phone's.
+        local = as_cafe_time(order["order_date"], cafe["cafe_id"])
+        order["when"] = local.strftime("%I:%M %p") if local else ""
+    return orders
+
+
+@app.route("/m/<token>/orders")
+def public_table_orders(token):
+    """
+    Every order this phone has sent this cafe today, with its number.
+
+    What a customer opens at the counter when they have ordered more than
+    once. Each row leads to that order's own page, which is where the
+    items and whether the kitchen has finished are.
+    """
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cafe = cafe_for_token(cursor, token)
+        if cafe is None:
+            return render_template("public_gone.html"), 404
+
+        return render_template(
+            "public_orders.html",
+            token=token,
+            cafe=cafe,
+            branding=get_cafe_branding(cafe["cafe_id"]),
+            orders=table_orders(cursor, cafe, remembered_refs(token)),
+            day=cafe_now(cafe["cafe_id"]).strftime("%d %B %Y"),
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
 @app.route("/m/<token>")
 def public_menu(token):
     """
@@ -9190,6 +9383,11 @@ def public_menu(token):
             token=token,
             cafe=cafe,
             branding=get_cafe_branding(cafe["cafe_id"]),
+            # Whatever this phone has already sent today. The menu is
+            # where a customer comes back to after ordering, so it is
+            # where the numbers they were given have to be reachable
+            # from - the page carrying the first one is long gone.
+            mine=table_orders(cursor, cafe, remembered_refs(token)),
             groups=group_foods_by_category(foods),
             food_count=len(foods),
             tax_percent=get_tax_percent(cafe["cafe_id"]),
@@ -9274,8 +9472,14 @@ def public_place_order(token):
             flash(str(error))
             return redirect(url_for("public_menu", token=token))
 
-        return redirect(url_for("public_order_placed", token=token,
-                                ref=result["public_ref"]))
+        # The phone keeps this number, so the next page and the menu
+        # after it can show it beside the rest of today's. Written only
+        # now that the order is real: one that failed for its own reasons
+        # teaches the phone nothing.
+        return remember_ref(
+            redirect(url_for("public_order_placed", token=token,
+                             ref=result["public_ref"])),
+            token, result["public_ref"])
     except mysql.connector.Error as error:
         if connection:
             connection.rollback()
@@ -9312,8 +9516,8 @@ def public_order_placed(token, ref):
             return render_template("public_gone.html"), 404
 
         cursor.execute("""
-            SELECT order_id, order_date, total_amount, order_status,
-                   daily_no, public_ref
+            SELECT order_id, order_date, order_day, total_amount,
+                   order_status, daily_no, public_ref
             FROM orders
             WHERE public_ref = %s AND user_id = %s AND source = 'qr'
         """, (ref, cafe["owner_user_id"]))
@@ -9338,14 +9542,30 @@ def public_order_placed(token, ref):
             for line in items:
                 line["made"] = 1
 
-        return render_template(
+        # The rest of today's, so the number they were given an hour ago
+        # is on the page in front of them rather than in a tab they have
+        # since closed.
+        held = remembered_refs(token)
+        answer = make_response(render_template(
             "public_placed.html",
             token=token,
             cafe=cafe,
             branding=get_cafe_branding(cafe["cafe_id"]),
             order=order,
             items=items,
-        )
+            mine=[other for other in table_orders(cursor, cafe, held)
+                  if other["public_ref"] != ref],
+        ))
+
+        # Reached by its own address - a reload after the cookie was
+        # cleared, or a link sent to somebody else at the table. The
+        # order on the screen is one of this phone's either way, and a
+        # phone that was not holding it a moment ago is exactly the one
+        # that needs to be.
+        if ref not in held and ordered_today(order["order_day"]):
+            remember_ref(answer, token, ref)
+
+        return answer
     finally:
         if cursor:
             cursor.close()
@@ -9562,70 +9782,6 @@ def theme_settings():
             return redirect(came_from())
 
         return render_template("theme_settings.html")
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-
-@app.route("/settings/printing", methods=["GET", "POST"])
-def print_settings():
-    """
-    Automatic printing: the kitchen ticket after an order, the bill when it
-    is marked paid.
-
-    Open to everyone, not just admins. Whoever is on the till is the person
-    who notices the tickets are coming out too early or not at all, and they
-    should be able to fix it without finding a manager. The settings belong
-    to the café, so a change applies to every device in it.
-    """
-    user = get_current_user()
-    if not user:
-        return redirect(url_for("login"))
-
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        cafe_id = require_cafe_session()
-
-        if request.method == "POST":
-            auto_kot = request.form.get("auto_kot") == "on"
-            auto_bill = request.form.get("auto_bill") == "on"
-
-            raw = (request.form.get("kot_delay") or "").strip()
-            try:
-                delay = int(raw)
-            except (TypeError, ValueError):
-                flash("Enter the delay as a whole number of seconds.")
-                return redirect(stay_on('print_settings'))
-
-            if delay < 0 or delay > MAX_KOT_DELAY:
-                flash("The delay must be between 0 and %d seconds."
-                      % MAX_KOT_DELAY)
-                return redirect(stay_on('print_settings'))
-
-            cursor.execute("""
-                UPDATE cafes
-                SET auto_kot_enabled = %s,
-                    auto_kot_delay = %s,
-                    auto_bill_enabled = %s
-                WHERE cafe_id = %s
-            """, (1 if auto_kot else 0, delay,
-                  1 if auto_bill else 0, cafe_id))
-            connection.commit()
-            g.pop("print_settings", None)
-
-            flash("Printing settings saved.")
-            return redirect(came_from())
-
-        return render_template(
-            "print_settings.html",
-            settings=get_print_settings(),
-            max_delay=MAX_KOT_DELAY,
-        )
     finally:
         if cursor:
             cursor.close()
@@ -9928,6 +10084,55 @@ start_keep_awake()
 # ==========================================
 
 
+@app.route("/robots.txt")
+def robots_txt():
+    """
+    What a crawler may look at, which is almost none of it.
+
+    Served as a route rather than a file in static/ so it cannot be
+    missed by a deploy that forgets to copy it, and so it stays beside
+    the route table it is describing.
+
+    Asking for this used to fall through to the sign-in guard and get a
+    redirect to /login. A checker following that read the login page as
+    directives and reported hundreds of errors in a file that did not
+    exist.
+    """
+    rules = "\n".join([
+        "# This is a till, not a website. Almost nothing here is for",
+        "# a search engine.",
+        "User-agent: *",
+        "",
+        "# A cafe's own ordering address. These pages also carry",
+        "# noindex, which is the part that binds - this only saves a",
+        "# crawler the trip.",
+        "Disallow: /m/",
+        "",
+        "# Behind a password anyway, and nothing to index if it were not.",
+        "Disallow: /dashboard",
+        "Disallow: /orders/",
+        "Disallow: /billing",
+        "Disallow: /kitchen",
+        "Disallow: /inventory",
+        "Disallow: /foods",
+        "Disallow: /categories",
+        "Disallow: /reports",
+        "Disallow: /users",
+        "Disallow: /settings/",
+        "Disallow: /account/",
+        "Disallow: /api/",
+        "Disallow: /media/",
+        "Disallow: /print/",
+        "",
+        "# Somebody looking for the app itself should find these.",
+        "Allow: /$",
+        "Allow: /login",
+        "Allow: /register",
+        "",
+    ])
+    return Response(rules, mimetype="text/plain")
+
+
 @app.route("/healthz")
 def healthz():
     """
@@ -9996,13 +10201,21 @@ def handle_too_large(error):
 @app.route("/favicon.ico")
 def favicon():
     """
-    Browsers ask for this unprompted on every visit.
+    The Cafora mark, for a browser that asks for it unprompted.
 
-    Answering "no content" keeps it out of the 404 handler below, which
-    would otherwise queue a "page could not be found" message for a request
-    the user never made.
+    Every page names its icon in its own head, and that stamped address
+    is the one a browser caches for a year. This one is for everything
+    that asks the old way regardless - a bookmark, a history list, a
+    tab restored before any page has loaded. It used to answer "no
+    content", which kept it clear of the 404 handler below, and left the
+    browser's blank globe on every tab.
+
+    A day rather than a year: nothing stamps this address, so a changed
+    icon has to be able to reach people by itself.
     """
-    return "", 204
+    return send_from_directory(
+        os.path.join(app.root_path, "static", "icons"), "favicon.ico",
+        mimetype="image/x-icon", max_age=24 * 60 * 60)
 
 
 @app.errorhandler(404)
@@ -10039,6 +10252,7 @@ def handle_unexpected_error(error):
         return error
 
     app.logger.exception("Unhandled application error")
+    note_failed_save()
 
     if wants_json_response() or request.path.startswith("/api/"):
         return jsonify({"error": "Something went wrong."}), 500

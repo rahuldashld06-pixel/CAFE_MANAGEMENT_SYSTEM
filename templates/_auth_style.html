@@ -1,0 +1,466 @@
+{#
+  How the sign-in, register and password-reset screens look: one set of
+  rules, inlined into each of them rather than fetched. These screens are
+  the first thing anybody sees, and a stylesheet of their own would be one
+  more request standing between a person and the page.
+
+  The typefaces are the app's own - Manrope to read, Fraunces for the two
+  headlines - and are asked for without holding the page up: the text
+  draws at once in the system font and changes over when they arrive.
+#}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style"
+  href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap"
+  onload="this.rel='stylesheet'">
+<noscript>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap">
+</noscript>
+
+<style>
+    /* Every row is either the full width or two filled halves, so
+       a form reads down in a straight line. What is optional says
+       so on its label; what each box wants is said inside it. */
+    :root {
+        --ink: #1a100b;
+        --panel: #22150f;
+        --line: rgba(217, 171, 120, .20);
+        --line-strong: rgba(217, 171, 120, .55);
+        --field: rgba(255, 250, 243, .045);
+        --field-focus: rgba(255, 250, 243, .075);
+        --cream: #f7efe3;
+        --cream-dim: #d8c7b3;
+        --cream-faint: #a28d78;
+        --gold: #c28b52;
+        --gold-light: #e0b27e;
+        --coffee-dark: #24150f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+        overflow-x: hidden;
+        font-family: "Manrope", system-ui, -apple-system, "Segoe UI",
+                     Roboto, sans-serif;
+        color: var(--cream);
+        background:
+            radial-gradient(900px 500px at 80% 0%, rgba(194, 139, 82, .18), transparent 60%),
+            linear-gradient(160deg, #1f130d 0%, #2c1b12 55%, #3a2517 100%);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    .auth-shell {
+        width: min(1120px, 100%);
+        display: grid;
+        grid-template-columns: .9fr 1.1fr;
+        border-radius: 24px;
+        overflow: hidden;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        box-shadow: 0 40px 90px rgba(0, 0, 0, .45);
+    }
+
+    /* ---------- The picture side ---------- */
+    .auth-visual {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 40px;
+        padding: 40px 44px 44px;
+        background:
+            linear-gradient(180deg, rgba(26, 16, 11, .55) 0%, rgba(26, 16, 11, .25) 40%, rgba(26, 16, 11, .92) 100%),
+            var(--login-photo, url("https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=640&q=70"))
+            center / cover no-repeat;
+    }
+
+    .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #e9a059, #b96a28);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, .3);
+        flex: 0 0 auto;
+    }
+
+    .brand-mark .brand-glyph {
+        display: block;
+        width: 30px;
+        height: 30px;
+        color: #fff8ee;
+    }
+
+    .brand-mark img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: inherit;
+    }
+
+    .brand-name {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.15;
+    }
+
+    .brand-name strong {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: .2px;
+    }
+
+    .brand-name span {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: var(--gold-light);
+    }
+
+    .brand-copy h1 {
+        margin: 0 0 18px;
+        font-family: "Fraunces", Georgia, serif;
+        font-size: clamp(28px, 3.2vw, 38px);
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -.3px;
+    }
+
+    .perks {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 11px;
+    }
+
+    .perks li {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 14.5px;
+        line-height: 1.45;
+        color: var(--cream-dim);
+    }
+
+    .perks svg {
+        flex: 0 0 auto;
+        width: 18px;
+        height: 18px;
+        margin-top: 1px;
+        color: var(--gold-light);
+    }
+
+    /* ---------- The form side ---------- */
+    .auth-panel {
+        padding: 44px 48px 36px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .eyebrow {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+        color: var(--gold-light);
+    }
+
+    .auth-panel h2 {
+        margin: 8px 0 8px;
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -.3px;
+    }
+
+    .subtitle {
+        margin: 0 0 26px;
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--cream-dim);
+    }
+
+    .flash {
+        margin-bottom: 18px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: rgba(166, 72, 50, .16);
+        border: 1px solid rgba(217, 130, 105, .42);
+        color: #f4cfc4;
+        font-size: 14px;
+        line-height: 1.45;
+    }
+
+    .field-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+    }
+
+    .field {
+        margin-bottom: 16px;
+        min-width: 0;
+    }
+
+    .field label {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 7px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--cream);
+    }
+
+    .optional {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--cream-faint);
+    }
+
+    .field input,
+    .field select {
+        width: 100%;
+        height: 48px;
+        padding: 0 14px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: var(--field);
+        color: var(--cream);
+        font: inherit;
+        font-size: 15px;
+        outline: none;
+        transition: border-color .15s ease, background .15s ease,
+                    box-shadow .15s ease;
+    }
+
+    .field input::placeholder {
+        color: var(--cream-faint);
+        opacity: 1;
+    }
+
+    .field input:hover,
+    .field select:hover {
+        border-color: rgba(217, 171, 120, .34);
+    }
+
+    .field input:focus,
+    .field select:focus {
+        border-color: var(--line-strong);
+        background: var(--field-focus);
+        box-shadow: 0 0 0 4px rgba(217, 171, 120, .12);
+    }
+
+    .field select {
+        appearance: none;
+        -webkit-appearance: none;
+        padding-right: 38px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%23E0B27E' stroke-width='1.6' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+    }
+
+    .field select option {
+        background: #2a1a12;
+        color: var(--cream);
+    }
+
+    /* The browser paints autofilled boxes its own pale blue; keep
+       them in the page's colours. */
+    .field input:-webkit-autofill {
+        -webkit-text-fill-color: var(--cream);
+        -webkit-box-shadow: 0 0 0 40px #2c1c14 inset;
+        caret-color: var(--cream);
+    }
+
+    .auth-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        width: 100%;
+        height: 52px;
+        margin-top: 8px;
+        border: 0;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #d99a5a, #b9793e);
+        color: #1e120c;
+        font: inherit;
+        font-size: 15.5px;
+        font-weight: 800;
+        letter-spacing: .2px;
+        cursor: pointer;
+        box-shadow: 0 10px 24px rgba(194, 139, 82, .22);
+        transition: transform .15s ease, box-shadow .15s ease,
+                    filter .15s ease;
+    }
+
+    .auth-button:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.05);
+        box-shadow: 0 14px 30px rgba(194, 139, 82, .3);
+    }
+
+    .auth-button:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 4px rgba(217, 171, 120, .35);
+    }
+
+    .brand-glyph--btn {
+        display: block;
+        width: 19px;
+        height: 19px;
+        color: currentColor;
+    }
+
+    .fine-print {
+        margin: 14px 0 0;
+        text-align: center;
+        font-size: 12.5px;
+        color: var(--cream-faint);
+    }
+
+    .auth-foot {
+        margin-top: 22px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        text-align: center;
+        font-size: 14px;
+        color: var(--cream-dim);
+    }
+
+    .auth-foot a {
+        color: var(--gold-light);
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .auth-foot a:hover { text-decoration: underline; }
+
+
+    /* ---------- Sign-in only ---------- */
+    .sign-in-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px 16px;
+        margin: -2px 0 18px;
+    }
+
+    .remember {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 14px;
+        color: var(--cream-dim);
+        cursor: pointer;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    .remember input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--gold);
+        cursor: pointer;
+    }
+
+    .forgot-link a {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--gold-light);
+        text-decoration: none;
+    }
+
+    .forgot-link a:hover { text-decoration: underline; }
+
+    .auth-note {
+        margin: 10px 0 0;
+        text-align: center;
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: var(--cream-faint);
+    }
+
+    /* ---------- Password reset only ---------- */
+    /* One column and no picture: somebody here is locked out and
+       wants the form, not an introduction. */
+    .auth-shell--narrow {
+        width: min(560px, 100%);
+        grid-template-columns: 1fr;
+    }
+
+    .auth-shell--narrow .auth-panel { padding: 40px 44px 34px; }
+
+    .auth-shell--narrow .brand { margin-bottom: 26px; }
+
+    .field .field-note {
+        display: block;
+        margin-top: 8px;
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: var(--cream-faint);
+    }
+
+    .divider {
+        height: 1px;
+        margin: 6px 0 20px;
+        background: var(--line);
+    }
+
+    @media (max-width: 860px) {
+        body { padding: 0; align-items: stretch; }
+
+        .auth-shell {
+            grid-template-columns: 1fr;
+            border-radius: 0;
+            border: 0;
+            min-height: 100vh;
+        }
+
+        .auth-visual {
+            gap: 22px;
+            padding: 26px 22px 28px;
+        }
+
+        .perks { display: none; }
+
+        .brand-copy h1 { margin: 0; font-size: 26px; }
+
+        .auth-panel { padding: 28px 22px 32px; }
+
+        .auth-panel h2 { font-size: 27px; }
+
+        .auth-shell--narrow .auth-panel { padding: 28px 22px 32px; }
+    }
+
+    @media (max-width: 520px) {
+        .field-row { grid-template-columns: 1fr; gap: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .auth-button { transition: none; }
+    }
+</style>

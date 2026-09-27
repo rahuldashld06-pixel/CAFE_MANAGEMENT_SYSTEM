@@ -6,7 +6,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>{% block title %}Cafe Manager{% endblock %}</title>
+    {# The page's own name, then the product's, the way every site
+       reads in a tab: "Kitchen · Cafora". The brand is added here
+       and not in each page, so no page can leave it off - three had -
+       and a rename is one constant, not two dozen templates. A page
+       with no title of its own is simply "Cafora". #}
+    <title>{% block title %}{% endblock %}{{ " · " if self.title()|trim }}{{ platform_name }}</title>
+
+    {# The line under the link when this address is shared. Pages inside
+       the app are not for a search engine - robots.txt says so - but
+       they are pasted into messages between the people running the
+       cafe, and a blank preview tells them nothing. #}
+    <meta name="description" content="{% block description %}Orders, kitchen, stock and billing for {{ cafe_branding.cafe_name }}.{% endblock %}">
 
     {# Installed from the browser's "Install" or "Add to Home Screen", the
        site opens with no address bar and no browser chrome at all, every
@@ -21,9 +32,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="{{ cafe_branding.cafe_name }}">
-    <link rel="apple-touch-icon"
-          href="{{ url_for('static', filename='icons/app-192.png', v=asset_version) }}">
+    {% include "_favicon.html" %}
 
+    {# The icon sheet is already off the blocking path, but the
+       browser still has to find its host and shake hands before any
+       icon arrives - 18ms of DNS and 127ms of TLS, measured, all of it
+       starting only once the HTML has been read this far. #}
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -42,15 +57,40 @@
     {# The accent palette, ahead of the sheet that uses it. Its own file
        because the print pages need the same colours without pulling in
        the whole app stylesheet. #}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=asset_version) }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/password-view.css', v=asset_version) }}">
+    <link rel="stylesheet" href="{{ asset_url('css/theme.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/style.css') }}">
 
     {# Loaded here, not deferred: every page script below relies on
        window.Instant already existing when it runs. #}
-    <script src="{{ url_for('static', filename='js/instant.js', v=asset_version) }}"></script>
-    <script src="{{ url_for('static', filename='js/password-view.js', v=asset_version) }}" defer></script>
-    <script src="{{ url_for('static', filename='js/fullscreen.js', v=asset_version) }}" defer></script>
+    <script src="{{ asset_url('js/instant.js') }}"></script>
+    <script src="{{ asset_url('js/fullscreen.js') }}" defer></script>
+
+    {# The show-password widget. The script belongs to the shell and not
+       to the pages that use it: it registers through Instant.shell() and
+       rescans on instant:load, so that one copy serves every password
+       field that is ever swapped in. Asking for it from the head of
+       change-password instead left that page with no reveal buttons when
+       it arrived through a swap, because a swap replaces the contents of
+       #page-view and nothing in the head. Deferred, so it has never held
+       up a paint.
+
+       Its stylesheet used to sit beside it as a link, which did hold up
+       the first paint - a whole round trip, about 400ms on this host,
+       for 2.7KB, on the dashboard and the kitchen screen as much as on
+       the two pages with a password on them. Small enough to go in the
+       page, so it does. #}
+    <script src="{{ asset_url('js/password-view.js') }}" defer></script>
+
+    {# Keeps a copy of every form as it is typed, so a closed browser or a
+       power cut costs nobody their work. Kept per person: this says
+       whose they are, so on a shared till nobody is shown somebody
+       else's half-typed form. An id, not a name - it only has to tell
+       two people apart. #}
+    <meta name="cafora-user" content="{{ session.get('user_id', '') }}">
+    <script src="{{ asset_url('js/drafts.js') }}" defer></script>
+    <style>/* password-view.css, inlined: a separate request for 2.7KB
+       held up the first paint by a whole round trip. */
+{{ password_view_css }}</style>
 </head>
 
 <body data-clock-unset="{{ 1 if (current_user and not current_user.timezone) else 0 }}">
@@ -80,7 +120,8 @@
                Cafe Branding. The cup is the fallback for a cafe that has
                not uploaded one yet. #}
             {# Set under Profile -> Name & Symbol. Left alone it reads
-               "Cafe Manager / Food & Service Admin", as it always did.
+               "Cafora / Food & Service Admin", which is the software
+               naming itself rather than the cafe.
                The symbol is drawn only when there is a real one. #}
             <div class="sidebar-brand"><!--brand:start-->
                 <span class="brand-mark">
@@ -258,14 +299,6 @@
 
                         <a href="{{ url_for('change_password') }}" class="profile-dropdown__item">
                             <i class="bi bi-shield-lock"></i><span>Change Password</span>
-                        </a>
-
-                        <div class="profile-dropdown__section">Printing</div>
-
-                        {# Not admin-only: whoever is on the till is the one
-                           who notices the tickets are wrong. #}
-                        <a href="{{ url_for('print_settings') }}" class="profile-dropdown__item">
-                            <i class="bi bi-printer"></i><span>Automatic Printing</span>
                         </a>
 
                         {% if session.get('role') == 'admin' %}
@@ -450,42 +483,6 @@
 // newly loaded page have not been through this yet.
 window.CafeShell = {
     csrfToken: {{ csrf_token_value|tojson }},
-
-    // Set under Profile -> Automatic Printing. Read by the New Order page
-    // (kitchen ticket, after a delay) and the Billing page (receipt, the
-    // moment a bill is marked paid).
-    printing: {{ print_settings|tojson }},
-
-    /**
-     * Send a printable page to the printer without leaving this one.
-     *
-     * The document is loaded into a hidden iframe and printed from there,
-     * so the till keeps whatever it was doing. The print pages call
-     * window.print() themselves on load, which is what actually opens the
-     * dialog - browsers will not print silently unless the browser itself
-     * was started with kiosk printing on.
-     */
-    autoPrint: function (url) {
-        const frame = document.createElement("iframe");
-        frame.setAttribute("aria-hidden", "true");
-        frame.style.position = "fixed";
-        frame.style.width = "0";
-        frame.style.height = "0";
-        frame.style.border = "0";
-        frame.style.opacity = "0";
-        frame.src = url;
-
-        // Whether the user prints or cancels, the frame has done its job.
-        // A generous window, because the dialog blocks until dismissed.
-        frame.addEventListener("load", function () {
-            window.setTimeout(function () {
-                if (frame.parentNode) frame.parentNode.removeChild(frame);
-            }, 60000);
-        });
-
-        document.body.appendChild(frame);
-        return frame;
-    },
 
     applyCsrf: function (root) {
         (root || document)
@@ -854,84 +851,6 @@ window.CafeShell = {
         });
 
         show();
-    }());
-
-    // ---- Tickets for orders nobody was here to take ----
-    // A counter order prints its ticket from the screen that rang it up.
-    // A QR order arrives with nobody at the counter at all, so whichever
-    // staff screen is open watches for one and prints it.
-    //
-    // The claim is what stops two tills printing the same ticket: the
-    // server flips the row and tells only the first caller it won. A
-    // screen that loses simply moves on.
-    (function () {
-        var printing = window.CafeShell && window.CafeShell.printing;
-        if (!printing || !printing.auto_kot) return;
-        if (!window.CafeShell.autoPrint) return;
-        // The kitchen screen does its own watching, on its own terms.
-        if (location.pathname === "/kitchen") return;
-
-        var EVERY = 12000;   // a kitchen is not a stock ticker
-        var busy = false;
-
-        function claimAndPrint(orderId) {
-            return fetch("/api/kitchen/claim/" + orderId, {
-                method: "POST",
-                credentials: "same-origin",
-                headers: {
-                    "X-Requested-With": "XMLHttpRequest",
-                    // Every write is CSRF checked, this one included. Sent
-                    // as a header because there is no form behind it.
-                    "X-CSRFToken": window.CafeShell.csrfToken
-                }
-            }).then(function (response) {
-                return response.json();
-            }).then(function (data) {
-                // Another screen got there first. Nothing to do, and
-                // nothing wrong.
-                if (!data || !data.claimed) return;
-                window.CafeShell.autoPrint("/orders/" + orderId + "/kot");
-            }).catch(function () { });
-        }
-
-        function look() {
-            if (busy || document.hidden) return;
-            busy = true;
-
-            fetch("/api/kitchen/pending", {
-                credentials: "same-origin",
-                headers: { "X-Requested-With": "XMLHttpRequest" }
-            }).then(function (response) {
-                return response.json();
-            }).then(function (data) {
-                // A kitchen screen is on and watching, so its printer
-                // is the right one for every ticket, whoever rang the
-                // order up. Leave it alone; if that screen goes away the
-                // server stops saying this and these screens take the job
-                // back.
-                if (data && data.kitchen_watching) return;
-
-                var waiting = (data && data.orders) || [];
-                // One at a time, in order, so a burst of orders does not
-                // fire a burst of print dialogs at once.
-                return waiting.reduce(function (chain, orderId) {
-                    return chain.then(function () {
-                        return claimAndPrint(orderId);
-                    });
-                }, Promise.resolve());
-            }).catch(function () { }).then(function () {
-                busy = false;
-            });
-        }
-
-        window.setInterval(look, EVERY);
-        look();
-
-        // Coming back to a screen that was in the background is exactly
-        // when there is something waiting.
-        document.addEventListener("visibilitychange", function () {
-            if (!document.hidden) look();
-        });
     }());
 
     // ---- Notices go after a second -----------------------------------

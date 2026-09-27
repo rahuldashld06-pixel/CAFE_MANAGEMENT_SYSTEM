@@ -8,7 +8,25 @@
   The digit count is the country's, and it is enforced twice - here so
   it is caught while being typed, and again on the server, because a
   form is a suggestion and anybody can post whatever they like.
+
+  How many digits is said inside the box - "10-digit mobile number" -
+  rather than on a line under it, and the dial code sits inside the box
+  on the left, the way a phone number is written. While a number is
+  being typed a count on the right says how far along it is.
 #}
+{# The digit count for the country already chosen, written into the page
+   so the box says it before any script has run. #}
+{% set picked = namespace(lengths=[]) %}
+{% for country, code, lengths in phone_countries %}
+    {% if country == chosen_country %}{% set picked.lengths = lengths %}{% endif %}
+{% endfor %}
+{% if picked.lengths|length > 1 %}
+    {% set digits = picked.lengths[:-1]|join(", ") ~ " or " ~ picked.lengths[-1] %}
+{% elif picked.lengths %}
+    {% set digits = picked.lengths[0]|string %}
+{% else %}
+    {% set digits = "" %}
+{% endif %}
 <div class="phone-field">
     <select name="phone_country" id="{{ prefix }}phone_country"
             class="phone-field__country"
@@ -32,27 +50,92 @@
                value="{{ value or '' }}"
                inputmode="numeric"
                autocomplete="tel-national"
+               placeholder="{{ digits ~ '-digit mobile number' if digits else 'Mobile number' }}"
                {% if required %}required{% endif %}
                aria-describedby="{{ prefix }}phone_hint">
+        <span class="phone-field__count" aria-hidden="true"></span>
     </div>
 </div>
 
-<small id="{{ prefix }}phone_hint" class="phone-field__hint"
-       data-phone-hint>&nbsp;</small>
+{# For a screen reader, which does not read a placeholder as a
+   description. Nobody sighted needs it - the box says the same thing. #}
+<span id="{{ prefix }}phone_hint" class="phone-field__said"
+      data-phone-hint>{{ digits ~ ' digits' if digits else '' }}</span>
+
+<style>
+    /* Side by side where there is room, the country above the number
+       where there is not. */
+    .phone-field {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 10px;
+    }
+
+    .phone-field .phone-field__number {
+        position: relative;
+        min-width: 0;
+    }
+
+    /* Inside the box, on the left, in the box's own text colour but
+       quieter than what is typed after it. */
+    .phone-field .phone-field__code {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        font-weight: 600;
+        opacity: .7;
+        z-index: 1;
+    }
+
+    .phone-field .phone-field__number input {
+        width: 100%;
+        padding-left: var(--dial-room, 54px);
+        padding-right: 58px;
+    }
+
+    .phone-field .phone-field__count {
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        opacity: .65;
+    }
+
+    .phone-field .phone-field__count[data-state="done"] {
+        opacity: 1;
+        color: #8FBB99;
+    }
+
+    .phone-field__said {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+    }
+</style>
 
 <script>
-    /* Keeps the + code and the "10 digits" note in step with the
-       country, and stops the box accepting more digits than the
-       country has. Nothing here is a check - the server does that -
-       it is only so a wrong number is obvious while it is being
-       typed rather than months later when a code does not arrive. */
+    /* Keeps the dial code and the number of digits in step with the
+       country, and stops the box accepting more digits than the country
+       has. Nothing here is the check - the server does that - it is only
+       so a wrong number is obvious while it is being typed rather than
+       months later when a code does not arrive. */
     (function () {
         var box = document.getElementById("{{ prefix }}phone_number");
         var picker = document.getElementById("{{ prefix }}phone_country");
         if (!box || !picker) return;
 
-        var shown = picker.parentNode.querySelector(".phone-field__code");
-        var hint = document.getElementById("{{ prefix }}phone_hint");
+        var wrap = box.parentNode;
+        var shown = wrap.querySelector(".phone-field__code");
+        var count = wrap.querySelector(".phone-field__count");
+        var said = document.getElementById("{{ prefix }}phone_hint");
 
         function lengths() {
             var raw = picker.options[picker.selectedIndex]
@@ -61,23 +144,50 @@
         }
 
         function spoken(list) {
-            if (list.length === 1) return list[0];
+            if (list.length === 1) return String(list[0]);
             return list.slice(0, -1).join(", ") + " or " +
                    list[list.length - 1];
+        }
+
+        function country() {
+            var label = picker.options[picker.selectedIndex].textContent || "";
+            return label.replace(/\s*\(\+\d+\)\s*$/, "").trim();
+        }
+
+        // The number starts after the code, however wide the code is:
+        // +1 and +880 do not take the same room.
+        function makeRoom() {
+            if (!shown) return;
+            var room = shown.getBoundingClientRect().width;
+            if (room) wrap.style.setProperty("--dial-room", (room + 24) + "px");
         }
 
         function sync() {
             var chosen = picker.options[picker.selectedIndex];
             var code = chosen.getAttribute("data-code") || "";
             var wanted = lengths();
-            if (shown) shown.textContent = "+" + code;
-            box.setAttribute("maxlength", String(Math.max.apply(null, wanted)));
+            var most = Math.max.apply(null, wanted);
             var typed = (box.value || "").replace(/\D/g, "").length;
-            if (hint) {
-                hint.textContent = typed && wanted.indexOf(typed) === -1
-                    ? spoken(wanted) + " digits needed, " + typed + " so far"
-                    : spoken(wanted) + " digits";
+            var fits = wanted.indexOf(typed) !== -1;
+
+            if (shown) shown.textContent = "+" + code;
+            makeRoom();
+
+            box.setAttribute("maxlength", String(most));
+            box.setAttribute("placeholder",
+                             spoken(wanted) + "-digit mobile number");
+            if (said) said.textContent = spoken(wanted) + " digits";
+
+            if (count) {
+                count.textContent = !typed ? "" : fits ? "✓" : typed + " / " + most;
+                count.setAttribute("data-state", fits ? "done" : "typing");
             }
+
+            // Said on Save rather than left for the server to refuse.
+            box.setCustomValidity(typed && !fits
+                ? "A mobile number in " + country() + " has " +
+                  spoken(wanted) + " digits - this one has " + typed + "."
+                : "");
         }
 
         picker.addEventListener("change", sync);
@@ -88,6 +198,11 @@
             if (only !== box.value) box.value = only;
             sync();
         });
+
         sync();
+        // The code's width depends on the font, which may arrive later.
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(makeRoom);
+        }
     }());
 </script>

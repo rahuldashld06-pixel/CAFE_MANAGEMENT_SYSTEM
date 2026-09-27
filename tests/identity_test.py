@@ -213,6 +213,40 @@ check("each option carries the digits that country needs",
       and 'data-lengths="10"' in register_page,
       "the page cannot tell anybody how long a number should be")
 
+# How many digits is said inside the box, not on a line under it, and it
+# is written by the server - so it is right before any script has run.
+_number_box = re.search(r'<input[^>]*name="phone_number"[^>]*>',
+                        register_page, re.S)
+check("the number box itself says how many digits it wants",
+      _number_box is not None
+      and 'placeholder="10-digit mobile number"' in _number_box.group(0),
+      "the box reads %r" % (_number_box.group(0)[:160]
+                            if _number_box else None))
+
+check("and there is no instruction line under it any more",
+      "phone-field__hint" not in register_page,
+      "the '10 digits' line is still under the box")
+
+check("the dial code sits inside the box, where a number starts",
+      re.search(r'class="phone-field__number">\s*<span class='
+                r'"phone-field__code"', register_page) is not None,
+      "the +91 is outside the number box")
+
+# Sign in, register and reset are one set of screens and look it.
+_screens = {path: guest.get(path).get_data(as_text=True)
+            for path in ("/login", "/register", "/forgot-password")}
+check("the sign-in, register and reset screens share one look",
+      all('class="auth-shell' in page for page in _screens.values()),
+      "not built on the shared screens: %s"
+      % [p for p, page in _screens.items() if 'class="auth-shell' not in page])
+
+check("and none of them waits on its typefaces to draw",
+      all('rel="preload" as="style"' in page
+          and "fonts.googleapis.com/css2" in page
+          and 'rel="stylesheet" href="https://fonts.googleapis' not in page
+          for page in _screens.values()),
+      "a font stylesheet is blocking the first paint of a sign-in screen")
+
 
 # ==========================================================
 print("\n=== 4. Signing in with either name ===")
@@ -397,6 +431,38 @@ again.post("/login/verify", data={"otp_code": found.group(1)},
 check("password and then the code signs in",
       all_the_way_in(again),
       "the right code did not complete the sign-in")
+
+# "Remember me" is ticked on the first screen, and the code screen has
+# no idea it was asked - so the answer has to be carried across the two
+# posts. Left behind, an admin with a code would be signed out at the
+# end of the shift however hard they ticked it.
+for ticked in (True, False):
+    asking = app.test_client()
+    form = {"username": "ida", "password": "password123"}
+    if ticked:
+        form["remember"] = "1"
+    sent = asking.post("/login", data=form,
+                       follow_redirects=True).get_data(as_text=True)
+    code = re.search(r"code:\s*(\d{6})", sent)
+    asking.post("/login/verify", data={"otp_code": code.group(1)},
+                follow_redirects=True)
+    with asking.session_transaction() as sess:
+        carried = sess.get("remembered")
+
+    check("a code sign-in remembers the box was %s"
+          % ("ticked" if ticked else "left alone"),
+          all_the_way_in(asking) and carried is ticked,
+          "the session reads remembered=%r" % carried)
+
+    # The name is kept once the code is right, not when the password
+    # was: a sign-in that never finished is not one to remember.
+    shown = asking.get("/logout", follow_redirects=True).get_data(as_text=True)
+    kept = re.search(r'name="username"[^>]*value="([^"]*)"', shown)
+    check("and %s the name for next time"
+          % ("keeps" if ticked else "does not keep"),
+          (kept and kept.group(1) == "ida") if ticked
+          else not (kept and kept.group(1)),
+          "the sign-in page reads %r" % (kept.group(1) if kept else None))
 
 wrong_code = app.test_client()
 wrong_code.post("/login", data={"username": "ida",
@@ -749,10 +815,8 @@ if _pick:
 
 check("the kitchen's own polling writes nothing that is cached",
       not writes_to_cached_rows(
-          lambda: owner.post("/api/kitchen/heartbeat",
-                             data={"_csrf_token": csrf(owner)},
-                             follow_redirects=True)),
-      "the heartbeat skips invalidation but writes a cached row")
+          lambda: owner.get("/api/kitchen/board")),
+      "the kitchen board skips invalidation but writes a cached row")
 
 
 # ---- and stock is deliberately NOT cached ----

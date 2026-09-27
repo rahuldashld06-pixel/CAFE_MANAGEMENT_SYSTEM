@@ -1,0 +1,16 @@
+{# ------------------------------------------------------------------
+   The Cafora mark on the browser's tab, and on a phone's home screen.
+
+   Every page that has a <head> of its own includes this, so there is
+   no page left showing the browser's blank globe beside its title.
+
+   The SVG is what current browsers draw: one small file, sharp at any
+   size and on any screen. The .ico carries 16, 32 and 48px pictures for
+   anything that does not take an SVG, and it is also what /favicon.ico
+   answers with when a browser asks for it unprompted. Both are built
+   from the mark in _brand_mark.html by a script, drawn heavier than the
+   sidebar's because a tab icon is sixteen pixels across.
+   ------------------------------------------------------------------ #}
+<link rel="icon" href="{{ asset_url('icons/favicon.ico') }}" sizes="32x32">
+<link rel="icon" href="{{ asset_url('icons/favicon.svg') }}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{ asset_url('icons/app-192.png') }}">

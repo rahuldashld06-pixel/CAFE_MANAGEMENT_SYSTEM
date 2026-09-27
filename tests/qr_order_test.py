@@ -253,37 +253,28 @@ check("an order cannot be read through another cafe's code",
       "one cafe's order was readable through another's code")
 
 
-print("\n=== 8. Exactly one screen prints the ticket ===")
-pending = json.loads(
-    admin.get("/api/kitchen/pending").get_data(as_text=True))
-check("the kitchen feed lists the waiting order",
-      order_id in pending.get("orders", []),
-      "the feed says %s" % pending)
+print("\n=== 8. A table's ticket prints when somebody presses Print ===")
+# It used to print by itself, from whichever staff screen claimed it
+# first. Nothing prints by itself now: the ticket is on the kitchen
+# screen, and Print KOT on the order is how it comes out.
+check("there is no queue of tickets waiting to print themselves",
+      admin.get("/api/kitchen/pending").status_code != 200,
+      "the old print queue still answers")
 
-first = json.loads(admin.post(
-    "/api/kitchen/claim/%d" % order_id,
-    data={"_csrf_token": csrf(admin)}).get_data(as_text=True))
-second = json.loads(admin.post(
-    "/api/kitchen/claim/%d" % order_id,
-    data={"_csrf_token": csrf(admin)}).get_data(as_text=True))
+check("nor anything to claim one with",
+      admin.post("/api/kitchen/claim/%d" % order_id,
+                 data={"_csrf_token": csrf(admin)}).status_code != 200,
+      "a screen can still claim a ticket to print")
 
-check("the first screen to ask gets it", first.get("claimed") is True,
-      "the first claim returned %s" % first)
-check("and the second is told no",
-      second.get("claimed") is False,
-      "two tills would both print the same ticket: %s" % second)
+check("the ticket is there to print by hand",
+      admin.get("/orders/%d/kot" % order_id).status_code == 200,
+      "the kitchen ticket for a table's order cannot be printed")
 
-after = json.loads(admin.get("/api/kitchen/pending").get_data(as_text=True))
-check("a claimed order drops off the feed",
-      order_id not in after.get("orders", []),
-      "it would be printed again on the next poll")
-
-check("another cafe cannot claim this one's ticket",
-      json.loads(other_admin.post(
-          "/api/kitchen/claim/%d" % order_id,
-          data={"_csrf_token": csrf(other_admin)}).get_data(as_text=True)
-      ).get("claimed") is False,
-      "one cafe claimed another's kitchen ticket")
+check("and another cafe cannot print this one's ticket",
+      other_admin.get("/orders/%d/kot" % order_id).status_code != 200
+      or str(order_id) not in other_admin.get(
+          "/orders/%d/kot" % order_id).get_data(as_text=True),
+      "one cafe printed another's kitchen ticket")
 
 
 print("\n=== 9. The code page is the admin's ===")
@@ -316,9 +307,9 @@ check("and cannot open it",
       cashier.get("/settings/qr",
                   follow_redirects=False).status_code in (302, 303),
       "a cashier reached the code page")
-check("but can still pull a kitchen ticket",
-      cashier.get("/api/kitchen/pending").status_code == 200,
-      "a cashier's screen could not print a customer's ticket")
+check("but can still print a kitchen ticket",
+      cashier.get("/orders/%d/kot" % order_id).status_code == 200,
+      "a cashier could not print a customer's ticket")
 
 
 print("\n=== 10. Replacing the code retires the old one ===")
@@ -364,34 +355,20 @@ check("and says it came from a table",
       "nothing on the board says where an order came from")
 
 
-print("\n=== 12. While the kitchen watches, the counter stands down ===")
-# Otherwise a customer's ticket comes out of whichever printer somebody
-# happened to leave a tab in front of.
-quiet = json.loads(admin.get("/api/kitchen/pending").get_data(as_text=True))
-check("with no kitchen screen open, the counter takes the job",
-      quiet.get("kitchen_watching") is False,
-      "the counter was told to stand down with no kitchen screen open")
+print("\n=== 12. The kitchen screen just watches ===")
+# It used to check in every twenty seconds, so that the counter screens
+# knew to leave the printing to it. With nothing printing by itself there
+# is nothing to hand over, and no check-in.
+check("the kitchen screen no longer has to check in",
+      admin.post("/api/kitchen/heartbeat",
+                 data={"_csrf_token": csrf(admin)}).status_code != 200,
+      "the heartbeat still answers")
 
-admin.post("/api/kitchen/heartbeat", data={"_csrf_token": csrf(admin)})
-watched = json.loads(admin.get("/api/kitchen/pending").get_data(as_text=True))
-check("once one checks in, the counter is told to leave it",
-      watched.get("kitchen_watching") is True,
-      "the counter would print a ticket meant for the kitchen")
-
-# And a screen that went away must not hold the job for ever.
-mysql_shim._DB.execute(
-    "UPDATE cafes SET kitchen_seen_at = '2020-01-01 00:00:00' "
-    "WHERE cafe_id = ?", (cafe_id,))
-mysql_shim._DB.commit()
-stale = json.loads(admin.get("/api/kitchen/pending").get_data(as_text=True))
-check("a kitchen screen that stopped checking in loses the job",
-      stale.get("kitchen_watching") is False,
-      "a tablet switched off would leave tickets unprinted for ever")
-
-check("one cafe's kitchen screen does not silence another's counter",
-      json.loads(other_admin.get("/api/kitchen/pending")
-                 .get_data(as_text=True)).get("kitchen_watching") is False,
-      "one cafe's kitchen screen stopped another cafe printing")
+theirs = json.loads(other_admin.get("/api/kitchen/board")
+                    .get_data(as_text=True)).get("orders", [])
+check("and one cafe's board shows none of another's orders",
+      order_id not in [order.get("order_id") for order in theirs],
+      "Bluebird's order is on another cafe's kitchen screen")
 
 print("\n=== 13. The number people say out loud starts again each day ===")
 # order_id cannot do this: it is the key every bill and order line points
@@ -491,12 +468,6 @@ check("stock is taken with the check inside the update",
       re.search(r"UPDATE inventory.{0,400}quantity >= %s", source, re.S)
       is not None,
       "two orders could each be told there was one left")
-
-# And the kitchen ticket, which two screens watch at once.
-check("a kitchen ticket is claimed by whoever asks first",
-      re.search(r"SET kot_printed = 1.{0,200}kot_printed = 0", source, re.S)
-      is not None,
-      "two screens could print the same ticket")
 
 print("\n=== 16. The kitchen screen is where orders are managed now ===")
 # Order Management was a second list of the same orders, on a page nobody
@@ -940,7 +911,7 @@ for where, html in credit_pages.items():
           "Served by" in html,
           "the cafe is not named on it")
     check("and %s carries the system's name under it" % where,
-          re.search(r'class="p-foot".*?class="p-by".*?Cafe Manager',
+          re.search(r'class="p-foot".*?class="p-by".*?Cafora',
                     html, re.S) is not None,
           "the credit is missing, or sits somewhere other than under it")
     check("with the drawn mark rather than a typed emoji on %s" % where,
@@ -956,7 +927,8 @@ check("and the printed receipt credits the same name",
       "the receipt names something else")
 
 sources = {}
-for name in ("public_menu.html", "public_placed.html", "print_bill.html"):
+for name in ("public_menu.html", "public_placed.html",
+             "public_orders.html", "print_bill.html"):
     sources[name] = io.open(
         os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
             __file__))), "templates", name), encoding="utf-8").read()
@@ -1035,7 +1007,7 @@ check("the printed receipt carries it too",
       "the receipt still names the cafe as it was on the first day")
 
 # Clearing the field means "use the product default in the sidebar". It
-# must not rename somebody's business to "Cafe Manager".
+# must not rename somebody's business to "Cafora".
 renamer.post("/settings/branding",
              data={"brand_name": "", "brand_tagline": "",
                    "_csrf_token": csrf(renamer)},
@@ -1079,6 +1051,237 @@ check("choosing a section needs no round trip",
       "data-section=" in _menu and _menu.count("<section") >= 1,
       "the sections are not all on the page, so switching one would "
       "have to ask the server again")
+
+# =====================================================================
+print("\n=== What this phone has ordered today ===")
+# =====================================================================
+# Somebody who orders twice was left holding only the second number.
+# The page carrying the first had been replaced by the menu they went
+# back to, and nothing tied the two together - not the server, where a
+# QR order belongs to nobody, and not the phone, which was asked to
+# remember nothing. At the counter that is the whole difficulty: "I
+# ordered earlier as well", and no way to say which order that was.
+#
+# Its own cafe, because the sections above move order days around and
+# this one is about what today means.
+
+date, timedelta = _dt.date, _dt.timedelta
+
+_mine, _mine_cafe, _mine_token = build_cafe(
+    "The Long Table", "tess",
+    [("Cortado", "150", "40"), ("Brownie", "90", "40")])
+
+_phone = app.test_client()
+_first_menu = _phone.get("/m/%s" % _mine_token).get_data(as_text=True)
+_dishes = re.findall(r'name="quantity_(\d+)"', _first_menu)
+
+
+def _send(client, dish, quantity="1", token=None):
+    """One order from a phone, and the ref it was given."""
+    reply = client.post("/m/%s/order" % (token or _mine_token),
+                        data={"quantity_%s" % dish: quantity})
+    return reply, reply.headers.get("Location", "").rsplit("/", 1)[-1]
+
+
+def _numbers(html, mark="p-mine__no"):
+    return re.findall(r'%s">#(\d+)<' % mark, html)
+
+
+check("a phone that has ordered nothing is offered no list",
+      "p-mine" not in _first_menu,
+      "the strip is on the menu before there is anything in it")
+
+_one_reply, _one = _send(_phone, _dishes[0])
+_cookie = _one_reply.headers.get("Set-Cookie", "")
+
+check("the order is given to the phone to keep",
+      _one and _one in _cookie,
+      "nothing came back for the phone to hold: %r" % _cookie[:120])
+
+check("with the day it belongs to",
+      date.today().isoformat() in _cookie,
+      "no day in %r, so yesterday's numbers would still be listed "
+      "tomorrow" % _cookie[:120])
+
+check("and kept to this cafe's own pages",
+      "Path=/m/%s" % _mine_token in _cookie,
+      "the path is not this cafe's: %r" % _cookie[:160])
+
+check("out of reach of anything running on the page",
+      "HttpOnly" in _cookie and "SameSite" in _cookie,
+      "%r" % _cookie[:160])
+
+_first_page = _phone.get("/m/%s/placed/%s" % (_mine_token, _one)
+                         ).get_data(as_text=True)
+check("one order on its own is not a list of orders",
+      "p-mine" not in _first_page,
+      "the first order is told about itself")
+
+_two_reply, _two = _send(_phone, _dishes[1], "2")
+_second_page = _phone.get("/m/%s/placed/%s" % (_mine_token, _two)
+                          ).get_data(as_text=True)
+
+_shown = re.search(r'p-done__number">#(\d+)<', _second_page).group(1)
+_beside = _numbers(_second_page)
+
+check("the second order names the first one beside it",
+      len(_beside) == 1 and _beside[0] != _shown,
+      "under order #%s it lists %s" % (_shown, _beside))
+
+check("and offers the rest of them",
+      "/m/%s/orders" % _mine_token in _second_page,
+      "there is no way through to the whole list")
+
+_back = _phone.get("/m/%s" % _mine_token).get_data(as_text=True)
+check("the menu they go back to carries both numbers, newest first",
+      _numbers(_back) == sorted(_numbers(_back), key=int, reverse=True)
+      and len(_numbers(_back)) == 2,
+      "the menu shows %s" % _numbers(_back))
+
+_list = _phone.get("/m/%s/orders" % _mine_token)
+_list_html = _list.get_data(as_text=True)
+
+check("the list opens without signing in", _list.status_code == 200,
+      "it answered %s" % _list.status_code)
+
+_listed = _numbers(_list_html, "p-past__no")
+check("and has both orders on it, newest first",
+      _listed == sorted(_listed, key=int, reverse=True) and len(_listed) == 2,
+      "it lists %s" % _listed)
+
+check("each one leads back to its own page",
+      ("/placed/%s" % _one) in _list_html
+      and ("/placed/%s" % _two) in _list_html,
+      "a number with nothing behind it is not proof of anything")
+
+check("with the time it was sent",
+      len(re.findall(r"Sent at \d\d:\d\d [AP]M", _list_html)) == 2,
+      "no times on the list")
+
+check("and what it came to",
+      len(re.findall(r'p-past__sum">&#8377;[\d.]+<', _list_html)) == 2,
+      "no totals on the list")
+
+check("the day is on the page, because that is what is being proved",
+      application.cafe_now(_mine_cafe).strftime("%d %B %Y") in _list_html,
+      "the list does not say which day it is")
+
+check("and it still tells a crawler to stay out",
+      'name="robots"' in _list_html and "noindex" in _list_html,
+      "the page is open to a search engine")
+
+# ---- It is this phone's list, and nobody else's ----
+_other_phone = app.test_client()
+_others = _other_phone.get("/m/%s/orders" % _mine_token).get_data(as_text=True)
+check("the phone at the next table sees none of it",
+      "Nothing from this phone today." in _others
+      and not _numbers(_others, "p-past__no"),
+      "another phone was handed this table's orders")
+
+_liar = app.test_client()
+_liar.set_cookie("table_orders",
+                 "%s.ZZZZnotarealref" % date.today().isoformat(),
+                 path="/m/%s" % _mine_token)
+check("a made-up cookie lists nothing",
+      not _numbers(_liar.get("/m/%s/orders" % _mine_token)
+                   .get_data(as_text=True), "p-past__no"),
+      "a ref somebody typed was taken at its word")
+
+# An order of this cafe's, from another phone - the case a cookie
+# written by hand would actually be aiming at.
+_elsewhere = app.test_client()
+_, _theirs = _send(_elsewhere, _dishes[0])
+_thief = app.test_client()
+_thief.set_cookie("table_orders",
+                  "%s.%s" % (date.today().isoformat(), _theirs),
+                  path="/m/%s" % _mine_token)
+_stolen = _thief.get("/m/%s/orders" % _mine_token).get_data(as_text=True)
+check("but a real ref is still only as private as the address it is in",
+      len(_numbers(_stolen, "p-past__no")) == 1,
+      # Said plainly rather than hidden: the ref IS the key to that
+      # order's page, as it has been since the page existed. Holding
+      # one has always been enough to read it; this adds no new way in.
+      "a ref that opens the order's own page did not list it")
+
+# ---- Only today, and only what a phone actually ordered ----
+_yesterday = app.test_client()
+_, _old = _send(_yesterday, _dishes[0])
+mysql_shim._DB.execute(
+    "UPDATE orders SET order_day = ? WHERE public_ref = ?",
+    ((date.today() - timedelta(days=1)).isoformat(), _old))
+mysql_shim._DB.commit()
+check("yesterday's order is not on today's list",
+      not _numbers(_yesterday.get("/m/%s/orders" % _mine_token)
+                   .get_data(as_text=True), "p-past__no"),
+      "an order from another day was listed under today's numbers")
+
+_stale = app.test_client()
+_stale.set_cookie("table_orders",
+                  "%s.%s" % ((date.today() - timedelta(days=1)).isoformat(),
+                             _one),
+                  path="/m/%s" % _mine_token)
+check("and a cookie written for another day is dropped whole",
+      not _numbers(_stale.get("/m/%s/orders" % _mine_token)
+                   .get_data(as_text=True), "p-past__no"),
+      "the day the cookie was written for is not being read")
+
+mysql_shim._DB.execute(
+    "UPDATE orders SET source = 'counter' WHERE public_ref = ?", (_two,))
+mysql_shim._DB.commit()
+_after = _phone.get("/m/%s/orders" % _mine_token).get_data(as_text=True)
+check("an order rung up at the counter is not a phone's to show",
+      _numbers(_after, "p-past__no") == [_listed[1]],
+      "it lists %s" % _numbers(_after, "p-past__no"))
+mysql_shim._DB.execute(
+    "UPDATE orders SET source = 'qr' WHERE public_ref = ?", (_two,))
+mysql_shim._DB.commit()
+
+# Another cafe's order, in this cafe's cookie.
+_far_admin, _far_cafe, _far_token = build_cafe(
+    "Two Doors Down", "quin", [("Filter", "60", "10")])
+_far_phone = app.test_client()
+_far_dish = re.findall(
+    r'name="quantity_(\d+)"',
+    _far_phone.get("/m/%s" % _far_token).get_data(as_text=True))[0]
+_, _far_ref = _send(_far_phone, _far_dish, token=_far_token)
+
+_crosser = app.test_client()
+_crosser.set_cookie("table_orders",
+                    "%s.%s" % (date.today().isoformat(), _far_ref),
+                    path="/m/%s" % _mine_token)
+check("one cafe's code will not list another cafe's order",
+      not _numbers(_crosser.get("/m/%s/orders" % _mine_token)
+                   .get_data(as_text=True), "p-past__no"),
+      "a ref from Two Doors Down was listed by The Long Table")
+
+# ---- A cancelled order stays on the list ----
+mysql_shim._DB.execute(
+    "UPDATE orders SET order_status = 'Cancelled' WHERE public_ref = ?",
+    (_two,))
+mysql_shim._DB.commit()
+_cancelled = _phone.get("/m/%s/orders" % _mine_token).get_data(as_text=True)
+check("a cancelled order is still on the list, and says so",
+      _shown in _numbers(_cancelled, "p-past__no")
+      and "Cancelled" in _cancelled,
+      "a number the kitchen called out disappeared from the list")
+
+# ---- Opening an order's page is enough to be holding it ----
+_returning = app.test_client()
+_taught = _returning.get("/m/%s/placed/%s" % (_mine_token, _one))
+check("opening an order's own page teaches the phone about it",
+      _one in _taught.headers.get("Set-Cookie", ""),
+      "a phone whose cookie was cleared cannot get its list back")
+
+# ---- What one phone can pile up ----
+_room = ".".join([date.today().isoformat()]
+                 + ["ref%04d_aaaa" % n for n in range(30)])
+with app.test_request_context("/m/%s/orders" % _mine_token,
+                              headers={"Cookie": "table_orders=%s" % _room}):
+    _kept = application.remembered_refs(_mine_token)
+check("a phone keeps a day's worth and not a month's",
+      len(_kept) == application.TABLE_ORDERS_KEPT,
+      "it kept %d of the 30 in the cookie" % len(_kept))
+
 
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))

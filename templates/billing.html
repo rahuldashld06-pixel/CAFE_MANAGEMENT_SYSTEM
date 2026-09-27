@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Billing Management · Cafe Manager{% endblock %}
+{% block title %}Billing Management{% endblock %}
 
 {% block content %}
 
@@ -526,15 +526,35 @@
            spare. Every column gives up the same 4px of width below, so
            no column loses a pixel of room for what is written in it -
            they sit closer together, and that is all. */
-        .billing-table th,
-        .billing-table td {
+        /* `table.billing-table thead th`, not `.billing-table th`. This
+           table carries .data-table as well, and the stylesheet's
+           `.data-table thead th` and `.data-table tbody td` are each one
+           element more specific than a bare `.billing-table th` - so
+           everything in this rule that those two also set was written,
+           matched and thrown away. Measured on the phone-sideways
+           table: every cell still had the desktop's 14px a side, which
+           is 28px of a 60px column, and the Date column was left 32px
+           for a clock that wants 50. The clock was drawn across Order
+           Items, by four pixels when the time held a wide digit and by
+           none when it did not - so a bill sent in the morning spilled
+           and the same bill in the afternoon did not, which is why this
+           looked like it came and went. The `table` in front of the
+           class is what makes these win outright rather than on the
+           order the two files happen to load in. */
+        table.billing-table thead th,
+        table.billing-table tbody td {
             padding: 6px 3px;
             font-size: 11.5px;
         }
 
         /* Two short words that were wrapping to two lines and setting
-           the height of the header row. */
-        .billing-table th { white-space: normal; line-height: 1.15; }
+           the height of the header row. `.data-table thead th` holds
+           these on one line, and beat this rule until it was written
+           this way too. */
+        table.billing-table thead th {
+            white-space: normal;
+            line-height: 1.15;
+        }
 
         /* The year is the easiest thing in the row to do without. */
         .date-long { display: none; }
@@ -1025,6 +1045,7 @@
                                   action="{{ url_for('edit_bill', bill_id=bill.bill_id) }}"
                                   class="payment-method-form"
                                   data-no-instant
+                                  data-no-draft
                                   data-bill-id="{{ bill.bill_id }}"
                                   style="margin:0;">
                                 <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
@@ -1076,6 +1097,7 @@
                                       action="{{ url_for('mark_bill_paid', bill_id=bill.bill_id) }}"
                                       class="payment-toggle-form"
                                   data-no-instant
+                                  data-no-draft
                                       data-bill-id="{{ bill.bill_id }}">
                                     <button type="submit"
                                             class="payment-status-toggle payment-status-toggle--pending"
@@ -1237,13 +1259,6 @@
                             '<i class="bi bi-check-circle-fill"></i> Paid</button>';
                     }
                     showBillingToast(data.message, false);
-
-                    // Receipt, straight away - the customer is standing there.
-                    const printing = (window.CafeShell || {}).printing || {};
-                    if (printing.auto_bill && data.order_id) {
-                        window.CafeShell.autoPrint(
-                            '/orders/' + data.order_id + '/bill');
-                    }
                 } else {
                     if (button) button.disabled = false;
                     showBillingToast(data.message || 'Could not update payment status.', true);
@@ -1307,11 +1322,9 @@
         }
     });
 
-    // Print a receipt for the customer who asks for one.
-    //
-    // Through the same hidden frame the automatic printing uses, so the
-    // page is not navigated away from and the cashier keeps their place in
-    // the list. Delegated, because the rows are re-rendered in place.
+    // Print a receipt for the customer who asks for one - the only way a
+    // bill is ever printed. Delegated, because the rows are re-rendered
+    // in place.
     document.addEventListener('click', function (event) {
         const button = event.target.closest('.print-bill-btn');
         if (!button) return;
@@ -1319,16 +1332,11 @@
         const orderId = button.dataset.printOrder;
         if (!orderId) return;
 
-        // Opened where it can be seen, not into the hidden frame the
-        // automatic printing uses. That frame is 0x0 with opacity 0 -
-        // deliberately, because a kitchen ticket printing by itself
-        // should not flash a page at anybody - but a browser will not
-        // print a frame with no rendered area, so pressing this did
-        // nothing at all and showed no bill either.
-        //
-        // A customer asking for their receipt is not the silent case.
-        // The bill opens, it can be read, and the page prints itself
-        // and keeps the copy on screen if the dialog is dismissed.
+        // Opened where it can be seen. A browser will not print a frame
+        // with no rendered area, and a customer asking for their receipt
+        // should see it: the bill opens, it can be read, and the page
+        // prints itself and keeps the copy on screen if the dialog is
+        // dismissed.
         var receipt = window.open('/orders/' + orderId + '/bill', '_blank');
 
         if (!receipt) {

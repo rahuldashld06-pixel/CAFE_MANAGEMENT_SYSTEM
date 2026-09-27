@@ -1056,6 +1056,61 @@ try:
                       % (s["column"], s["over"], s["text"])
                       for s in wide["spills"][:6]))
 
+    # The check above measures the clock that happens to be on the page,
+    # which made it a check on the time of day: "08:21 PM" sat a pixel
+    # inside the column and "09:19 AM" four pixels outside it, so the
+    # same tree passed every afternoon and failed every morning. This one
+    # asks the column whether it has room for the widest clock there is,
+    # and gets the same answer whenever the suite is run.
+    clock = json.loads(b.evaluate("""
+        (function () {
+            var cell = document.querySelector(
+                '.billing-table tbody td[data-label="Date"]');
+            if (!cell) return JSON.stringify({missing: true});
+            var cs = getComputedStyle(cell);
+
+            function needs(text) {
+                var probe = document.createElement('span');
+                probe.textContent = text;
+                probe.style.font = cs.font;
+                probe.style.position = 'absolute';
+                probe.style.visibility = 'hidden';
+                probe.style.whiteSpace = 'nowrap';
+                document.body.appendChild(probe);
+                var width = probe.getBoundingClientRect().width;
+                probe.remove();
+                return width;
+            }
+
+            // Whichever digit this font draws widest, in all four
+            // places, with whichever of AM and PM is the wider. Not a
+            // real time - an upper bound on every real one.
+            var digit = '0', widest = 0;
+            for (var d = 0; d < 10; d++) {
+                var w = needs(String(d));
+                if (w > widest) { widest = w; digit = String(d); }
+            }
+            var half = needs('09:09 AM') >= needs('09:09 PM') ? ' AM' : ' PM';
+            var worst = digit + digit + ':' + digit + digit + half;
+
+            return JSON.stringify({
+                worst: worst,
+                needs: Math.round(needs(worst) * 10) / 10,
+                room: Math.round((cell.getBoundingClientRect().width
+                                  - parseFloat(cs.paddingLeft)
+                                  - parseFloat(cs.paddingRight)) * 10) / 10,
+                padding: cs.paddingLeft + " / " + cs.paddingRight
+            });
+        }())
+    """))
+
+    check("the Date column has room for any clock of the day",
+          not clock.get("missing") and clock["room"] >= clock["needs"],
+          "the column leaves %spx inside padding of %s and %r needs "
+          "%spx, so for part of the day the clock is drawn over Order "
+          "Items" % (clock.get("room"), clock.get("padding"),
+                     clock.get("worst"), clock.get("needs")))
+
     # The declared widths add up to more than the panel holds, the panel
     # does not scroll, and so the last column simply is not reachable.
     # It was 11px past the right of the screen, which is most of the

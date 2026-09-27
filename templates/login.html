@@ -4,424 +4,183 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ cafe_branding.cafe_name }} | Login</title>
+    <meta name="description" content="Sign in to run orders, the kitchen, stock and billing for your cafe.">
+    {# The picture behind the panel is the biggest thing on this page,
+       so it is what Largest Contentful Paint times. As a CSS background
+       it was invisible to the preload scanner - the browser only learns
+       of it once the styles are matched against the element. Stated
+       here, it starts loading with the page.
 
-    <style>
-        :root {
-            --coffee-dark: #24150f;
-            --coffee: #3b2418;
-            --coffee-mid: #5a3927;
-            --cream: #f7efe3;
-            --cream-dark: #e8d8c5;
-            --gold: #c28b52;
-            --gold-light: #d9ab78;
-            --white: #fffaf3;
-        }
+       Pointed at whichever picture will actually be used: the cafe's
+       own if it has uploaded one, otherwise the stock photo, which
+       lives on another host and needs that host found first. #}
+    {%- if cafe_branding.login_photo %}
+    <link rel="preload" as="image" fetchpriority="high"
+          href="{{ cafe_branding.login_photo }}">
+    {%- else %}
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin>
+    <link rel="preload" as="image" fetchpriority="high"
+          href="https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=640&q=70"
+          imagesrcset="https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=640&q=70 640w, https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1200&q=85 1600w"
+          imagesizes="(max-width: 900px) 100vw, 50vw">
+    {%- endif %}
+    <title>Sign in · {{ platform_name }}</title>
+    {% include "_favicon.html" %}
 
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            min-height: 100vh;
-            font-family: Georgia, "Times New Roman", serif;
-            background:
-                radial-gradient(circle at 75% 30%, rgba(194,139,82,.22), transparent 28%),
-                linear-gradient(135deg, #24150f 0%, #3b2418 48%, #5a3927 100%);
-            color: var(--cream);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        .login-shell {
-            width: min(1100px, 94vw);
-            min-height: 650px;
-            display: grid;
-            grid-template-columns: 1.08fr .92fr;
-            border-radius: 28px;
-            overflow: hidden;
-            background: rgba(36,21,15,.94);
-            border: 1px solid rgba(217,171,120,.35);
-            box-shadow: 0 30px 80px rgba(0,0,0,.45);
-        }
-
-        .login-visual {
-            position: relative;
-            min-height: 650px;
-            background:
-                linear-gradient(90deg, rgba(36,21,15,.82), rgba(36,21,15,.20)),
-                var(--login-photo, url("https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1200&q=85"))
-                center/cover no-repeat;
-            display: flex;
-            align-items: flex-end;
-            padding: 52px;
-        }
-
-        .login-visual::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(0deg, rgba(36,21,15,.85), transparent 60%);
-        }
-
-        .brand-mark {
-            width: 58px;
-            height: 58px;
-            border: 1px solid var(--gold-light);
-            border-radius: 50%;
-            display: grid;
-            place-items: center;
-            font-size: 27px;
-            margin-bottom: 20px;
-            background: rgba(36,21,15,.55);
-        }
-
-        .brand-mark .brand-glyph {
-            display: block;
-            width: 30px;
-            height: 30px;
-            color: var(--gold-light);
-        }
-
-        /* On a button it sits on the line, at the text's own size. */
-        .brand-glyph--btn {
-            display: inline-block;
-            vertical-align: -3px;
-            width: 17px;
-            height: 17px;
-            color: currentColor;
-        }
-
-        .brand-copy {
-            position: relative;
-            z-index: 1;
-            max-width: 500px;
-        }
-
-        .brand-copy h1 {
-            margin: 0 0 12px;
-            font-size: clamp(38px, 5vw, 62px);
-            letter-spacing: 1px;
-        }
-
-        .brand-copy p {
-            margin: 0;
-            color: var(--cream-dark);
-            font-size: 17px;
-            line-height: 1.7;
-        }
-
-        .login-panel {
-            padding: 55px 52px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            background: rgba(255,250,243,.055);
-        }
-
-        .login-panel .eyebrow {
-            color: var(--gold-light);
-            text-transform: uppercase;
-            letter-spacing: 2.5px;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .login-panel h2 {
-            margin: 9px 0 8px;
-            font-size: 34px;
-        }
-
-        .login-panel .subtitle {
-            margin: 0 0 30px;
-            color: #d8c7b4;
-            line-height: 1.5;
-        }
-
-        .flash {
-            padding: 11px 13px;
-            margin-bottom: 18px;
-            border-radius: 9px;
-            background: rgba(166, 72, 50, .18);
-            border: 1px solid rgba(217,130,105,.4);
-            color: #f1c8bd;
-            font-size: 14px;
-        }
-
-        .field {
-            margin-bottom: 18px;
-        }
-
-        .field label {
-            display: block;
-            margin-bottom: 8px;
-            color: var(--cream-dark);
-            font-size: 14px;
-            font-weight: 700;
-        }
-
-        .field input {
-            width: 100%;
-            padding: 14px 15px;
-            border-radius: 10px;
-            border: 1px solid rgba(217,171,120,.35);
-            background: rgba(0,0,0,.20);
-            color: var(--white);
-            font-size: 15px;
-            outline: none;
-        }
-
-        .field input:focus {
-            border-color: var(--gold-light);
-            box-shadow: 0 0 0 3px rgba(217,171,120,.10);
-        }
-
-        .forgot-link {
-            text-align: right;
-            margin: -8px 0 20px;
-        }
-
-        .forgot-link a {
-            color: var(--gold-light);
-            font-size: 13px;
-            text-decoration: none;
-            border-bottom: 1px solid transparent;
-            transition: border-color .15s ease;
-        }
-
-        .forgot-link a:hover {
-            border-bottom-color: var(--gold-light);
-        }
-
-        .create-account-link {
-            text-align: center;
-            margin-top: 18px;
-            color: #ad9a87;
-            font-size: 13px;
-        }
-
-        .create-account-link a {
-            color: var(--gold-light);
-            font-weight: 700;
-            text-decoration: none;
-            border-bottom: 1px solid transparent;
-            transition: border-color .15s ease;
-        }
-
-        .create-account-link a:hover {
-            border-bottom-color: var(--gold-light);
-        }
-
-        .login-button {
-            width: 100%;
-            margin-top: 7px;
-            padding: 14px 18px;
-            border: 0;
-            border-radius: 10px;
-            background: linear-gradient(135deg, var(--gold), var(--gold-light));
-            color: var(--coffee-dark);
-            font-size: 15px;
-            font-weight: 800;
-            cursor: pointer;
-            transition: transform .15s ease, box-shadow .15s ease;
-        }
-
-        .login-button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 8px 22px rgba(194,139,82,.25);
-        }
-
-        .login-note {
-            margin-top: 24px;
-            text-align: center;
-            color: #ad9a87;
-            font-size: 12px;
-        }
-
-        @media (max-width: 800px) {
-            body {
-                overflow: auto;
-                padding: 20px 0;
-            }
-
-            .login-shell {
-                grid-template-columns: 1fr;
-                min-height: auto;
-            }
-
-            .login-visual {
-                min-height: 300px;
-                padding: 32px;
-            }
-
-            .login-panel {
-                padding: 40px 30px;
-            }
-        }
-    
-.login-logo {
-    width: 72px;
-    height: 72px;
-    object-fit: contain;
-    border-radius: 50%;
-    margin-bottom: 20px;
-    background: rgba(255,250,243,.12);
-    border: 1px solid rgba(217,171,120,.45);
-    padding: 6px;
-}
-
-</style>
+    {% include "_auth_style.html" %}
     {# The sign-in screen is self-contained (its CSS is inline above), but the
        page waiting on the other side of it is not: it needs style.css, the
-       navigation layer, the icon font and Google Fonts. Warming them while
-       the cashier is still typing their password means the dashboard or New
-       Order screen paints from cache the moment the login succeeds, instead
-       of showing an unstyled shell first.
+       navigation layer and the icon font. Warming them while the cashier is
+       still typing their password means the dashboard or New Order screen
+       paints from cache the moment the login succeeds, instead of showing
+       an unstyled shell first. The typefaces are already loading - this
+       page is set in them too.
 
        Protected pages themselves cannot be fetched here - there is no
        session yet - so instant.js takes over and warms those the instant the
        first authenticated page loads. #}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 
-    <link rel="prefetch" as="style" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
-    <link rel="prefetch" as="style" href="{{ url_for('static', filename='css/style.css', v=asset_version) }}">
-    <link rel="prefetch" as="script" href="{{ url_for('static', filename='js/instant.js', v=asset_version) }}">
-    <link rel="prefetch" as="script" href="{{ url_for('static', filename='js/fullscreen.js', v=asset_version) }}">
-    <link rel="prefetch" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" crossorigin>
+    <link rel="prefetch" as="style" href="{{ asset_url('css/theme.css') }}">
+    <link rel="prefetch" as="style" href="{{ asset_url('css/style.css') }}">
+    <link rel="prefetch" as="script" href="{{ asset_url('js/instant.js') }}">
+    <link rel="prefetch" as="script" href="{{ asset_url('js/fullscreen.js') }}">
     <link rel="prefetch" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" crossorigin>
     <link rel="prefetch" as="font" type="font/woff2" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2" crossorigin>
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/password-view.css', v=asset_version) }}">
-    <script src="{{ url_for('static', filename='js/password-view.js', v=asset_version) }}" defer></script>
+    <style>/* password-view.css, inlined: a separate request for 2.7KB
+       held up the first paint by a whole round trip. */
+{{ password_view_css }}</style>
+    <script src="{{ asset_url('js/password-view.js') }}" defer></script>
 </head>
 
 <body>
 
-<div class="login-shell">
+<div class="auth-shell">
 
-    <section class="login-visual"
+    <section class="auth-visual"
         {% if cafe_branding.login_photo %}
         style="--login-photo: url('{{ cafe_branding.login_photo }}');"
         {% endif %}>
+
+        <div class="brand">
+            <span class="brand-mark">
+                {% if cafe_branding.logo %}
+                <img src="{{ cafe_branding.logo }}" alt="">
+                {% else %}
+                {{ coffee_mark() }}
+                {% endif %}
+            </span>
+            <span class="brand-name">
+                <strong>{{ cafe_branding.cafe_name }}</strong>
+                <span>{{ cafe_branding.brand_tagline }}</span>
+            </span>
+        </div>
+
         <div class="brand-copy">
-            {% if cafe_branding.logo %}
-                <img
-                    src="{{ cafe_branding.logo }}"
-                    alt="{{ cafe_branding.cafe_name }} logo"
-                    class="login-logo">
-            {% else %}
-                <div class="brand-mark">{{ coffee_mark() }}</div>
-            {% endif %}
+            <h1>Your café, ready when you are.</h1>
 
-            <h1>{{ cafe_branding.cafe_name }}</h1>
-
-            <p>
-                Welcome to your cafe management workspace.
-                Manage orders, inventory, billing and daily
-                operations from one place.
-            </p>
+            {% set tick %}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="8.2" opacity=".45"/><path d="M6.4 10.2l2.4 2.4 4.8-5"/></svg>{% endset %}
+            <ul class="perks">
+                <li>{{ tick }}Orders from the counter and the table, in one list</li>
+                <li>{{ tick }}A kitchen screen that keeps up with every ticket</li>
+                <li>{{ tick }}Stock, bills and reports that always add up</li>
+            </ul>
         </div>
     </section>
 
+    <section class="auth-panel">
 
-    <section class="login-panel">
-
-        <div class="eyebrow">Cafe Management System</div>
-
-        <h2>Welcome</h2>
-
-        <p class="subtitle">
-            Sign in to continue to your dashboard.
-        </p>
+        <p class="eyebrow">Welcome back</p>
+        <h2>Sign in</h2>
+        <p class="subtitle">Use your username or email, and your password.</p>
 
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}
-                    <div class="flash">
-                        {{ message }}
-                    </div>
+                    <div class="flash" role="alert">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
-        {# The browser knows what clock this screen is on, and the cafe
-       may not have been asked yet. Carried with the sign-in so the very
-       first page already reads the right time - settling it afterwards
-       meant reloading the page under whoever had just arrived. #}
-    <form method="POST">
+        <form method="POST">
 
             <div class="field">
-                <label for="username">
-                    Username or email
-                </label>
-
+                <label for="username">Username or email</label>
                 <input
                     type="text"
                     id="username"
                     name="username"
                     placeholder="Username or email address"
                     autocomplete="username"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    {# Kept from the last sign-in with the box ticked.
+                       The password is not: that is for the browser's own
+                       password manager to offer, which it does on this
+                       field pair because of the autocomplete names. #}
+                    value="{{ request.form.get('username') or remembered_login or '' }}"
                     required
-                    autofocus>
+                    {% if not remembered_login %}autofocus{% endif %}>
             </div>
 
-
             <div class="field">
-                <label for="password">
-                    Password
-                </label>
-
+                <label for="password">Password</label>
                 <input
                     type="password"
                     id="password"
                     name="password"
-                    placeholder="Enter password"
+                    placeholder="Your password"
                     autocomplete="current-password"
-                    required>
+                    required
+                    {% if remembered_login %}autofocus{% endif %}>
             </div>
 
-            <div class="forgot-link">
-                <a href="{{ url_for('forgot_password') }}">Forgot your password?</a>
+            {# Without the box a sign-in ends after eight hours of nobody
+               using it, which is right for a till; with it, after a week
+               away, which is right for the phone in an owner's pocket -
+               and the name is filled in here from then on. #}
+            <div class="sign-in-row">
+                <label class="remember">
+                    <input type="checkbox" name="remember" value="1"
+                           {% if request.form.get('remember') or remembered_login %}checked{% endif %}>
+                    <span>Remember me</span>
+                </label>
+
+                <span class="forgot-link">
+                    <a href="{{ url_for('forgot_password') }}">Forgot your password?</a>
+                </span>
             </div>
 
-            <button
-                type="submit"
-                class="login-button">
-
-                {{ coffee_mark('brand-glyph--btn') }} Sign In
-
+            <button type="submit" class="auth-button">
+                {{ coffee_mark('brand-glyph--btn') }}
+                <span>Sign in</span>
             </button>
 
-            <div class="create-account-link">
-                New here? <a href="{{ url_for('register') }}">Create an account</a>
-            </div>
+            <p class="auth-note">
+                Admins with a mobile number or email on file confirm a
+                one-time code after their password.
+            </p>
 
+            {# The browser knows what clock this screen is on, and the
+               cafe may not have been asked yet. Carried with the sign-in
+               so the very first page already reads the right time. #}
             <input type="hidden" name="timezone" id="signInClock">
-    </form>
+        </form>
 
-    <script>
-        (function () {
-            var box = document.getElementById("signInClock");
-            if (!box) return;
-            try {
-                box.value =
-                    Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-            } catch (error) { /* older browser: the setting still works */ }
-        }());
-    </script>
+        <script>
+            (function () {
+                var box = document.getElementById("signInClock");
+                if (!box) return;
+                try {
+                    box.value =
+                        Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+                } catch (error) { /* older browser: the setting still works */ }
+            }());
+        </script>
 
-        <div class="login-note">
-            Cafe Management System · Secure Admin Access
-        </div>
-
-        <div class="login-note">
-            Admin accounts with a mobile number on file are asked for a
-            one-time code after signing in.
+        <div class="auth-foot">
+            New here? <a href="{{ url_for('register') }}">Create an account</a>
         </div>
 
     </section>

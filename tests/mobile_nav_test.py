@@ -393,7 +393,7 @@ try:
           == "flex",
           "it is hidden on a phone, where the sidebar is shut")
     check("it carries the product name",
-          "Cafe Manager" in (b.evaluate(
+          "Cafora" in (b.evaluate(
               "document.querySelector('.topbar-brand__name').textContent")
               or ""),
           "it reads %r" % b.evaluate(

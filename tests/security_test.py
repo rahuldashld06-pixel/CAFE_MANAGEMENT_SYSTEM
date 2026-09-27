@@ -346,6 +346,247 @@ check("and is not sent on other sites' requests",
       "SameSite=Lax" in cookie_header or "SameSite=Strict" in cookie_header,
       cookie_header[:120])
 
+# ---- How long a sign-in lasts ----
+#
+# A sign-in ended after eight hours of nobody using it, and there was
+# no way to ask for longer, so the phone in an owner's pocket wanted a
+# password every morning. The box on the sign-in form asks for a week:
+# closing the browser signs nobody out, working all week does not
+# either, and a week away does.
+#
+# Unused, not since signing in. Flask sends the cookie again with a
+# fresh expiry on every request, so a till in use all day has always
+# stayed signed in all day - and the first version of this counted from
+# sign-in instead, which would have signed a cafe's till out in the
+# middle of an evening's service. That is checked below too.
+#
+# The cookie's own expiry is a browser's to honour, and a cookie can be
+# kept after the browser was told to drop it - so the same rule is
+# enforced on this side, where whoever is holding it cannot reach it.
+# That is what these check: that the shorter window is still real, and
+# that the longer one is a choice rather than a new default.
+
+
+def sign_in_for(remember, address):
+    """One sign-in, and what the browser was told to keep."""
+    client = app.test_client()
+    data = {"username": "guardboss", "password": "password123"}
+    if remember:
+        data["remember"] = "1"
+    reply = client.post("/login", data=data,
+                        environ_overrides={"REMOTE_ADDR": address})
+    header = " ".join(str(value) for value in
+                      reply.headers.getlist("Set-Cookie"))
+    return client, header
+
+
+def hours_until(header):
+    """How long the session cookie in this header is good for."""
+    from email.utils import parsedate_to_datetime
+    from datetime import datetime, timezone
+
+    stamp = re.search(r"session=[^;]*;[^\n]*?Expires=([^;]+)", header)
+    if not stamp:
+        return None
+    return (parsedate_to_datetime(stamp.group(1))
+            - datetime.now(timezone.utc)).total_seconds() / 3600.0
+
+
+def wind_back(client, hours):
+    """Make this sign-in's last use that long ago."""
+    import time as _time
+    with client.session_transaction() as sess:
+        sess["seen_at"] = int(_time.time() - hours * 3600)
+
+
+SHIFT = application.SESSION_HOURS
+WEEK = application.REMEMBER_DAYS * 24
+
+plain, plain_header = sign_in_for(False, "192.0.2.183")
+kept, kept_header = sign_in_for(True, "192.0.2.184")
+
+plain_hours = hours_until(plain_header)
+kept_hours = hours_until(kept_header)
+
+check("left alone, a sign-in lasts a shift",
+      plain_hours is not None and 0 < plain_hours <= SHIFT + 0.2,
+      "the browser was told to keep it for %s hours, against a shift of "
+      "%s" % (plain_hours, SHIFT))
+
+check("the box is what asks for longer",
+      kept_hours is not None and kept_hours > SHIFT * 2,
+      "ticking it gave %s hours, the same as leaving it alone"
+      % kept_hours)
+
+check("and it asks for exactly as long as it says",
+      kept_hours is not None and abs(kept_hours - WEEK) <= 1,
+      "%s hours against the %s it is set to" % (kept_hours, WEEK))
+
+check("which is a week, as asked for",
+      application.REMEMBER_DAYS == 7,
+      "a remembered sign-in lasts %s days" % application.REMEMBER_DAYS)
+
+with plain.session_transaction() as sess:
+    plain_flag = sess.get("remembered")
+with kept.session_transaction() as sess:
+    kept_flag = sess.get("remembered")
+
+check("the answer is recorded on the session, not guessed at later",
+      plain_flag is False and kept_flag is True,
+      "unticked reads %r and ticked reads %r" % (plain_flag, kept_flag))
+
+# A till at work through a long day: used once an hour, for longer than
+# the window itself. Only app.py's clock is moved - the cookie's
+# signature and expiry keep real time - so what is being tested is the
+# rule, and nothing else. Counted from signing in, this till would be
+# signed out at hour nine with a queue at the counter.
+class _Clock(object):
+    def __init__(self, real):
+        self.real, self.ahead = real, 0
+
+    def time(self):
+        return self.real.time() + self.ahead
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
+_real_time = application.time
+application.time = _Clock(_real_time)
+try:
+    till, _ = sign_in_for(False, "192.0.2.185")
+    served = []
+    for hour in range(SHIFT + 4):
+        application.time.ahead += 3600
+        served.append(till.get("/categories").status_code)
+    check("a till in use all day is not signed out mid-service",
+          all(status == 200 for status in served),
+          "used hourly for %d hours, it was refused at hour %s"
+          % (len(served), [n + 1 for n, s in enumerate(served)
+                           if s != 200][:1]))
+
+    application.time.ahead += (SHIFT + 1) * 3600
+    closed = till.get("/categories")
+    check("and left overnight, it is signed out by morning",
+          "/login" in closed.headers.get("Location", ""),
+          "a till unused for %d hours was still signed in (status %s)"
+          % (SHIFT + 1, closed.status_code))
+finally:
+    application.time = _real_time
+
+# The cookie is presented after the window has passed with nobody using
+# it - which is exactly what a copied cookie looks like.
+wind_back(plain, SHIFT + 1)
+after_shift = plain.get("/categories")
+check("an ordinary sign-in unused for a shift is refused",
+      "/login" in after_shift.headers.get("Location", ""),
+      "status %s, so a cookie kept past its expiry was still a session"
+      % after_shift.status_code)
+
+with plain.session_transaction() as sess:
+    left_over = sess.get("user_id")
+check("and what was left of it is thrown away",
+      left_over is None,
+      "the session still says user_id %r" % left_over)
+
+wind_back(kept, SHIFT + 1)
+check("a remembered sign-in is still good the next morning",
+      kept.get("/categories").status_code == 200,
+      "it was signed out after a shift, which is what the box was "
+      "ticked to prevent")
+
+wind_back(kept, WEEK + 1)
+refused = kept.get("/categories")
+check("but a week away and it is gone",
+      "/login" in refused.headers.get("Location", ""),
+      "a remembered sign-in unused for a week was still accepted "
+      "(status %s)" % refused.status_code)
+
+check("and the sign-in page offers the box",
+      'name="remember"' in app.test_client().get("/login")
+      .get_data(as_text=True),
+      "there is nothing on the page to tick")
+
+# ---- The name, kept for next time ----
+#
+# Ticking the box also keeps the name or email typed, so the sign-in
+# page has it filled in from then on. Never the password: that is for
+# the browser's own password manager, which asks first and locks it
+# away. A site that wrote it down would hand it to anybody holding the
+# device.
+NAME_COOKIE = application.REMEMBERED_LOGIN_COOKIE
+
+
+def name_cookie(header):
+    # To the start of the next cookie, not the next comma: the expiry
+    # date has one in it.
+    found = re.search(r"%s=([^;]*);(.*?)(?= (?:session|cafora_[a-z]+)=|$)"
+                      % NAME_COOKIE, header)
+    return (found.group(1), found.group(2)) if found else (None, "")
+
+
+kept_name, kept_attrs = name_cookie(kept_header)
+check("ticking the box keeps the name for next time",
+      kept_name == "guardboss",
+      "the sign-in kept %r" % kept_name)
+
+days = re.search(r"Max-Age=(\d+)", kept_attrs)
+check("for as long as a browser will keep anything",
+      days and int(days.group(1)) >= 390 * 24 * 3600,
+      "it is kept for %s seconds" % (days.group(1) if days else None))
+
+check("where only the sign-in pages can read it",
+      "Path=/login" in kept_attrs and "HttpOnly" in kept_attrs,
+      "attributes: %s" % kept_attrs)
+
+check("and never the password",
+      "password123" not in kept_header and "password123" not in plain_header,
+      "the password is in a cookie")
+
+check("an ordinary sign-in keeps no name",
+      name_cookie(plain_header)[0] in (None, ""),
+      "a sign-in without the box kept %r" % name_cookie(plain_header)[0])
+
+returning = app.test_client()
+returning.post("/login", data={"username": "guardboss",
+                               "password": "password123", "remember": "1"},
+               environ_overrides={"REMOTE_ADDR": "192.0.2.186"})
+returning.get("/logout")
+page = returning.get("/login").get_data(as_text=True)
+check("signing out does not forget it: the page has the name filled in",
+      re.search(r'name="username"[^>]*value="guardboss"', page) is not None,
+      "the name field is empty after signing out")
+check("with the box already ticked",
+      re.search(r'name="remember"[^>]*checked', page) is not None,
+      "the box is not ticked")
+check("and the cursor waiting in the password box",
+      re.search(r'type="password"[^>]*autofocus', page) is not None,
+      "the cursor starts in the name field it has already filled")
+
+forgetting = returning.post(
+    "/login", data={"username": "guardboss", "password": "password123"},
+    environ_overrides={"REMOTE_ADDR": "192.0.2.187"})
+cleared = " ".join(str(v) for v in forgetting.headers.getlist("Set-Cookie"))
+check("signing in without the box forgets it",
+      re.search(r"%s=;[^,]*(Max-Age=0|Expires=Thu, 01 Jan 1970)" % NAME_COOKIE,
+                cleared) is not None,
+      "the name was not cleared: %s" % cleared[:160])
+
+# A save's answer is for a signed-in page's form, not the sign-in itself.
+check("signing in leaves no answer to a save that was never made",
+      application.SAVE_ANSWER_COOKIE not in kept_header,
+      "the sign-in post set %s" % application.SAVE_ANSWER_COOKIE)
+
+# Signed out, pressing Log out and signing in again must not sign out.
+bounced = app.test_client()
+landing = bounced.post("/login?next=/logout",
+                       data={"username": "guardboss",
+                             "password": "password123"},
+                       environ_overrides={"REMOTE_ADDR": "192.0.2.188"})
+check("signing in with next=/logout does not sign straight back out",
+      "/logout" not in landing.headers.get("Location", ""),
+      "it went to %s" % landing.headers.get("Location"))
+
 # Production must not be able to boot on a default key.
 source = open(os.path.join(ROOT, "app.py"), encoding="utf-8").read()
 check("production refuses to start without a signing key",
@@ -797,7 +1038,6 @@ WRITES = [
     ("delete the staff member", "/users/%d/delete" % B["staff"], {}),
     ("edit the staff member", "/users/%d/edit" % B["staff"],
      {"full_name": "Taken Over", "role": "admin", "is_active": "1"}),
-    ("claim the kitchen ticket", "/api/kitchen/claim/%d" % B["order"], {}),
     ("mark a dish made", "/api/kitchen/item/%d" % B["item"], {}),
 ]
 

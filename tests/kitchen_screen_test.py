@@ -8,9 +8,10 @@ those same requests from fetch() with no token at all - so the kitchen
 screen could not check in and could not claim a ticket, and said so only
 on screen. The API was fine; the page calling it was not.
 
-So what is checked here is the page doing its own work: checking in,
-drawing what is waiting, and claiming a ticket, all through the browser
-rather than around it.
+So what is checked here is the page doing its own work: drawing what
+is waiting and ticking dishes off, all through the browser rather than
+around it - and, since printing became something only a person starts,
+that it never sends anything to a printer by itself.
 
 Needs a Chromium-family browser (Edge or Chrome) installed; it drives one
 headless over the DevTools protocol and skips cleanly if none is found.
@@ -121,11 +122,6 @@ for name, price in (("Flat White", "180"), ("Masala Chai", "70")):
         "quantity": "20", "minimum_stock": "2", "description": "",
         "_csrf_token": csrf(seed)}, follow_redirects=True)
 
-# Automatic printing on, or the shell watcher never runs at all.
-seed.post("/settings/printing", data={
-    "auto_kot": "1", "kot_delay": "0", "_csrf_token": csrf(seed)},
-    follow_redirects=True)
-
 with seed.session_transaction() as sess:
     cafe_id = sess.get("cafe_id")
 token = application.get_public_token(cafe_id)
@@ -173,18 +169,6 @@ def wait_for(expression, what, timeout=25):
     raise AssertionError("timed out waiting for %s" % what)
 
 
-def seen_watching():
-    """Whether the server currently believes a kitchen screen is there."""
-    with app.test_request_context("/"):
-        connection = application.get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        try:
-            return application.kitchen_is_watching(cursor, cafe_id)
-        finally:
-            cursor.close()
-            connection.close()
-
-
 try:
     browser.call("Page.enable")
     browser.call("Emulation.setDeviceMetricsOverride", width=1280, height=900,
@@ -197,18 +181,27 @@ try:
     # rather than installed after the fact, or the first ticket prints
     # for real and is never seen here.
     browser.call("Page.addScriptToEvaluateOnNewDocument", source="""
+        // Anything the page does that would reach a printer: the print
+        // dialog, a window opened to print from, or a hidden frame loaded
+        // with a ticket. Installed before the page's own scripts run, so a
+        // print on the very first look is caught too.
         window.__printed = [];
-        var held;
-        Object.defineProperty(window, 'CafeShell', {
-            configurable: true,
-            get: function () { return held; },
-            set: function (value) {
-                held = value;
-                value.autoPrint = function (url) {
-                    window.__printed.push(url);
-                };
-            }
-        });
+        window.print = function () {
+            window.__printed.push('print() on ' + location.pathname);
+        };
+        window.open = function (url) {
+            window.__printed.push('window.open ' + url);
+            return null;
+        };
+        new MutationObserver(function (changes) {
+            changes.forEach(function (change) {
+                change.addedNodes.forEach(function (node) {
+                    if (node.tagName === 'IFRAME') {
+                        window.__printed.push('frame ' + node.src);
+                    }
+                });
+            });
+        }).observe(document, { childList: true, subtree: true });
     """)
 
     print("\n=== 1. Sign in and open the kitchen ===")
@@ -234,9 +227,6 @@ try:
         "document.getElementById('kitchenStateText').textContent")
     check("the screen says it is watching", state == "Watching",
           "it reads %r - the requests it makes are being turned away" % state)
-    check("and the server agrees a kitchen screen is there",
-          seen_watching(),
-          "the counter screens would still be printing customers' tickets")
 
     refused = [row for row in REJECTED if "kitchen" in row[1]]
     check("nothing it sent was turned away", not refused,
@@ -266,31 +256,21 @@ try:
           board["phone"] and "table" in board["from"].lower(),
           "the card says %r" % board["from"])
 
-    print("\n=== 4. It claims the ticket and prints it ===")
-    wait_for("window.__printed.length > 0", "the ticket to be printed")
-    printed = browser.evaluate("JSON.stringify(window.__printed)")
-    ticket = mysql_shim._DB.execute(
-        "SELECT order_id FROM orders WHERE source = 'qr' "
-        "ORDER BY order_id LIMIT 1").fetchone()
-    check("the kitchen ticket was sent to the printer",
-          ticket is not None
-          and ("/orders/%d/kot" % ticket[0]) in printed,
-          "it printed %s" % printed)
-
-    claimed = mysql_shim._DB.execute(
-        "SELECT kot_printed FROM orders WHERE source = 'qr' "
-        "ORDER BY order_id LIMIT 1").fetchone()
-    check("and the order is marked as printed",
-          claimed and claimed[0] == 1,
-          "kot_printed is %s, so it would print again on the next look"
-          % (claimed[0] if claimed else None))
-
-    # It must not print the same thing over and over.
-    before = int(browser.evaluate("window.__printed.length"))
+    print("\n=== 4. A new ticket prints nothing by itself ===")
+    # It used to: the screen claimed each new ticket and sent it to the
+    # printer. Printing is something a person starts now - Print KOT on
+    # the order - so a ticket arriving, and sitting through more than one
+    # look at the board, must not reach a printer at all.
     time.sleep(7)
-    check("it does not print the same ticket again",
-          int(browser.evaluate("window.__printed.length")) == before,
-          "the same ticket printed more than once")
+    printed = browser.evaluate("JSON.stringify(window.__printed)")
+    check("the ticket on the board was not sent to a printer",
+          printed == "[]",
+          "the kitchen screen printed by itself: %s" % printed)
+
+    check("and nothing on the screen asks the server for tickets to print",
+          not [row for row in REJECTED if "claim" in row[1]
+               or "pending" in row[1]],
+          "it still reaches for the old print queue: %s" % REJECTED)
 
     print("\n=== 5. Marking one done marks its dishes ===")
     browser.evaluate("document.querySelector('[data-done]').click()")
@@ -320,13 +300,12 @@ try:
                and "kitchen" in row[1]],
           "the server refused: %s" % REJECTED)
 
-    print("\n=== 6. And it does not print again once it is done ===")
-    settled = int(browser.evaluate("window.__printed.length"))
+    print("\n=== 6. And finishing one prints nothing either ===")
     time.sleep(7)
-    check("a finished order is not sent to the printer again",
-          int(browser.evaluate("window.__printed.length")) == settled,
-          "now that finished orders stay on the board, one of them "
-          "reprinted on the next sweep")
+    printed = browser.evaluate("JSON.stringify(window.__printed)")
+    check("a finished order is not sent to a printer",
+          printed == "[]",
+          "finishing an order printed: %s" % printed)
 
     print("\n=== 7. The customer at the table is told, without reloading ===")
     # The whole point of Done reaching them: someone sitting at a table has

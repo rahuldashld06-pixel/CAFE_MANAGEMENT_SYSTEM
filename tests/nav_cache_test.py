@@ -218,17 +218,9 @@ try:
           % (first, FETCHED_MS))
 
     print("\n=== 2. The app talking to itself is not a write ===")
-    housekeeping("/api/kitchen/heartbeat")
-    beat = switch("/foods", "Food")
-    check("a kitchen heartbeat leaves the cached pages alone",
-          0 <= beat < FETCHED_MS,
-          "took %.0fms - the kitchen saying it is still switched on threw "
-          "away every cached page, which it does every twenty seconds"
-          % beat)
-
     housekeeping("/api/tutorial/seen")
     seen = switch("/billing", "Billing")
-    check("and so does the tour recording that it was seen",
+    check("the tour recording that it was seen leaves the cache alone",
           0 <= seen < FETCHED_MS,
           "took %.0fms after a one-off flag was written" % seen)
 

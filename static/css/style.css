@@ -1,5 +1,5 @@
 /* ==========================================================
-   Cafe Manager — Coffeehouse Admin Theme
+   Cafora — Coffeehouse Admin Theme
    A moody, warm dashboard styled after a dim third-wave
    coffee bar: espresso-dark surfaces, copper & gold light,
    sage-green freshness accents.
@@ -3483,7 +3483,7 @@ body.nav-locked {
 
    Two rows rather than one cramped line:
 
-     [cup  Cafe Manager] ............ [full screen] [profile]
+     [cup  Cafora] ............ [full screen] [profile]
      [menu]
 
    The name leads, the two controls sit in the right corner, and the
@@ -4390,72 +4390,6 @@ body.tour-open { overflow: hidden; }
     }
 }
 
-/* ---------- The mobile number field ---------- */
-/* A country and a number, side by side on a screen with room and
-   stacked on one without. The country is a real select rather than a
-   list of dial codes: +1 is twenty-odd countries and +44 covers the
-   Channel Islands as well as Britain, so codes alone would have been a
-   list of ambiguities. */
-.phone-field {
-    display: flex;
-    gap: 8px;
-    align-items: stretch;
-}
-
-.phone-field__country {
-    flex: 0 1 45%;
-    min-width: 0;
-}
-
-/* The dial code sits inside the box, in front of the number, so what
-   is typed reads as the whole number rather than half of one. */
-.phone-field__number {
-    flex: 1 1 auto;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    padding-left: 10px;
-    background: var(--espresso-850);
-    border: 1px solid var(--espresso-700);
-    border-radius: var(--radius-md, 10px);
-}
-
-.phone-field__code {
-    flex: 0 0 auto;
-    color: var(--cream-dim);
-    font-variant-numeric: tabular-nums;
-}
-
-.phone-field__number input {
-    flex: 1 1 auto;
-    min-width: 0;
-    border: 0;
-    background: transparent;
-    padding-left: 0;
-}
-
-.phone-field__number input:focus {
-    outline: none;
-    box-shadow: none;
-}
-
-.phone-field__hint {
-    display: block;
-    margin-top: 6px;
-    color: var(--cream-faint);
-}
-
-@media (max-width: 560px) {
-    .phone-field {
-        flex-direction: column;
-    }
-
-    .phone-field__country {
-        flex: 1 1 auto;
-    }
-}
-
 /* ---------- An order that said "sent" and was not ---------- */
 /* The success message clears itself after a second. This one does not:
    whoever saw "sent" has already turned to the next customer, and an
@@ -4502,4 +4436,57 @@ body.tour-open { overflow: hidden; }
         align-items: stretch;
         text-align: center;
     }
+}
+
+/* ============================================================
+   A form brought back after the page closed
+   drafts.js keeps a copy of every form as it is typed. When one
+   is put back, this line says so - and, when the save may already
+   have gone through, says that more loudly.
+   ============================================================ */
+.draft-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 16px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--copper-rgb, 224, 138, 62), .45);
+    background: rgba(var(--copper-rgb, 224, 138, 62), .12);
+    color: var(--cream, #F3E9DA);
+    font-size: 0.92rem;
+    line-height: 1.4;
+}
+
+.draft-note .bi {
+    flex: 0 0 auto;
+    color: var(--copper-light, #F0A85F);
+    font-size: 1.05rem;
+}
+
+.draft-note__text { flex: 1 1 auto; min-width: 0; }
+
+.draft-note--warn {
+    border-color: rgba(242, 201, 76, .55);
+    background: rgba(242, 201, 76, .12);
+}
+
+.draft-note--warn .bi { color: #F2C94C; }
+
+.draft-note__discard {
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    border: 1px solid rgba(255, 255, 255, .2);
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.draft-note__discard:hover,
+.draft-note__discard:focus-visible {
+    background: rgba(255, 255, 255, .08);
 }

@@ -8,6 +8,7 @@ exercised without a real database server.
 import re
 import sqlite3
 import sys
+import threading
 import types
 import datetime
 
@@ -35,9 +36,107 @@ sqlite3.register_adapter(Decimal, str)
 # at all offline, so no test could use one.
 sqlite3.register_converter("DECTEXT", lambda raw: Decimal(raw.decode()))
 
-_DB = sqlite3.connect(":memory:", check_same_thread=False,
-                      detect_types=sqlite3.PARSE_DECLTYPES)
-_DB.row_factory = sqlite3.Row
+_RAW = sqlite3.connect(":memory:", check_same_thread=False,
+                       detect_types=sqlite3.PARSE_DECLTYPES)
+_RAW.row_factory = sqlite3.Row
+
+# Every use of _RAW, from any thread, holds this. Re-entrant, because the
+# schema probes below run a query of their own from inside a query.
+#
+# Without it the stand-in could deadlock the whole process: one thread
+# inside SQLite (holding SQLite's mutex) needing the GIL to run NOW() or
+# the money converter, while another holds the GIL and waits for that
+# mutex. Waiting on a Python lock gives the GIL back, so it cannot.
+_LOCK = threading.RLock()
+
+
+class _Rows:
+    """A statement's results, read in full while the lock was held."""
+
+    def __init__(self, cursor):
+        self.description = cursor.description
+        self.rowcount = cursor.rowcount
+        self.lastrowid = cursor.lastrowid
+        self._rows = cursor.fetchall() if cursor.description else []
+        self._i = 0
+        cursor.close()
+
+    def fetchone(self):
+        if self._i < len(self._rows):
+            self._i += 1
+            return self._rows[self._i - 1]
+        return None
+
+    def fetchall(self):
+        rest = self._rows[self._i:]
+        self._i = len(self._rows)
+        return rest
+
+    def fetchmany(self, size=1):
+        rest = self._rows[self._i:self._i + size]
+        self._i += len(rest)
+        return rest
+
+    def __iter__(self):
+        return iter(self.fetchall())
+
+    def close(self):
+        return None
+
+
+class _Guarded:
+    """
+    The SQLite connection, with the lock taken for everything.
+
+    Tests reach it directly as mysql_shim._DB - to count rows, or to put
+    a bill back how it was - often while the app is answering the browser
+    on another thread. That is the direct route to the deadlock above, so
+    it goes through the lock like everything else.
+    """
+
+    def __init__(self, raw):
+        self.__dict__["_raw"] = raw
+
+    def execute(self, sql, params=()):
+        with _LOCK:
+            return _Rows(self._raw.execute(sql, params))
+
+    def executemany(self, sql, rows):
+        with _LOCK:
+            return _Rows(self._raw.executemany(sql, rows))
+
+    def executescript(self, script):
+        with _LOCK:
+            self._raw.executescript(script)
+
+    def commit(self):
+        with _LOCK:
+            self._raw.commit()
+
+    def rollback(self):
+        with _LOCK:
+            self._raw.rollback()
+
+    @property
+    def in_transaction(self):
+        with _LOCK:
+            return self._raw.in_transaction
+
+    def cursor(self):
+        return self._raw.cursor()
+
+    def create_function(self, *args, **kwargs):
+        with _LOCK:
+            return self._raw.create_function(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._raw, name)
+
+    def __setattr__(self, name, value):
+        setattr(self._raw, name, value)
+
+
+_DB = _Guarded(_RAW)
 _DB.execute("PRAGMA foreign_keys=ON")
 
 # Emulate the MySQL functions app.py calls.
@@ -169,6 +268,10 @@ class _Cursor:
         self._i = 0
 
     def execute(self, sql, params=()):
+        with _LOCK:
+            return self._execute(sql, params)
+
+    def _execute(self, sql, params=()):
         kind, s = _translate(sql)
 
         if kind == "__INFOSCHEMA__":
@@ -294,10 +397,11 @@ class _Cursor:
         return rest
 
     def close(self):
-        try:
-            self._cur.close()
-        except Exception:
-            pass
+        with _LOCK:
+            try:
+                self._cur.close()
+            except Exception:
+                pass
 
 
 class _Connection:

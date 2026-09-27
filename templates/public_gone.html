@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Menu not found</title>
+    <title>Menu not found · {{ platform_name }}</title>
+    {% include "_favicon.html" %}
     <meta name="theme-color" content="#170F0B">
     <meta name="robots" content="noindex">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/public.css', v=asset_version) }}">
+    <meta name="description" content="This ordering code is no longer in use. Ask a member of staff for the current one.">
+    <link rel="stylesheet" href="{{ asset_url('css/theme.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/public.css') }}">
 </head>
 
 <body>

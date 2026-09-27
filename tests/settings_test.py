@@ -279,8 +279,8 @@ def corner(client):
 
 
 name, tagline, logo = corner(a)
-check("a cafe that has chosen nothing reads Cafe Manager",
-      name == "Cafe Manager", "it reads %r" % name)
+check("a cafe that has chosen nothing reads Cafora",
+      name == "Cafora", "it reads %r" % name)
 check("with the line that has always gone under it",
       tagline == "Food &amp; Service Admin", "it reads %r" % tagline)
 check("and no uploaded symbol beside it", logo is None,
@@ -356,7 +356,7 @@ a.post("/settings/branding", data={
     "brand_name": "", "brand_tagline": "", "_csrf_token": csrf(a)},
     content_type="multipart/form-data", follow_redirects=True)
 name, tagline, _ = corner(a)
-check("the name falls back", name == "Cafe Manager", "it reads %r" % name)
+check("the name falls back", name == "Cafora", "it reads %r" % name)
 check("and so does the tagline", tagline == "Food &amp; Service Admin",
       "it reads %r" % tagline)
 
@@ -402,7 +402,7 @@ check("the endpoint is not on the staff allowlist",
 print("\n=== 14. One cafe's corner is not another's ===")
 sign_in(b, "beta")
 check("cafe B is still on the default",
-      corner(b)[0] == "Cafe Manager",
+      corner(b)[0] == "Cafora",
       "cafe B reads %r" % corner(b)[0])
 check("and cafe A keeps its own", corner(a)[0] == "Spice Garden",
       "cafe A reads %r" % corner(a)[0])
@@ -469,7 +469,7 @@ print("\n=== 16. A settings screen returns you where you were ===")
 BACK = re.compile(r'href="([^"]+)" class="btn btn--ghost" data-back')
 
 SETTINGS = ["/settings/tax", "/settings/theme", "/settings/branding",
-            "/settings/printing", "/account/password", "/account/photo"]
+            "/account/password", "/account/photo"]
 
 wrong = []
 for path in SETTINGS:

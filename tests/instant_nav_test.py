@@ -91,12 +91,13 @@ print("\n=== 1b. The swap region carries every script its page needs ===")
 # What this checks is the other half of the contract: that base.html really
 # does keep every page script between the markers.
 #
-# These are the shell's own scripts, the same four on every page and the
-# only ones allowed outside the markers: instant.js, password-view.js and
-# fullscreen.js in <head>, and the shell block at the end of <body>.
-# Adding another to base.html means raising this number - a page's own
-# script appearing out there is the thing being guarded against.
-SHELL_SCRIPTS = 4
+# These are the shell's own scripts, the same five on every page and the
+# only ones allowed outside the markers: instant.js, password-view.js,
+# fullscreen.js and drafts.js in <head>, and the shell block at the end
+# of <body>. Adding another to base.html means raising this number - a
+# page's own script appearing out there is the thing being guarded
+# against.
+SHELL_SCRIPTS = 5
 
 missing_markers, stranded = [], []
 for path in PAGES:
@@ -158,8 +159,10 @@ print("\n=== 2b. A 404 only speaks up for a page a person opened ===")
 client.get("/foods")                       # drain the queue first
 
 icon = client.get("/favicon.ico")
+# Answered with the Cafora icon now, where it used to be "no content".
 check("/favicon.ico is answered, not sent to the 404 handler",
-      icon.status_code == 204, "status=%d" % icon.status_code)
+      icon.status_code == 200 and icon.mimetype == "image/x-icon",
+      "status=%d, type %r" % (icon.status_code, icon.mimetype))
 
 # Signed out too. Otherwise the auth guard redirects the icon request to
 # /login and the browser renders the whole sign-in page a second time -
@@ -167,7 +170,7 @@ check("/favicon.ico is answered, not sent to the 404 handler",
 signed_out = app.test_client()
 icon_out = signed_out.get("/favicon.ico")
 check("/favicon.ico is answered without a session as well",
-      icon_out.status_code == 204,
+      icon_out.status_code == 200 and "Location" not in icon_out.headers,
       "status=%d - the auth guard is intercepting it" % icon_out.status_code)
 
 with client.session_transaction() as sess:
@@ -205,11 +208,17 @@ check("instant.js is served", asset.status_code == 200 and len(asset.data) > 100
 check("static assets are cached hard (a ?v= stamp busts them on deploy)",
       "max-age=" in cache_control and "31536000" in cache_control,
       "Cache-Control=%r" % cache_control)
-check("the asset stamp is exposed to templates",
+# Each file carries its own time, not the newest time of all of them.
+# This used to look for the one global stamp on the stylesheet, which
+# held only while style.css happened to be the last static file anybody
+# touched - so it failed the day an icon was redrawn, with nothing wrong.
+_style_stamp = str(int(os.path.getmtime(
+    os.path.join(ROOT, "static", "css", "style.css"))))
+check("the stylesheet is stamped with its own time",
       application.ASSET_VERSION.isdigit() and
-      ("css/style.css?v=%s" % application.ASSET_VERSION)
+      ("css/style.css?v=%s" % _style_stamp)
       in client.get("/kitchen").get_data(as_text=True),
-      "ASSET_VERSION=%r" % application.ASSET_VERSION)
+      "style.css's own stamp is %s" % _style_stamp)
 
 
 print("\n=== 4. Signed-out prefetches cannot leak a page ===")

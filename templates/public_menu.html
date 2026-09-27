@@ -1,19 +1,24 @@
 {% from "_brand_mark.html" import coffee_mark %}
+{% from "_table_orders.html" import table_orders_link %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ cafe_theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Order · {{ branding.cafe_name }}</title>
+    {% include "_favicon.html" %}
     <meta name="theme-color" content="#170F0B">
     <meta name="robots" content="noindex">
+    {# noindex keeps this out of a search engine; a description is still
+       what a messaging app shows when somebody pastes the link. #}
+    <meta name="description" content="Order from {{ cafe.cafe_name }} at your table.">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css', v=asset_version) }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/public.css', v=asset_version) }}">
+    <link rel="stylesheet" href="{{ asset_url('css/theme.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/public.css') }}">
 </head>
 
 <body>
@@ -41,6 +46,11 @@
             {% endfor %}
         {% endif %}
     {% endwith %}
+
+    {# Somebody who has already ordered today arrives back here, because
+       "Order something else" leads here. Without this the number they
+       were given is on a page they have left behind. #}
+    {{ table_orders_link(token, mine, "Your orders today") }}
 
     {% if food_count == 0 %}
 
@@ -90,8 +100,12 @@
         {% endfor %}
     </nav>
 
+    {# data-hold is how long the window below waits before sending on its
+       own, in seconds. It is written here rather than in the script so
+       that the length of the minute is a fact about this page, and can
+       be read - and shortened - from outside it. #}
     <form method="POST" action="{{ url_for('public_place_order', token=token) }}"
-          id="orderForm">
+          id="orderForm" data-hold="60">
 
         {% for group in groups %}
         <section class="p-group" data-section="{{ loop.index0 }}">
@@ -140,6 +154,47 @@
                 </div>
                 <button type="submit" class="p-send" id="sendBtn" disabled>
                     Send to kitchen
+                </button>
+            </div>
+        </div>
+
+        {# A minute between Send to kitchen and the kitchen.
+
+           Ordering at a table is not one decision: somebody sends a
+           coffee and remembers a pastry ten seconds later, and that used
+           to be a second order - a second number to quote, a second
+           ticket, two lines at the counter for one table. During this
+           minute nothing has been sent, so anything added goes on the
+           same order.
+
+           Inside the form on purpose: the button that ends the minute
+           early is this form's own submit button, so the order still
+           goes the one way it ever went. With no JavaScript at all there
+           is no minute and Send to kitchen sends - which is what it did
+           before this existed. #}
+        <div class="p-hold" id="holdWindow" hidden>
+            <div class="p-hold__card" role="dialog" aria-modal="true"
+                 aria-labelledby="holdTitle" aria-describedby="holdNote">
+                <p class="p-hold__label" id="holdTitle">Sending to the kitchen in</p>
+                <p class="p-hold__clock" id="holdClock" role="timer"
+                   aria-live="off">1:00</p>
+
+                <div class="p-hold__bar" aria-hidden="true">
+                    <span id="holdBar"></span>
+                </div>
+
+                <p class="p-hold__sum" id="holdSum"></p>
+
+                <p class="p-hold__note" id="holdNote">
+                    Want anything else? Add it now and it goes on this same
+                    order.
+                </p>
+
+                <button type="submit" class="p-send p-hold__go" id="holdNow">
+                    Send it now
+                </button>
+                <button type="button" class="p-hold__more" id="holdMore">
+                    Add something else
                 </button>
             </div>
         </div>
@@ -223,11 +278,143 @@
         retally();
     });
 
-    // A second tap while the kitchen is being told would send it twice.
-    form.addEventListener("submit", function () {
+    // ---- The minute before it goes ----------------------------------
+    //
+    // Send to kitchen opens a window instead of sending. Confirming
+    // inside it sends at once; letting it run out sends it too, so a
+    // customer who has put the phone down still gets their food. Adding
+    // something closes the window and nothing has been sent, which is
+    // the whole point of the minute - one table, one order, one number.
+    //
+    // The remaining time is worked out from a deadline rather than
+    // counted down, because a phone that sleeps stops giving out
+    // timers: on waking, the clock is right and an expired window
+    // sends immediately rather than starting the minute again.
+    var hold = document.getElementById("holdWindow");
+    var holdClock = document.getElementById("holdClock");
+    var holdBar = document.getElementById("holdBar");
+    var holdSum = document.getElementById("holdSum");
+    var holdNow = document.getElementById("holdNow");
+    var holdMore = document.getElementById("holdMore");
+
+    var deadline = 0;
+    var span = 60;              // seconds, from the form's data-hold
+    var timer = null;
+    var waiting = false;        // the window is open
+    var sending = false;        // the order has been handed to the browser
+
+    function spell(seconds) {
+        var secs = seconds % 60;
+        return Math.floor(seconds / 60) + ":" + (secs < 10 ? "0" : "") + secs;
+    }
+
+    function stopClock() {
+        if (timer) { window.clearInterval(timer); timer = null; }
+    }
+
+    function shut() {
+        stopClock();
+        waiting = false;
+        if (hold) hold.hidden = true;
+        send.focus();
+    }
+
+    // Everything that says "this order is on its way", in one place:
+    // the window can send it, and so can the button inside the window,
+    // and the page has to look the same either way.
+    function markSending() {
+        sending = true;
+        stopClock();
         send.disabled = true;
         send.textContent = "Sending...";
+        if (hold) {
+            holdClock.textContent = "0:00";
+            holdNow.disabled = true;
+            holdNow.textContent = "Sending...";
+            holdMore.disabled = true;
+        }
+    }
+
+    function sendIt() {
+        if (sending) return;
+        markSending();
+
+        // requestSubmit runs the form's own submission, validation and
+        // all, and raises the submit event - which sees `sending` and
+        // stands out of the way. submit() is the way back for a browser
+        // without it, and raises no event at all, which is why the page
+        // is put in its sending state above rather than in the handler.
+        if (form.requestSubmit) { form.requestSubmit(holdNow); }
+        else { form.submit(); }
+    }
+
+    function tick() {
+        var left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+        holdClock.textContent = spell(left);
+        if (holdBar) {
+            holdBar.style.width = (left / span * 100) + "%";
+        }
+        if (left <= 0) { sendIt(); }
+    }
+
+    function open() {
+        // Read here rather than once at the top, so the page is the one
+        // place the length of the window is written down.
+        span = parseInt(form.getAttribute("data-hold"), 10) || 60;
+
+        waiting = true;
+        deadline = Date.now() + span * 1000;
+
+        // What is about to go, in the words the bar is already using.
+        holdSum.textContent = document.getElementById("barCount").textContent
+            + " · " + document.getElementById("barTotal").textContent;
+
+        hold.hidden = false;
+        stopClock();
+        tick();
+        timer = window.setInterval(tick, 250);
+        holdNow.focus();
+    }
+
+    form.addEventListener("submit", function (event) {
+        // sendIt() is submitting; it has already said so on the page.
+        if (sending) return;
+
+        // The first tap opens the window instead of sending. With no
+        // window in the page there is nothing to open, and the tap
+        // sends, which is what it did before the window existed.
+        if (!waiting && hold) {
+            event.preventDefault();
+            open();
+            return;
+        }
+
+        // "Send it now", or the same thing from a keyboard. A second
+        // one while the kitchen is being told would send it twice.
+        markSending();
     });
+
+    if (hold) {
+        holdMore.addEventListener("click", shut);
+
+        // Anywhere off the card, and the Escape key: both mean "not
+        // yet", and neither sends. The minute starts again from the
+        // next tap of Send to kitchen.
+        hold.addEventListener("click", function (event) {
+            if (event.target === hold && !sending) { shut(); }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (waiting && !sending && event.key === "Escape") { shut(); }
+        });
+
+        // A phone that was asleep, or a tab that was in the background,
+        // gets timers as slowly as the browser likes. The deadline is
+        // what decides; this reads it the moment anybody is looking.
+        document.addEventListener("visibilitychange", function () {
+            if (!document.hidden && waiting && !sending) { tick(); }
+        });
+    }
 
     retally();
 }());

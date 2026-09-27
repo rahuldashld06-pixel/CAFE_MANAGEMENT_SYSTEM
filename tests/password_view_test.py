@@ -362,6 +362,59 @@ try:
           """),
           "a reveal button would submit its form")
 
+    print("\n=== 7. The styling costs nothing and arrives whole ===")
+    # Inlined rather than fetched. Two things can undo that quietly: the
+    # link can come back, and the rules can arrive HTML-escaped - which
+    # happened, and which the plain class selectors survive, so the
+    # button still looked right while every quoted selector in the file
+    # had stopped matching.
+    #
+    # Hence an effect rather than the markup: padding-right on a password
+    # input comes only from `.pw-field input[type="password"]`. If the
+    # quotes arrive as entities, that selector matches nothing and the
+    # padding is not 44px.
+    def padding_now():
+        return browser.evaluate("""
+            (function () {
+                var i = document.querySelector('.pw-field input');
+                return i.type + ' ' + getComputedStyle(i).paddingRight;
+            }())
+        """)
+
+    for where, path in (("the app shell", "/account/password"),
+                        ("the sign-in page", "/login")):
+        # A signed-in browser asking for /login is sent to the dashboard,
+        # which has no password field. The sign-in page is worth checking
+        # on its own because it stands outside the layout and carries its
+        # own copy of the rules, so the session goes first. Nothing runs
+        # after this section.
+        if path == "/login":
+            browser.call("Page.navigate", url=BASE + "/logout")
+            wait_for("location.pathname === '/login'", "signing out")
+
+        browser.call("Page.navigate", url=BASE + path)
+        wait_for("document.querySelectorAll('.pw-toggle').length > 0",
+                 "the reveal buttons on " + where)
+
+        links = browser.evaluate(
+            "document.querySelectorAll("
+            "'link[href*=@password-view@]').length".replace("@", chr(34)))
+        check("%s fetches no stylesheet for it" % where, links == 0,
+              "%d render-blocking request(s) came back" % links)
+
+        check("%s applies the quoted selectors" % where,
+              padding_now() == "password 44px",
+              "reads %s, wanted password 44px - the rules can be in the "
+              "page and still not match if they arrived escaped"
+              % padding_now())
+
+        # Revealing flips the input to type=text, which is the second half
+        # of that same quoted pair.
+        click_toggle(0)
+        check("%s keeps them applied once revealed" % where,
+              padding_now() == "text 44px",
+              "revealed field reads %s, wanted text 44px" % padding_now())
+
 finally:
     browser.close()
 

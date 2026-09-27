@@ -189,7 +189,7 @@ check("and the way back to it is in the profile menu",
 # looking for help looks.
 menu = after[after.index('id="profileDropdown"'):]
 check("sitting at the bottom of that menu",
-      menu.index('id="tourReplay"') > menu.index("Automatic Printing"),
+      menu.index('id="tourReplay"') > menu.index("Change Password"),
       "it is above the settings rather than under them")
 check("and styled as the links beside it, not as a raw button",
       "button.profile-dropdown__item" in io.open(
@@ -250,8 +250,6 @@ kept = {
         ("branding.html", "everywhere it is named"),
     "that a new QR code breaks the printed ones":
         ("qr_settings.html", "already printed"),
-    "how to make a printer stop asking":
-        ("print_settings.html", "kiosk-printing"),
 }
 for what, (name, wording) in kept.items():
     check("the warning %s is still there" % what,
