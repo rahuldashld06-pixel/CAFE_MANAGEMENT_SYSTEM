@@ -209,6 +209,17 @@ try:
     type_into("input[name=password]", "Coffee-Break-2026!")
     check("and measures the password", meter("input[name=password]")["word"] == "Strong")
 
+    # Reached the way people move about - swapped in without a reload, a
+    # couple of pages along. The script's listener for that used to go
+    # with the first page, so Add User arrived with no meter at all.
+    for path in ("/foods", "/billing", "/users/add"):
+        b.evaluate("window.Instant.visit(%s, {}), true" % json.dumps(BASE + path))
+        wait("location.pathname === %s" % json.dumps(path), path)
+        time.sleep(0.6)
+    check("still there after moving between pages without a reload",
+          b.evaluate("!!document.querySelector('#page-view .pw-meter')"
+                     " && !!document.querySelector('#page-view .field-check')"))
+
     # =================================================================
     print("\n=== 4. Search remembers, and forgets when asked ===")
     # =================================================================

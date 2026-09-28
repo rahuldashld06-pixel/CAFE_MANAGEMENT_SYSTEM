@@ -238,7 +238,7 @@
             </span>
             <button type="submit" class="btn btn--ghost" id="reportApply">Apply</button>
         </form>
-        <button type="button" class="report-icon-btn" onclick="window.print()"
+        <button type="button" class="report-icon-btn" data-print-now
                 title="Print this report" aria-label="Print this report">
             <i class="bi bi-printer"></i>
         </button>
@@ -492,8 +492,8 @@
 </section>
 
 
-<script src="{{ asset_url('js/charts.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}" src="{{ asset_url('js/charts.js') }}"></script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
     var curve = {{ report.curve|tojson }};
     var categories = {{ report.categories|tojson }};

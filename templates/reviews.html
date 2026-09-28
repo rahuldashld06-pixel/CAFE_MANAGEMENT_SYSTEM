@@ -256,7 +256,7 @@
     {% endif %}
 </section>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
     var list = document.getElementById("reviewList");
     var none = document.getElementById("reviewNone");

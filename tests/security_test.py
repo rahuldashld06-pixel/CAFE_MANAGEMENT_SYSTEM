@@ -112,18 +112,32 @@ check("no plugin content at all",
       rules.get("object-src") == ["'none'"],
       "object-src is %s" % rules.get("object-src"))
 
-# The weak line, and the one worth watching. 'unsafe-inline' is in
-# script-src because this app writes its behaviour inline and instant.js
-# injects fetched markup into the current document, where a nonce from
-# another response would be refused. What must not slip is the other
-# half: where a script may be *fetched* from.
+# Where a script may be fetched from, and which inline ones may run:
+# only those carrying this response's nonce. 'unsafe-inline' was here
+# once; a scan flagged it, and it is gone.
 script_src = rules.get("script-src", [])
+_nonces = [s for s in script_src if s.startswith("'nonce-")]
 check("scripts may only be fetched from us and one known CDN",
-      set(script_src) <= {"'self'", "'unsafe-inline'",
-                          "https://cdn.jsdelivr.net",
-                          "https://checkout.razorpay.com",
-                          "https://api.razorpay.com"},
+      set(script_src) - set(_nonces) <= {"'self'",
+                                         "https://cdn.jsdelivr.net",
+                                         "https://checkout.razorpay.com",
+                                         "https://api.razorpay.com"},
       "script-src has grown: %s" % script_src)
+check("no 'unsafe-inline' for scripts: an inline script needs this "
+      "response's nonce",
+      "'unsafe-inline'" not in script_src and len(_nonces) == 1, script_src)
+_front_html = front.get_data(as_text=True)
+_nonce = _nonces[0][len("'nonce-"):-1] if _nonces else "?"
+_tags = re.findall(r"<script\b[^>]*>", _front_html)
+check("and every script the page writes carries it",
+      _tags and all('nonce="%s"' % _nonce in tag for tag in _tags),
+      [t for t in _tags if 'nonce="%s"' % _nonce not in t])
+check("a fresh one for every response",
+      directives(anon.get("/login")).get("script-src") != script_src)
+check("and no inline event handler anywhere, which no nonce could cover",
+      not re.search(r'\son(click|submit|change|load|input)="', _front_html))
+check("a response that writes no script names no nonce",
+      "nonce" not in anon.get("/robots.txt").headers.get("Content-Security-Policy", ""))
 
 check("and nothing may be sent to an origin we did not name",
       rules.get("connect-src") == ["'self'"],

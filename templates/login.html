@@ -39,7 +39,7 @@
     <style>/* password-view.css, inlined: a separate request for 2.7KB
        held up the first paint by a whole round trip. */
 {{ password_view_css }}</style>
-    <script src="{{ asset_url('js/password-view.js') }}" defer></script>
+    <script nonce="{{ csp_nonce() }}" src="{{ asset_url('js/password-view.js') }}" defer></script>
 </head>
 
 <body>
@@ -170,7 +170,7 @@
             <input type="hidden" name="timezone" id="signInClock">
         </form>
 
-        <script>
+        <script nonce="{{ csp_nonce() }}">
             /* Remember me, and the password.
 
                The password is never kept by this site - not in a cookie,

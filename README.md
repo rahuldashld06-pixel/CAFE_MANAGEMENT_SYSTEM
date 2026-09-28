@@ -572,16 +572,18 @@ set `APP_ENV=production` (or leave it out) to make that explicit. Taking a card 
 the browser to Razorpay, so that one route gets its own policy rather
 than opening the whole app up.
 
-One honest limit: `script-src` still carries `'unsafe-inline'`. The app
-writes its behaviour as inline `<script>` in eighteen templates, and the
-usual fix — a per-response nonce — cannot work here, because instant.js
-fetches a page and injects its markup into the *current* document, where
-a nonce belonging to another response is refused and the script never
-runs. Removing it means moving that JavaScript into files under
-`static/`. Until then the rest of the policy is what does the work:
-scripts cannot be *fetched* from anywhere unexpected, the page cannot be
-framed, forms cannot post elsewhere, and no plugin or base-tag trick is
-available.
+`script-src` carries no `'unsafe-inline'`. Every HTML response makes a
+nonce, puts it on each `<script>` its page writes (`csp_nonce()` in the
+templates) and names it in the header, so an inline script without it -
+one smuggled in through a stored value, say - is refused. instant.js
+swaps fetched pages into the *current* document, whose policy names a
+different nonce, so it re-creates each swapped-in script under the nonce
+of the document it is going into, which it reads from its own tag. There
+are no inline event attributes (`onclick=` and the like), which no nonce
+can cover: forms that ask first carry `data-confirm`, print buttons
+`data-print-now`, and the shell attaches the handlers. `style-src` keeps
+`'unsafe-inline'`: the café's colours and a good deal of layout are style
+attributes, and CSS runs no code.
 
 **Uploads.** Checked by content, not by name. A file called `logo.png`
 holding markup, an SVG, or a shell script is refused rather than stored
@@ -727,8 +729,8 @@ python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
 python tests/list_search_test.py  # expect PASSED: 109  FAILED: 0
 python tests/identity_test.py     # expect PASSED: 97   FAILED: 0
-python tests/security_test.py     # expect PASSED: 141  FAILED: 0
-python tests/page_head_test.py    # expect PASSED: 99   FAILED: 0
+python tests/security_test.py     # expect PASSED: 146  FAILED: 0
+python tests/page_head_test.py    # expect PASSED: 101   FAILED: 0
 python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
 python tests/draft_restore_test.py # expect PASSED: 35  FAILED: 0
 python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
@@ -740,7 +742,7 @@ python tests/review_test.py       # expect PASSED: 46   FAILED: 0
 python tests/menu_marks_test.py   # expect PASSED: 99   FAILED: 0
 python tests/compression_test.py  # expect PASSED: 42   FAILED: 0
 python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
-python tests/account_fields_browser_test.py # expect PASSED: 26  FAILED: 0
+python tests/account_fields_browser_test.py # expect PASSED: 27  FAILED: 0
 python tests/sign_in_cafe_test.py # expect PASSED: 41   FAILED: 0
 python tests/table_order_test.py  # expect PASSED: 30   FAILED: 0
 python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0

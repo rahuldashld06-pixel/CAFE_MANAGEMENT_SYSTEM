@@ -14,7 +14,7 @@
         <small class="food-guess__diet" id="foodGuessDiet" hidden></small>
     </span>
 </div>
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
     var box = document.getElementById("foodGuess");
     if (!box) return;

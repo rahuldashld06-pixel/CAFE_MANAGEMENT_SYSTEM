@@ -650,26 +650,27 @@ def _no_store_pages(response):
 # Where a page may load things from. Everything is refused unless it is
 # named here.
 #
-# 'unsafe-inline' is in script-src and it is worth being plain about
-# why, because it is the one weak line in this policy. The app writes
-# its behaviour as inline <script> in eighteen templates, and the usual
-# fix - a per-response nonce - cannot work here: instant.js fetches a
-# page and injects its markup into the *current* document, so any nonce
-# on those scripts belongs to a different response and the browser
-# refuses to run them. The whole navigation model would stop.
+# No 'unsafe-inline' in script-src. Every HTML response makes a nonce -
+# a random value for that response alone - puts it on each <script> it
+# writes, and names it in this header; an inline script without it, say
+# one smuggled in through a stored value, is refused. It used to be
+# thought impossible here: instant.js swaps a fetched page into the
+# *current* document, so the new page's nonce is not the one the browser
+# checked. So instant.js re-creates each script it swaps in under the
+# nonce of the document it is putting it into (it reads its own), and
+# navigation carries on. Inline event attributes (onclick="...") cannot
+# carry a nonce, so there are none: every handler is attached by script.
 #
-# Getting rid of it means moving that JavaScript into files under
-# static/, which is worth doing and is not a five-minute change. Until
-# then the rest of the policy is what does the work: scripts cannot be
-# *fetched* from anywhere unexpected, the page cannot be framed, forms
-# cannot post elsewhere, and no plugin or base-tag trick is available.
+# style-src keeps 'unsafe-inline'. The cafe's colours and a good deal of
+# layout are style attributes, which no nonce can cover, and CSS runs no
+# code.
 _CSP_SELF = "'self'"
 _CDN = "https://cdn.jsdelivr.net"
 _PHOTOS = "https://images.unsplash.com"
 
 _BASE_CSP = {
     "default-src": [_CSP_SELF],
-    "script-src": [_CSP_SELF, "'unsafe-inline'", _CDN],
+    "script-src": [_CSP_SELF, _CDN],
     # Inline style is genuinely needed: the cafe's own colours are an
     # inline style attribute on <html>, and a good deal of layout is
     # written the same way.
@@ -718,11 +719,26 @@ _PAYMENT_CSP["img-src"] = _BASE_CSP["img-src"] + _RAZORPAY
 _PAYMENT_ENDPOINTS = {"start_online_payment"}
 
 
-def _policy(directives):
+def _policy(directives, nonce=None):
     return "; ".join(
-        "%s %s" % (name, " ".join(sources))
+        "%s %s" % (name, " ".join(
+            sources + ["'nonce-%s'" % nonce]
+            if nonce and name == "script-src" else sources))
         for name, sources in directives.items()
     )
+
+
+def csp_nonce():
+    """This response's nonce for the scripts its page writes; made once."""
+    if not has_request_context():
+        return ""
+    nonce = getattr(g, "_csp_nonce", None)
+    if nonce is None:
+        nonce = g._csp_nonce = secrets.token_urlsafe(18)
+    return nonce
+
+
+app.jinja_env.globals["csp_nonce"] = csp_nonce
 
 
 _BASE_POLICY = _policy(_BASE_CSP)
@@ -802,10 +818,11 @@ def _security_headers(response):
     """
     headers = response.headers
 
+    # With this response's nonce when its page wrote any script.
     headers.setdefault(
         "Content-Security-Policy",
-        _PAYMENT_POLICY if request.endpoint in _PAYMENT_ENDPOINTS
-        else _BASE_POLICY)
+        _policy(_PAYMENT_CSP if request.endpoint in _PAYMENT_ENDPOINTS
+                else _BASE_CSP, getattr(g, "_csp_nonce", None)))
 
     # Take the declared Content-Type at its word. Without this a browser
     # may sniff a response's bytes and decide a stored image is really
@@ -9615,8 +9632,8 @@ def require_login():
         "register", "forgot_password", "static", "razorpay_webhook",
         "healthz", "cafe_media", "robots_txt",
         # What the site is, for a language model - read signed out, like
-        # robots.txt.
-        "llms_txt",
+        # robots.txt - and what it offers AI agents (nothing, said validly).
+        "llms_txt", "ai_catalog",
         # The manifest is what lets the site be installed as an app.
         # It falls back to the platform name with no session, so it
         # is safe to answer before sign-in.
@@ -12358,6 +12375,25 @@ def llms_txt():
         "",
     ])
     return Response(body, mimetype="text/plain")
+
+
+@app.route("/.well-known/ai-catalog.json")
+@app.route("/ai-catalog.json")
+def ai_catalog():
+    """
+    The Agentic Resource Discovery manifest (ARD, ai-catalog.json).
+
+    It lists the MCP servers, agents and APIs a site offers to AI agents.
+    Cafora offers none - everything here is a person's till behind a
+    sign-in - so the honest catalog is a valid one with no entries. Asked
+    for signed out it used to redirect to the sign-in page, and a checker
+    tried to read that HTML as JSON.
+    """
+    return jsonify({
+        "specVersion": "1.0",
+        "host": {"displayName": app.config["CAFE_NAME"]},
+        "entries": [],
+    })
 
 
 @app.route("/healthz")

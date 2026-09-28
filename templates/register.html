@@ -19,8 +19,8 @@
     <style>/* password-view.css, inlined: a separate request for 2.7KB
        held up the first paint by a whole round trip. */
 {{ password_view_css }}</style>
-    <script src="{{ asset_url('js/password-view.js') }}" defer></script>
-    <script src="{{ asset_url('js/account-fields.js') }}" defer></script>
+    <script nonce="{{ csp_nonce() }}" src="{{ asset_url('js/password-view.js') }}" defer></script>
+    <script nonce="{{ csp_nonce() }}" src="{{ asset_url('js/account-fields.js') }}" defer></script>
     {# The app's own stylesheet and scripts, fetched while someone is
        typing their password or a one-time code. None of them are loaded
        by this screen, so without this they are all fetched fresh the
@@ -162,7 +162,7 @@
             <input type="hidden" name="timezone" id="signUpClock">
         </form>
 
-        <script>
+        <script nonce="{{ csp_nonce() }}">
             (function () {
                 var box = document.getElementById("signUpClock");
                 if (!box) return;

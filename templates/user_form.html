@@ -56,7 +56,7 @@
             <!-- Role -->
             <div class="field">
                 <label>Role</label>
-                <select name="role" required id="userRoleSelect" onchange="togglePhoneHint()">
+                <select name="role" required id="userRoleSelect">
                     {% for role in ['cashier','staff','manager','admin'] %}
                     <option value="{{ role }}" {% if user and user.role == role %}selected{% endif %}>
                         {{ role|capitalize }}
@@ -108,7 +108,7 @@
                 <small id="phoneHint">Required for admin accounts to receive a one-time login code by SMS.</small>
             </div>
 
-            <script>
+            <script nonce="{{ csp_nonce() }}">
                 function togglePhoneHint() {
                     var role = document.getElementById("userRoleSelect").value;
                     var hint = document.getElementById("phoneHint");
@@ -118,6 +118,11 @@
                         : "Optional for this role — only admin logins ask for a one-time code.";
                 }
                 document.addEventListener("DOMContentLoaded", togglePhoneHint);
+                (function () {
+                    var role = document.getElementById("userRoleSelect");
+                    if (role) role.addEventListener("change", togglePhoneHint);
+                    togglePhoneHint();
+                }());
             </script>
 
             <!-- Password -->
@@ -157,7 +162,7 @@
 
     </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Admins have every task, so the boxes are set aside for them. Changing
 // to another role keeps whatever was ticked.
 (function () {

@@ -209,8 +209,8 @@
     </main>
 </div>
 
-<script id="orderSays" type="application/json">{{ SAYS|tojson }}</script>
-<script>
+<script nonce="{{ csp_nonce() }}" id="orderSays" type="application/json">{{ SAYS|tojson }}</script>
+<script nonce="{{ csp_nonce() }}">
 // Asking, every few seconds, whether the kitchen has finished. The
 // customer is sitting at a table with this open; the alternative is
 // walking up to the counter to ask.
@@ -301,7 +301,7 @@
 }());
 </script>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Stars: a tap sets them, a tap on the same star again clears them. Sent
 // without leaving the page; with no script, the form posts as it is.
 (function () {

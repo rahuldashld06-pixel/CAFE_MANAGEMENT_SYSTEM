@@ -558,7 +558,7 @@
         {% if order.order_status != 'Cancelled' %}
             <form method="POST"
                   action="{{ url_for('cancel_order', order_id=order.order_id) }}"
-                  onsubmit="return confirm('Cancel Order #{{ order.order_id }}? The bill and complete order history will be preserved, and inventory will be restored.');">
+                  data-confirm="Cancel Order #{{ order.order_id }}? The bill and complete order history will be preserved, and inventory will be restored.">
                 <button type="submit" class="btn btn--delete">
                     <i class="bi bi-x-circle-fill"></i> Cancel Order
                 </button>

@@ -18,7 +18,7 @@
 
 <div class="print-toolbar no-print">
     <button type="button" class="print-toolbar__btn print-toolbar__btn--primary"
-            onclick="window.print()">Print KOT</button>
+            data-print-now>Print KOT</button>
     <a href="{{ url_for('print_bill', order_id=order.order_id) }}"
        class="print-toolbar__btn">Bill</a>
     <a href="{{ url_for('order_details', order_id=order.order_id) }}"
@@ -59,11 +59,16 @@
 
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 window.addEventListener("load", function () {
     window.print();
 });
 </script>
 
+<script nonce="{{ csp_nonce() }}">
+    [].forEach.call(document.querySelectorAll("[data-print-now]"), function (button) {
+        button.addEventListener("click", function () { window.print(); });
+    });
+</script>
 </body>
 </html>

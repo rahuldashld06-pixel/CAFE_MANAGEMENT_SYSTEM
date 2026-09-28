@@ -79,6 +79,15 @@
     var rawClearTimeout = window.clearTimeout;
     var rawClearInterval = window.clearInterval;
     var rawAdd = EventTarget.prototype.addEventListener;
+
+    // The nonce this document was served with - the one its policy names.
+    // A page fetched and swapped in carries its own response's nonce,
+    // which this document's policy has never heard of, so its scripts are
+    // re-created under this one instead. Read now: the attribute is hidden
+    // from the page once the browser has checked it, the property is not.
+    var PAGE_NONCE = (document.currentScript
+        && (document.currentScript.nonce
+            || document.currentScript.getAttribute("nonce"))) || "";
     var rawRemove = EventTarget.prototype.removeEventListener;
     var rawFetch = window.fetch;
 
@@ -277,6 +286,10 @@
 
             for (var i = 0; i < original.attributes.length; i++) {
                 fresh.setAttribute(original.attributes[i].name, original.attributes[i].value);
+            }
+            if (PAGE_NONCE) {
+                fresh.setAttribute("nonce", PAGE_NONCE);
+                fresh.nonce = PAGE_NONCE;
             }
 
             if (original.src) {

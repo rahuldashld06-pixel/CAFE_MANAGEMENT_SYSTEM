@@ -106,7 +106,7 @@
     {% if branding.logo %}
     <form method="POST"
           class="photo-remove"
-          onsubmit="return confirm('Remove the symbol? The name will stand on its own.');">
+          data-confirm="Remove the symbol? The name will stand on its own.">
         <input type="hidden" name="action" value="remove_logo">
         <button type="submit" class="btn btn--small btn--delete">
             <i class="bi bi-trash"></i> Remove symbol

@@ -1213,7 +1213,7 @@
                                            id="cash-received-{{ bill.bill_id }}"
                                            placeholder="Cash in"
                                            aria-label="Cash received for Bill #{{ bill.bill_id }}"
-                                           oninput="calculateReturn({{ bill.bill_id }}, {{ bill.total_amount }})">
+                                           data-return-bill="{{ bill.bill_id }}" data-return-total="{{ bill.total_amount }}">
                                     <span class="return-amount" id="return-amount-{{ bill.bill_id }}">—</span>
                                 </div>
                             {% else %}
@@ -1285,10 +1285,17 @@
 
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
     // Live "change to return" calculator for Cash payments only.
     // Purely client-side: reads the amount the cashier types in, subtracts
     // that specific bill's total_amount, and shows the change due.
+    document.addEventListener("input", function (event) {
+        var box = event.target;
+        if (!box.hasAttribute || !box.hasAttribute("data-return-bill")) return;
+        calculateReturn(box.getAttribute("data-return-bill"),
+                        box.getAttribute("data-return-total"));
+    });
+
     function calculateReturn(billId, totalAmount) {
         const input = document.getElementById('cash-received-' + billId);
         const display = document.getElementById('return-amount-' + billId);

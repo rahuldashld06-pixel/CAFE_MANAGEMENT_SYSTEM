@@ -105,7 +105,7 @@
                             <form action="{{ url_for('delete_food', food_id=food.food_id) }}"
                                   method="POST"
                                   class="inline-form"
-                                  onsubmit="return confirm('Are you sure you want to delete this food?');">
+                                  data-confirm="Are you sure you want to delete this food?">
                                 <button type="submit" class="btn btn--sm btn--delete">
                                     <i class="bi bi-trash-fill"></i> Delete
                                 </button>

@@ -62,7 +62,7 @@
     {% if has_photo %}
     <form method="POST"
           class="photo-remove"
-          onsubmit="return confirm('Remove your profile photo? Your initial will be shown instead.');">
+          data-confirm="Remove your profile photo? Your initial will be shown instead.">
         <input type="hidden" name="action" value="remove">
         <button type="submit" class="btn btn--small btn--delete">
             <i class="bi bi-trash"></i> Remove photo

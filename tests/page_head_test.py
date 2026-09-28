@@ -370,6 +370,14 @@ check("and links to follow, as the visitor's https addresses",
 check("robots.txt points crawlers at it", "Allow: /llms.txt" in
       app.test_client().get("/robots.txt").get_data(as_text=True))
 
+for _path in ("/.well-known/ai-catalog.json", "/ai-catalog.json"):
+    _cat = app.test_client().get(_path)
+    _json = _cat.get_json(silent=True)
+    check("%s is a valid, empty agent catalog, not a sign-in page" % _path,
+          _cat.status_code == 200 and _cat.mimetype == "application/json"
+          and _json == {"specVersion": "1.0", "host": {"displayName": "Cafora"},
+                        "entries": []}, (_cat.status_code, _json))
+
 for _path in ("/login", "/register", "/forgot-password"):
     _page = app.test_client().get(_path + "?next=/",
                                   headers={"X-Forwarded-Proto": "https,http"}

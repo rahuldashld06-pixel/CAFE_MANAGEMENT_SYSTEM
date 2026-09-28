@@ -73,10 +73,15 @@ check("and the page is well under half the size",
       len(zipped.get_data()) * 2 < len(plain.get_data()),
       "%d bytes against %d" % (len(zipped.get_data()), len(plain.get_data())))
 opened = gzip.decompress(zipped.get_data()).decode("utf-8")
+def same_page(html):
+    """The page without what is fresh on every response: token and nonce."""
+    html = re.sub(r'csrfToken: "[^"]*"', 'csrfToken: ""', html)
+    return re.sub(r'nonce="[^"]*"', 'nonce=""', html)
+
+
 check("it opens to the whole page", opened.rstrip().endswith("</html>")
-      and 'id="page-view"' in opened and opened == plain.get_data(as_text=True)
-      .replace(re.findall(r'csrfToken: "([^"]*)"', plain.get_data(as_text=True))[0],
-               re.findall(r'csrfToken: "([^"]*)"', opened)[0]),
+      and 'id="page-view"' in opened
+      and same_page(opened) == same_page(plain.get_data(as_text=True)),
       repr(opened[-120:]))
 check("its length is the compressed length",
       int(zipped.headers["Content-Length"]) == len(zipped.get_data()))
@@ -86,8 +91,9 @@ check("a browser that does not say so gets it as it is",
       plain.headers.get("Content-Encoding") is None
       and "</html>" in plain.get_data(as_text=True))
 check("the security headers are all still there",
-      zipped.headers.get("Content-Security-Policy")
-      == plain.headers.get("Content-Security-Policy")
+      re.sub(r"'nonce-[^']*'", "", zipped.headers.get("Content-Security-Policy", ""))
+      == re.sub(r"'nonce-[^']*'", "", plain.headers.get("Content-Security-Policy", ""))
+      and "'nonce-" in zipped.headers.get("Content-Security-Policy", "")
       and zipped.headers.get("X-Frame-Options") == plain.headers.get("X-Frame-Options"))
 
 

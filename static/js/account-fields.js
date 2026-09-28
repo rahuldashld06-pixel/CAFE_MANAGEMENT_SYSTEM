@@ -164,10 +164,19 @@
 
     window.CafeAccountFields = {scan: scan, grade: grade};
 
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", function () { scan(document); });
-    } else {
+    // Registered as shell code: this file runs once per real page load,
+    // after the first page's scope has opened, so a listener added plainly
+    // would be torn down with that page on the first swap - and every
+    // page after it went without its meter and its username check.
+    function start() {
         scan(document);
+        document.addEventListener("instant:load", function () { scan(document); });
     }
-    document.addEventListener("instant:load", function () { scan(document); });
+    if (window.Instant && window.Instant.shell) {
+        window.Instant.shell(start);
+    } else if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", start);
+    } else {
+        start();
+    }
 }());

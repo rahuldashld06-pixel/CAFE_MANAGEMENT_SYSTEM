@@ -23,7 +23,7 @@
     <p class="kitchen-empty">Looking for orders&hellip;</p>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // The shell is defined at the end of <body>, after this page's own
 // markup, so nothing here can touch window.CafeShell while the document
 // is still parsing. Waiting until the page is built is the difference

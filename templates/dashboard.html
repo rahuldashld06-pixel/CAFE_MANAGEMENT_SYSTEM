@@ -258,8 +258,8 @@
     {% endif %}
 </section>
 
-<script src="{{ asset_url('js/charts.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}" src="{{ asset_url('js/charts.js') }}"></script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
     var PERIOD_KEY = "cafora.dashPeriod";
     var WORDS = {today: "today", week: "last 7 days", month: "last 30 days"};

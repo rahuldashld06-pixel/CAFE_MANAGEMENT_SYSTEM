@@ -62,7 +62,7 @@
 <span id="{{ prefix }}phone_hint" class="phone-field__said"
       data-phone-hint>{{ digits ~ ' digits' if digits else '' }}</span>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
     /* Keeps the dial code and the number of digits in step with the
        country, and stops the box accepting more digits than the country
        has. Nothing here is the check - the server does that - it is only

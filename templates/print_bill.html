@@ -19,7 +19,7 @@
 
 <div class="print-toolbar no-print">
     <button type="button" class="print-toolbar__btn print-toolbar__btn--primary"
-            onclick="window.print()">Print bill</button>
+            data-print-now>Print bill</button>
     <a href="{{ url_for('print_kot', order_id=order.order_id) }}"
        class="print-toolbar__btn">Kitchen ticket</a>
     <a href="{{ url_for('order_details', order_id=order.order_id) }}"
@@ -174,7 +174,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Straight to the print dialog - this page is opened to print something.
 // The toolbar stays for a second copy, or to reach the kitchen ticket.
 window.addEventListener("load", function () {
@@ -182,5 +182,10 @@ window.addEventListener("load", function () {
 });
 </script>
 
+<script nonce="{{ csp_nonce() }}">
+    [].forEach.call(document.querySelectorAll("[data-print-now]"), function (button) {
+        button.addEventListener("click", function () { window.print(); });
+    });
+</script>
 </body>
 </html>

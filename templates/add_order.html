@@ -936,7 +936,7 @@
                         <div class="food-card-footer">
                             <span class="food-card-price">₹{{ food.price }}</span>
                             <div class="quantity-control">
-                                <button type="button" class="quantity-btn quantity-minus" onclick="changeQuantity({{ food.food_id }}, -1)">−</button>
+                                <button type="button" class="quantity-btn quantity-minus" data-qty-food="{{ food.food_id }}" data-qty-step="-1">−</button>
                                 {# The mirror deliberately has no `name`, so the browser
                                    posts one field per food, and class
                                    `quantity-mirror-input` keeps it out of every
@@ -949,7 +949,7 @@
                                        data-price="{{ food.price }}"
                                        data-food-name="{{ food.food_name }}"
                                        min="0" max="{{ food.quantity }}" value="0" readonly>
-                                <button type="button" class="quantity-btn quantity-plus" onclick="changeQuantity({{ food.food_id }}, 1)">+</button>
+                                <button type="button" class="quantity-btn quantity-plus" data-qty-food="{{ food.food_id }}" data-qty-step="1">+</button>
                             </div>
                         </div>
                     </div>
@@ -1170,7 +1170,7 @@
 </div>
 
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Menu search. Filters the category sections in place: matching on a food
 // name or on its category, hiding sections that end up empty, and leaving
 // every quantity alone - a filter narrows what is on screen, it never
@@ -1346,7 +1346,7 @@
      aria-label="Jump to a section" hidden></div>
 {% endif %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Dine-in, takeaway or delivery. The choice is a hidden field in the
 // order form; the three buttons set it, and the totals follow.
 function setOrderType(kind) {
@@ -1574,7 +1574,7 @@ function setOrderType(kind) {
 }
 </style>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
     var button = document.getElementById("menuJump");
     var card = document.getElementById("menuJumpCard");
@@ -1650,7 +1650,7 @@ function setOrderType(kind) {
 </script>
 
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // The café's own rates, set under Profile -> Tax & Discount. `var`, not
 // `const`: instant.js re-runs this script whenever the page is swapped back
 // in, and a repeated const would throw on the second visit.
@@ -1704,6 +1704,14 @@ function syncHotMirrors() {
         }
     });
 }
+
+// The - and + on every card, the shelf's copies included.
+document.addEventListener("click", function (event) {
+    var button = event.target.closest && event.target.closest("[data-qty-food]");
+    if (!button) return;
+    changeQuantity(Number(button.getAttribute("data-qty-food")),
+                   Number(button.getAttribute("data-qty-step")));
+});
 
 function changeQuantity(foodId, change) {
     const input = document.getElementById('quantity_' + foodId);
@@ -1765,7 +1773,7 @@ document.addEventListener('draft:restored', syncHotMirrors);
 </script>
 
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
 
     function getQuantityInputs() {

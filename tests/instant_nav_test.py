@@ -76,7 +76,7 @@ response = client.get("/orders/add")
 body = response.get_data(as_text=True)
 check("the page scope opens inside #page-view, before any page script",
       body.find('id="page-view"') < body.find("window.Instant.beginPage()")
-      < body.find("<script>", body.find("beginPage()") + 1),
+      < body.find("<script", body.find("beginPage()") + 1),
       "marker is not positioned ahead of the page's own scripts")
 
 
@@ -91,14 +91,15 @@ print("\n=== 1b. The swap region carries every script its page needs ===")
 # What this checks is the other half of the contract: that base.html really
 # does keep every page script between the markers.
 #
-# These are the shell's own scripts, the same seven on every page and the
+# These are the shell's own scripts, the same eight on every page and the
 # only ones allowed outside the markers: instant.js, password-view.js,
 # account-fields.js, fullscreen.js and drafts.js in <head>, the one that
-# opens the guide before the first paint, and the shell block at the end
-# of <body>. Adding another to base.html means raising this number - a
-# page's own script appearing out there is the thing being guarded
-# against.
-SHELL_SCRIPTS = 7
+# opens the guide before the first paint, the one that switches the icon
+# sheet on (an onload= attribute did that before the CSP lost
+# 'unsafe-inline'), and the shell block at the end of <body>. Adding
+# another to base.html means raising this number - a page's own script
+# appearing out there is the thing being guarded against.
+SHELL_SCRIPTS = 8
 
 missing_markers, stranded = [], []
 for path in PAGES:

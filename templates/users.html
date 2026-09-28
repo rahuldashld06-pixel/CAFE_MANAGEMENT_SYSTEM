@@ -461,7 +461,7 @@
                                 {% if u.user_id != cafe_owner_id %}
                                 <form method="POST"
                                       action="{{ url_for('delete_user', user_id=u.user_id) }}"
-                                      onsubmit="return confirm('Delete {{ (u.full_name or u.username)|e }} permanently? Orders and bills they handled are kept.');">
+                                      data-confirm="Delete {{ (u.full_name or u.username)|e }} permanently? Orders and bills they handled are kept.">
                                     <button class="row-menu__item row-menu__item--danger" type="submit"><i class="bi bi-trash3"></i> Delete</button>
                                 </form>
                                 {% endif %}
@@ -514,7 +514,7 @@
 
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // The eye beside a password an admin set: asked of the server each time
 // (never written into the page), shown for half a minute, then hidden.
 (function () {
