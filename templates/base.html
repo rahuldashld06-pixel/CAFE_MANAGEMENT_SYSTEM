@@ -292,14 +292,15 @@
                            order at the counter. #}
                         {% set qr_on = cafe_branding is not defined or cafe_branding.qr_ordering is not defined or cafe_branding.qr_ordering %}
                         <div class="profile-dropdown__section">Service</div>
-                        <form method="POST" action="{{ url_for('table_ordering_switch') }}" class="qr-switch-form">
+                        <form method="POST" action="{{ url_for('table_ordering_switch') }}" class="qr-switch-form"
+                              data-table-ordering="{{ 'on' if qr_on else 'off' }}">
                             <input type="hidden" name="open" value="{{ '0' if qr_on else '1' }}">
                             <button type="submit" class="profile-dropdown__item qr-switch"
                                     role="switch" aria-checked="{{ 'true' if qr_on else 'false' }}"
                                     id="qrSwitch">
                                 <i class="bi bi-qr-code-scan"></i>
                                 <span>Table QR ordering</span>
-                                <span class="qr-switch__state {{ 'is-on' if qr_on }}">{{ "On" if qr_on else "Paused" }}</span>
+                                <span class="qr-switch__state {{ 'is-on' if qr_on }}">{{ "On" if qr_on else "Off" }}</span>
                             </button>
                         </form>
 
@@ -522,6 +523,11 @@
 
     </div>
 
+    {# Where notices float: every message a page brings, and the ones the
+       shell raises itself. Outside the page, so a swap never takes one
+       away half read, and fixed, so nothing on the page moves for it. #}
+    <div class="toast-host" id="toastHost" role="status" aria-live="polite"></div>
+
     {% if session.get('role') %}
     <div class="order-status-overlay" id="orderStatusOverlay" aria-hidden="true">
         <div class="order-status-popup" role="dialog" aria-modal="true" aria-labelledby="orderStatusTitle">
@@ -656,6 +662,63 @@ window.CafeShell = {
             event.stopImmediatePropagation();
         }
     }, true);
+    // ---- Table QR ordering: switched here, heard everywhere ----------
+    // The switch asks by script and draws itself from the answer; the
+    // page is not reloaded, so it cannot be drawn from a worker that
+    // still remembers the old state. Everyone else learns from the
+    // order-status feed, which every open page asks.
+    const qrForm = document.querySelector(".qr-switch-form");
+
+    function drawTableOrdering(on) {
+        if (!qrForm) return;
+        qrForm.setAttribute("data-table-ordering", on ? "on" : "off");
+        const field = qrForm.querySelector('input[name="open"]');
+        const button = qrForm.querySelector(".qr-switch");
+        const state = qrForm.querySelector(".qr-switch__state");
+        if (field) field.value = on ? "0" : "1";
+        if (button) button.setAttribute("aria-checked", on ? "true" : "false");
+        if (state) {
+            state.textContent = on ? "On" : "Off";
+            state.classList.toggle("is-on", on);
+        }
+    }
+
+    window.CafeShell.noteTableOrdering = function (on) {
+        if (typeof on !== "boolean" || !qrForm) return;
+        const was = qrForm.getAttribute("data-table-ordering") === "on";
+        if (was === on) return;
+        drawTableOrdering(on);
+        window.CafeShell.notice(on ? "Table QR ordering was turned back on."
+                                   : "Table QR ordering was turned off. Customers are asked to order at the counter.",
+                                on ? "on" : "off");
+    };
+
+    if (qrForm) {
+        qrForm.addEventListener("submit", function (event) {
+            if (!window.fetch || !window.FormData) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            const button = qrForm.querySelector(".qr-switch");
+            if (button) button.disabled = true;
+            window.CafeShell.applyCsrf(qrForm);
+            fetch(qrForm.action, {
+                method: "POST",
+                body: new FormData(qrForm),
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            }).then(function (response) {
+                return response.json();
+            }).then(function (data) {
+                if (data.ok) drawTableOrdering(!!data.open);
+                window.CafeShell.notice(data.message, data.ok ? (data.open ? "on" : "off") : null);
+            }).catch(function () {
+                window.CafeShell.notice("That did not go through. Please try again.");
+            }).then(function () {
+                if (button) button.disabled = false;
+            });
+        });
+    }
+
     document.addEventListener("click", function (event) {
         const target = event.target.closest && event.target.closest("[data-print-now], [data-select-all]");
         if (!target) return;
@@ -1034,13 +1097,35 @@ window.CafeShell = {
             }, LINGER);
         }
 
+        var host = document.getElementById("toastHost");
+
         function sweep() {
+            // A page's messages are lifted out of it into the floating
+            // host, so they read the same everywhere and push nothing
+            // down the page for the second they are up.
+            if (host) {
+                var lifted = document.querySelectorAll("#page-view .flash-stack .alert");
+                for (var j = 0; j < lifted.length; j++) {
+                    lifted[j].classList.add("toast");
+                    host.appendChild(lifted[j]);
+                }
+            }
             var notices = document.querySelectorAll(
-                ".flash-stack .alert, .toast-success, .toast-error");
+                ".flash-stack .alert, .toast-host .toast, .toast-success, .toast-error");
             for (var i = 0; i < notices.length; i++) {
                 dismiss(notices[i]);
             }
         }
+
+        // For the shell's own news. tone: "on" (green), "off" (red), or
+        // nothing for the ordinary copper.
+        window.CafeShell.notice = function (text, tone) {
+            if (!host || !text) return;
+            var note = document.createElement("div");
+            note.className = "alert toast" + (tone ? " toast--" + tone : "");
+            note.textContent = text;
+            host.appendChild(note);
+        };
 
         // Anything already on the page, anything a swap brings in, and
         // anything a script adds afterwards - the billing toasts are
@@ -1186,6 +1271,9 @@ window.CafeShell = {
                 .then(function (response) { return response.json(); })
                 .then(function (data) {
                     lastFeed = data;
+                    if (window.CafeShell.noteTableOrdering) {
+                        window.CafeShell.noteTableOrdering(data.table_ordering);
+                    }
                     if (overlay.classList.contains("open")) renderOrderStatus(data);
                     else if (badge) {
                         badge.textContent = data.pending_count ? data.pending_count : "";

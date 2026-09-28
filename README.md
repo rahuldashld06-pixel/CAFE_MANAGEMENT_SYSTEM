@@ -94,9 +94,16 @@ branding, fully isolated from the others.
   café's packing charge, says so on the order's page, and the bill the
   counter raises later charges what the customer was shown.
 - **Table ordering can be paused.** Anyone on shift switches it off or on
-  from the profile menu. Customers still see the menu, with a kind note
-  asking them to order at the counter, and nothing is sent until it is
-  back on.
+  from the profile menu; the switch reads a green On or a red Off, drawn
+  from the server's answer without reloading the page. Everyone else on
+  shift gets a one-second notice when it changes (every open page asks
+  the order-status feed, which carries the switch). Customers still see
+  the menu, with a kind note asking them to order at the counter, and
+  nothing is sent until it is back on.
+- **Notices float for a second.** Every message a page brings, and the
+  shell's own, floats under the header as one notice and goes after a
+  second - nothing on the page moves for it. Pages used to print their
+  messages a second time in blocks of their own.
 - **A busy kitchen, said kindly.** After a table order, when the kitchen
   has more than three orders waiting or more than one big order (three
   or more items) came in within fifteen minutes - from the table or the
@@ -744,13 +751,14 @@ python tests/compression_test.py  # expect PASSED: 42   FAILED: 0
 python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
 python tests/account_fields_browser_test.py # expect PASSED: 27  FAILED: 0
 python tests/sign_in_cafe_test.py # expect PASSED: 41   FAILED: 0
-python tests/table_order_test.py  # expect PASSED: 30   FAILED: 0
+python tests/table_order_test.py  # expect PASSED: 35   FAILED: 0
 python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0
 python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0
+python tests/table_switch_browser_test.py # expect PASSED: 12  FAILED: 0
 ```
 
-All fifty-one run in memory against a SQLite stand-in — no database or
-network needed. The twenty-one that drive a browser use a headless Edge or
+All fifty-two run in memory against a SQLite stand-in — no database or
+network needed. The twenty-two that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
 Each browser suite binds its own fixed port. A run that is killed part

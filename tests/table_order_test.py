@@ -184,11 +184,14 @@ paused = cashier.post("/settings/table-ordering",
 said = flashes(cashier)
 check("a cashier can pause it", paused.status_code == 302
       and db("SELECT qr_ordering FROM cafes WHERE cafe_id = ?", (CAFE,)) == [(0,)])
-check("and is told what customers will see", any("paused" in m for m in said), said)
+check("and is told what customers will see",
+      any("is off" in m and "counter" in m for m in said), said)
 page = text(cashier.get("/orders/add"))
-check("the switch then reads Paused",
-      re.search(r'id="qrSwitch".*?Paused', page, re.S) is not None
+check("the switch then reads Off",
+      re.search(r'id="qrSwitch".*?qr-switch__state ">Off<', page, re.S) is not None
       and 'aria-checked="false"' in page)
+check("and each message is on the page once, not once more in the page's own block",
+      page.count("Table QR ordering is off") <= 1)
 
 menu = text(app.test_client().get("/m/%s" % TOKEN))
 check("the customer's menu still shows",
@@ -205,8 +208,22 @@ check("it goes back to the menu, which says why",
       where.endswith("/m/%s" % TOKEN)
       and any("counter" in m for m in flashes(guest)), where)
 
-cashier.post("/settings/table-ordering", data={"open": "1", "_csrf_token": csrf(cashier)})
-flashes(cashier)
+# The team hears through the order-status feed every open page asks.
+feed = cashier.get("/api/order-status").get_json()
+check("the order-status feed tells every page it is off",
+      feed.get("table_ordering") is False, feed)
+
+# The profile menu switches it by script and draws itself from the answer.
+answer = cashier.post("/settings/table-ordering",
+                      data={"open": "1", "_csrf_token": csrf(cashier)},
+                      headers={"X-Requested-With": "XMLHttpRequest"})
+check("asked by script, the switch answers with its new state, not a page",
+      answer.status_code == 200 and answer.get_json()["ok"] is True
+      and answer.get_json()["open"] is True
+      and "on again" in answer.get_json()["message"], answer.get_json())
+check("and leaves no message behind for the next page", flashes(cashier) == [])
+check("the feed says it is on again",
+      cashier.get("/api/order-status").get_json().get("table_ordering") is True)
 check("switched back on, it takes orders again",
       "/m/%s/placed/" % TOKEN in table_order(1)[2])
 check("without the form token the switch does nothing",

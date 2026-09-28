@@ -1619,6 +1619,11 @@ def get_public_token(cafe_id, create=True):
 # The two a customer at a table can choose between.
 TABLE_ORDER_TYPES = ("dine_in", "takeaway")
 
+# What the switch says to whoever moved it, and to everyone else on shift.
+TABLE_ORDERING_NOW_OFF = ("Table QR ordering is off. Customers who scan "
+                          "the QR are asked to order at the counter.")
+TABLE_ORDERING_NOW_ON = "Table QR ordering is on again."
+
 TABLE_ORDERING_PAUSED = (
     "Ordering from the table is taking a little break right now. "
     "Please pop over to the counter - we would love to take your order "
@@ -5884,9 +5889,19 @@ def order_status_feed():
 
         pending_count = sum(1 for o in orders_out if o["order_status"] == "Pending")
 
+        # Whether table ordering is on, read fresh: every open page asks
+        # this feed, so when somebody switches it the rest of the team
+        # hears within the half minute - and a page drawn from a cafe row
+        # a worker remembered from before is put right.
+        cursor.execute("SELECT qr_ordering FROM cafes WHERE cafe_id = %s",
+                       (get_current_cafe_id(),))
+        cafe = cursor.fetchone() or {}
+
         return {
             "orders": orders_out,
             "pending_count": pending_count,
+            "table_ordering": (cafe.get("qr_ordering") is None
+                               or bool(cafe.get("qr_ordering"))),
         }
 
     except mysql.connector.Error as error:
@@ -11189,6 +11204,7 @@ def table_ordering_switch():
     menu still shows, with a kind word to order at the counter.
     """
     wanted = 1 if request.form.get("open") == "1" else 0
+    said = (TABLE_ORDERING_NOW_ON if wanted else TABLE_ORDERING_NOW_OFF)
     connection = None
     cursor = None
     try:
@@ -11199,17 +11215,22 @@ def table_ordering_switch():
                        (wanted, cafe_id))
         connection.commit()
     except mysql.connector.Error as error:
-        flash(database_error(error, "switching table ordering"))
+        message = database_error(error, "switching table ordering")
+        if wants_json_response():
+            return jsonify({"ok": False, "message": message}), 500
+        flash(message)
         return redirect(came_from())
     finally:
         if cursor:
             cursor.close()
         if connection:
             connection.close()
-    flash("Table ordering is on - customers can order from the QR again."
-          if wanted else
-          "Table ordering is paused. Customers who scan the QR are asked, "
-          "kindly, to order at the counter.")
+    # The profile menu asks by script and redraws the switch from this
+    # answer - not from the next page, which another worker may draw from
+    # a cafe row it remembered from before the switch moved.
+    if wants_json_response():
+        return jsonify({"ok": True, "open": bool(wanted), "message": said})
+    flash(said)
     return redirect(came_from())
 
 

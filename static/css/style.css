@@ -161,12 +161,16 @@ textarea:focus-visible {
     min-height: 100vh;
 }
 
+:root {
+    --sidebar-bg: color-mix(in srgb, var(--espresso-950) 78%, #000);
+}
+
 .sidebar {
     position: sticky;
     top: 0;
     align-self: start;
     height: 100vh;
-    background: linear-gradient(190deg, var(--espresso-850) 0%, var(--espresso-950) 75%);
+    background: linear-gradient(190deg, color-mix(in srgb, var(--espresso-900) 80%, #000) 0%, var(--sidebar-bg) 70%);
     border-right: 1px solid var(--espresso-800);
     padding: 28px 18px;
     /* A column with a fixed head and one scrolling part. The whole
@@ -2059,6 +2063,51 @@ button.order-status-badge:disabled {
         justify-content: center;
     }
 }
+
+/* Notices float under the header for a second (see base.html). */
+.toast-host {
+    position: fixed;
+    top: calc(var(--topbar-h, 64px) + 12px);
+    left: 50%;
+    z-index: 1600;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(520px, calc(100% - 32px));
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.toast-host .toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 12px 16px;
+    border: 1px solid var(--espresso-700);
+    border-left: 4px solid var(--copper);
+    border-radius: 12px;
+    background: var(--espresso-900);
+    color: var(--cream);
+    box-shadow: 0 18px 40px -14px rgba(0, 0, 0, .7);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    pointer-events: auto;
+    animation: slide-down .25s ease both;
+}
+
+.toast-host .toast::before {
+    content: "\F431";                      /* bi-info-circle */
+    font-family: "bootstrap-icons";
+    color: var(--copper-light);
+    font-size: 16px;
+}
+
+.toast-host .toast--on { border-left-color: var(--sage); }
+.toast-host .toast--on::before { content: "\F26B"; color: var(--sage); }     /* bi-check-circle */
+.toast-host .toast--off { border-left-color: var(--berry); }
+.toast-host .toast--off::before { content: "\F567"; color: var(--berry); }  /* bi-slash-circle */
 
 /* Global flash messages rendered by base.html */
 .flash-stack {
@@ -5006,7 +5055,10 @@ body.tour-open { overflow: hidden; }
         width: var(--guide-w);
         height: calc(100vh - var(--topbar-h));
         padding: 4px 8px 16px;
-        background: var(--espresso-950);
+        /* A shade under the page, so the guide reads as its own column
+           without a line drawn down it. Mixed from the theme's colour, so
+           every theme gets its own darker shade. */
+        background: var(--sidebar-bg);
         border: 0;
         overflow: hidden;
     }
