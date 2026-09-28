@@ -4,13 +4,273 @@
 
 {% block content %}
 
+<style>
+    /* ---- Three facts, read before anything else ---- */
+    .order-facts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .order-fact {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        padding: 14px 16px;
+        border: 1px solid var(--espresso-800);
+        border-radius: var(--radius-lg);
+        background: var(--surface-lift), var(--espresso-900);
+        box-shadow: var(--inset-light), var(--shadow-soft);
+    }
+
+    .order-fact__icon {
+        display: grid;
+        place-items: center;
+        flex: 0 0 40px;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: rgba(var(--copper-rgb), .15);
+        color: var(--copper-light);
+        font-size: 17px;
+    }
+
+    .order-fact__label {
+        display: block;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--cream-faint);
+    }
+
+    .order-fact__value {
+        display: block;
+        margin-top: 2px;
+        font-weight: 700;
+        color: var(--cream);
+        overflow-wrap: anywhere;
+    }
+
+    .order-fact__value--money {
+        font-family: var(--font-display);
+        font-size: 22px;
+        color: var(--copper-light);
+    }
+
+    /* Where the order is, in the colour it would be on the Kitchen screen. */
+    .order-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 12.5px;
+        font-weight: 800;
+        border: 1px solid rgba(var(--copper-rgb), .45);
+        background: rgba(var(--copper-rgb), .12);
+        color: var(--copper-light);
+    }
+
+    .order-pill::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .order-pill--completed,
+    .order-pill--paid {
+        border-color: rgba(143, 187, 153, .45);
+        background: rgba(143, 187, 153, .12);
+        color: var(--sage);
+    }
+
+    .order-pill--cancelled {
+        border-color: rgba(225, 97, 79, .45);
+        background: rgba(225, 97, 79, .12);
+        color: var(--berry);
+    }
+
+    /* ---- The order on the left, what it came to on the right ---- */
+    .order-view {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
+    }
+
+    @media (min-width: 1100px) {
+        .order-view {
+            grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
+        }
+    }
+
+    .order-view .panel { margin-bottom: 0; }
+
+    .order-line__name {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .order-line__name i { color: var(--copper); }
+
+    .order-total {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--espresso-700);
+    }
+
+    .order-total span {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--cream-faint);
+    }
+
+    .order-total strong {
+        font-family: var(--font-display);
+        font-size: 28px;
+        color: var(--copper-light);
+    }
+
+    /* ---- The bill, laid out like one ---- */
+    .bill-sum {
+        margin: 0;
+        padding: 4px 16px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-850);
+    }
+
+    .bill-sum > div {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px dashed var(--espresso-700);
+    }
+
+    .bill-sum > div:last-child { border-bottom: 0; }
+
+    .bill-sum dt {
+        color: var(--cream-dim);
+        font-weight: 600;
+    }
+
+    .bill-sum dd {
+        margin: 0;
+        font-weight: 700;
+        color: var(--cream);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .bill-sum .bill-sum__total {
+        align-items: baseline;
+        margin-top: 2px;
+        border-top: 1px solid var(--espresso-600);
+        padding-top: 12px;
+        padding-bottom: 12px;
+    }
+
+    .bill-sum__total dt {
+        color: var(--cream);
+        font-weight: 800;
+    }
+
+    .bill-sum__total dd {
+        font-family: var(--font-display);
+        font-size: 24px;
+        color: var(--copper-light);
+    }
+
+    .pay-facts {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    .pay-facts > div {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 13.5px;
+    }
+
+    .pay-facts > div > span:first-child {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--cream-faint);
+        font-weight: 600;
+    }
+
+    .pay-facts strong { color: var(--cream); text-align: right; }
+
+    .bill-missing {
+        display: grid;
+        justify-items: center;
+        gap: 8px;
+        padding: 26px 12px;
+        color: var(--cream-faint);
+        text-align: center;
+    }
+
+    .bill-missing i { font-size: 26px; color: var(--espresso-600); }
+
+    .order-foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+    }
+
+    .order-foot form { margin: 0; }
+
+    @media (max-width: 760px) {
+        .order-facts {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        /* The date is the longest of the three; it has the row to itself. */
+        .order-fact--when { grid-column: 1 / -1; order: 3; }
+
+        .order-fact { padding: 12px 14px; gap: 10px; }
+
+        .order-fact__icon {
+            flex-basis: 34px;
+            width: 34px;
+            height: 34px;
+            font-size: 15px;
+            border-radius: 10px;
+        }
+
+        .order-fact__value--money { font-size: 19px; }
+
+        .order-total strong { font-size: 24px; }
+
+        .order-foot > * { flex: 1 1 0; }
+        .order-foot .btn { width: 100%; justify-content: center; }
+    }
+</style>
+
     <!-- ==========================================
          PAGE HEADER
          ========================================== -->
 
-    <div class="page-header">
+    <div class="page-header page-header--wrap">
 
         <div>
+            <div class="eyebrow">Order</div>
 
             <h1>
                 <i class="bi bi-receipt-cutoff"></i>
@@ -18,11 +278,9 @@
             </h1>
 
             <p class="page-subtitle">
-                View order items, bill and payment information
+                What was ordered, what it came to, and how it was paid
             </p>
-
         </div>
-
 
         <div class="page-header__actions">
 
@@ -34,10 +292,8 @@
                 target="_blank"
                 rel="noopener"
                 class="btn btn--primary">
-
                 <i class="bi bi-printer-fill"></i>
                 Print Bill
-
             </a>
 
             <a
@@ -45,430 +301,131 @@
                 target="_blank"
                 rel="noopener"
                 class="btn btn--ghost">
-
                 <i class="bi bi-fire"></i>
                 Print KOT
-
             </a>
 
+            {# The same link is at the foot of the page, and Kitchen is in
+               the menu - on a phone this one gives its room to the two
+               print buttons. #}
             <a
                 href="{{ url_for('kitchen_display') }}"
-                class="btn btn--ghost">
-
+                class="btn btn--ghost"
+                data-drawer-echo>
                 <i class="bi bi-arrow-left"></i>
                 Back to Kitchen
-
             </a>
 
         </div>
 
     </div>
-
 
 
     <!-- ==========================================
          ORDER INFORMATION
          ========================================== -->
 
-    <div class="panel">
+    <section class="order-facts" aria-label="Order information">
 
-        <div class="panel-header">
-
-            <h2>
-                <i class="bi bi-info-circle-fill"></i>
-                Order Information
-            </h2>
-
-        </div>
-
-
-        <div class="order-meta">
-
+        <div class="order-fact">
+            <span class="order-fact__icon"><i class="bi bi-flag-fill"></i></span>
             <span>
-
-                <i class="bi bi-hash"></i>
-
-                Order ID:
-
-                <strong>
-                    #{{ order.order_id }}
-                </strong>
-
+                <span class="order-fact__label">Status</span>
+                <span class="order-fact__value">
+                    <span class="order-pill order-pill--{{ (order.order_status or '')|lower }}">
+                        {{ order.order_status }}
+                    </span>
+                </span>
             </span>
+        </div>
 
-
+        <div class="order-fact">
+            <span class="order-fact__icon"><i class="bi bi-currency-rupee"></i></span>
             <span>
-
-                <i class="bi bi-calendar3"></i>
-
-                Date:
-
-                <strong>
-                    {{ order.order_date }}
-                </strong>
-
+                <span class="order-fact__label">Order total</span>
+                <span class="order-fact__value order-fact__value--money">₹{{ order.total_amount }}</span>
             </span>
+        </div>
 
-
+        <div class="order-fact order-fact--when">
+            <span class="order-fact__icon"><i class="bi bi-calendar3"></i></span>
             <span>
-
-                <i class="bi bi-flag-fill"></i>
-
-                Status:
-
-                <strong>
-                    {{ order.order_status }}
-                </strong>
-
+                <span class="order-fact__label">Placed</span>
+                <span class="order-fact__value">{{ order.order_date|local_time }}</span>
             </span>
-
         </div>
 
-    </div>
+    </section>
 
 
+    <div class="order-view">
 
-    <!-- ==========================================
-         ORDER ITEMS
-         ========================================== -->
+        <!-- ==========================================
+             ORDER ITEMS
+             ========================================== -->
 
-    <div class="panel">
+        <section class="panel">
 
-        <div class="panel-header">
+            <div class="panel-header">
 
-            <h2>
-                <i class="bi bi-egg-fried"></i>
-                Order Items
-            </h2>
-
-            <span class="badge badge--available">
-
-                <i class="bi bi-list-check"></i>
-
-                {{ items|length }} item{% if items|length != 1 %}s{% endif %}
-
-            </span>
-
-        </div>
-
-
-        <div class="table-wrap">
-
-            <table class="data-table">
-
-                <thead>
-
-                    <tr>
-
-                        <th>
-                            Food
-                        </th>
-
-                        <th>
-                            Quantity
-                        </th>
-
-                        <th>
-                            Price
-                        </th>
-
-                        <th>
-                            Subtotal
-                        </th>
-
-                    </tr>
-
-                </thead>
-
-
-                <tbody>
-
-                {% for item in items %}
-
-                    <tr>
-
-                        <td class="cell-strong">
-
-                            <i
-                                class="bi bi-egg-fried"
-                                style="color: var(--copper); margin-right: 6px;">
-                            </i>
-
-                            {{ item.food_name }}
-
-                        </td>
-
-
-                        <td>
-
-                            <span class="badge">
-
-                                {{ item.quantity }}
-
-                            </span>
-
-                        </td>
-
-
-                        <td>
-
-                            ₹{{ item.price }}
-
-                        </td>
-
-
-                        <td class="cell-strong">
-
-                            ₹{{ item.subtotal }}
-
-                        </td>
-
-                    </tr>
-
-
-                {% else %}
-
-                    <tr>
-
-                        <td
-                            colspan="4"
-                            class="empty-row">
-
-                            <i class="bi bi-inbox"></i>
-
-                            No items found for this order.
-
-                        </td>
-
-                    </tr>
-
-                {% endfor %}
-
-                </tbody>
-
-            </table>
-
-        </div>
-
-
-        <!-- Order Total -->
-
-        <div
-            style="
-                display: flex;
-                justify-content: flex-end;
-                margin-top: 20px;
-                padding-top: 18px;
-                border-top: 1px solid var(--espresso-700);
-            ">
-
-            <div style="text-align: right;">
-
-                <div
-                    style="
-                        color: var(--cream-faint);
-                        font-size: 13px;
-                        margin-bottom: 4px;
-                    ">
-
-                    Order Total
-
-                </div>
-
-
-                <div
-                    style="
-                        font-family: var(--font-display);
-                        font-size: 28px;
-                        font-weight: 700;
-                        color: var(--copper-light);
-                    ">
-
-                    ₹{{ order.total_amount }}
-
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-
-    <!-- ==========================================
-         BILL SECTION
-         ========================================== -->
-
-    <div class="panel">
-
-        <div class="panel-header">
-
-            <h2>
-
-                <i class="bi bi-receipt-cutoff"></i>
-
-                Bill Details
-
-            </h2>
-
-
-            {% if bill %}
+                <h2>
+                    <i class="bi bi-egg-fried"></i>
+                    Order Items
+                </h2>
 
                 <span class="badge badge--available">
-
-                    <i class="bi bi-check-circle-fill"></i>
-
-                    Bill Generated
-
+                    <i class="bi bi-list-check"></i>
+                    {{ items|length }} item{% if items|length != 1 %}s{% endif %}
                 </span>
 
-            {% else %}
-
-                <span class="badge badge--unavailable">
-
-                    <i class="bi bi-x-circle-fill"></i>
-
-                    No Bill
-
-                </span>
-
-            {% endif %}
-
-        </div>
-
-
-
-        {% if bill %}
-
+            </div>
 
             <div class="table-wrap">
 
                 <table class="data-table">
 
+                    <thead>
+                        <tr>
+                            <th>Food</th>
+                            <th>Quantity</th>
+                            <th>Price</th>
+                            <th>Subtotal</th>
+                        </tr>
+                    </thead>
+
                     <tbody>
 
-
-                        <!-- Bill ID -->
+                    {% for item in items %}
 
                         <tr>
-
                             <td class="cell-strong">
-
-                                <i
-                                    class="bi bi-receipt"
-                                    style="color: var(--copper); margin-right: 6px;">
-                                </i>
-
-                                Bill ID
-
+                                <span class="order-line__name">
+                                    <i class="bi bi-egg-fried" aria-hidden="true"></i>
+                                    {{ item.food_name }}
+                                </span>
                             </td>
 
                             <td>
-
-                                #{{ bill.bill_id }}
-
+                                <span class="badge">
+                                    {{ item.quantity }}
+                                </span>
                             </td>
 
+                            <td>₹{{ item.price }}</td>
+
+                            <td class="cell-strong">₹{{ item.subtotal }}</td>
                         </tr>
 
-
-                        <!-- Subtotal -->
+                    {% else %}
 
                         <tr>
-
-                            <td class="cell-strong">
-
-                                Subtotal
-
+                            <td colspan="4" class="empty-row">
+                                <i class="bi bi-inbox"></i>
+                                No items found for this order.
                             </td>
-
-                            <td>
-
-                                ₹{{ bill.subtotal }}
-
-                            </td>
-
                         </tr>
 
-
-                        <!-- Tax -->
-
-                        {% if bill.tax and bill.tax|float > 0 %}
-                        <tr>
-
-                            <td class="cell-strong">
-
-                                Tax
-
-                            </td>
-
-                            <td>
-
-                                ₹{{ bill.tax }}
-
-                            </td>
-
-                        </tr>
-                        {% endif %}
-
-
-                        <!-- Discount, when there was one -->
-
-                        {% if bill.discount and bill.discount|float > 0 %}
-                        <tr>
-
-                            <td class="cell-strong">
-
-                                Discount
-
-                            </td>
-
-                            <td>
-
-                                &minus;₹{{ bill.discount }}
-
-                            </td>
-
-                        </tr>
-                        {% endif %}
-
-
-                        <!-- Total -->
-
-                        <tr>
-
-                            <td
-                                class="cell-strong"
-                                style="
-                                    font-size: 17px;
-                                    color: var(--cream);
-                                ">
-
-                                <i
-                                    class="bi bi-cash-stack"
-                                    style="color: var(--gold); margin-right: 6px;">
-                                </i>
-
-                                Total Amount
-
-                            </td>
-
-
-                            <td
-                                style="
-                                    font-family: var(--font-display);
-                                    font-size: 22px;
-                                    font-weight: 700;
-                                    color: var(--copper-light);
-                                ">
-
-                                ₹{{ bill.total_amount }}
-
-                            </td>
-
-                        </tr>
-
+                    {% endfor %}
 
                     </tbody>
 
@@ -476,117 +433,124 @@
 
             </div>
 
+            <div class="order-total">
+                <span>Order Total</span>
+                <strong>₹{{ order.total_amount }}</strong>
+            </div>
+
+        </section>
 
 
-            <!-- ======================================
-                 PAYMENT INFORMATION
-                 ====================================== -->
+        <!-- ==========================================
+             BILL SECTION
+             ========================================== -->
 
-            <div
-                style="
-                    margin-top: 22px;
-                    padding-top: 20px;
-                    border-top: 1px solid var(--espresso-700);
-                ">
+        <aside class="panel">
 
-                <div class="panel-header">
+            <div class="panel-header">
 
-                    <h2>
+                <h2>
+                    <i class="bi bi-receipt"></i>
+                    Bill Details
+                </h2>
 
-                        <i class="bi bi-credit-card-2-front"></i>
-
-                        Payment Information
-
-                    </h2>
-
-                </div>
-
-
-                <div class="order-meta">
-
-
-                    <!-- Payment Method -->
-
-                    <span>
-
-                        <i class="bi bi-wallet2"></i>
-
-                        Payment Method:
-
-                        <strong>
-                            {{ bill.payment_method }}
-                        </strong>
-
+                {% if bill %}
+                    <span class="badge badge--available">
+                        <i class="bi bi-check-circle-fill"></i>
+                        Bill Generated
                     </span>
+                {% else %}
+                    <span class="badge badge--unavailable">
+                        <i class="bi bi-x-circle-fill"></i>
+                        No Bill
+                    </span>
+                {% endif %}
 
+            </div>
 
-                    <!-- Payment Status -->
+            {% if bill %}
 
-                    <span>
+                <dl class="bill-sum">
 
-                        <i class="bi bi-check2-circle"></i>
+                    <div>
+                        <dt>Bill ID</dt>
+                        <dd>#{{ bill.bill_id }}</dd>
+                    </div>
 
-                        Payment Status:
+                    <div>
+                        <dt>Subtotal</dt>
+                        <dd>₹{{ bill.subtotal }}</dd>
+                    </div>
 
-                        <strong>
+                    {% if bill.tax and bill.tax|float > 0 %}
+                    <div>
+                        <dt>Tax</dt>
+                        <dd>₹{{ bill.tax }}</dd>
+                    </div>
+                    {% endif %}
+
+                    {% if bill.discount and bill.discount|float > 0 %}
+                    <div>
+                        <dt>Discount</dt>
+                        <dd>&minus;₹{{ bill.discount }}</dd>
+                    </div>
+                    {% endif %}
+
+                    <div class="bill-sum__total">
+                        <dt>Total Amount</dt>
+                        <dd>₹{{ bill.total_amount }}</dd>
+                    </div>
+
+                </dl>
+
+                <!-- ======================================
+                     PAYMENT INFORMATION
+                     ====================================== -->
+
+                <div class="pay-facts" aria-label="Payment information">
+
+                    <div>
+                        <span><i class="bi bi-wallet2"></i> Payment Method</span>
+                        <strong>{{ bill.payment_method }}</strong>
+                    </div>
+
+                    <div>
+                        <span><i class="bi bi-check2-circle"></i> Payment Status</span>
+                        <span class="order-pill order-pill--{{ (bill.payment_status or '')|lower }}">
                             {{ bill.payment_status }}
-                        </strong>
+                        </span>
+                    </div>
 
-                    </span>
-
-
-                    <!-- Bill Date -->
-
-                    <span>
-
-                        <i class="bi bi-calendar-check"></i>
-
-                        Bill Date:
-
-                        <strong>
-                            {{ bill.bill_date }}
-                        </strong>
-
-                    </span>
-
+                    <div>
+                        <span><i class="bi bi-calendar-check"></i> Bill Date</span>
+                        <strong>{{ bill.bill_date|local_time }}</strong>
+                    </div>
 
                 </div>
 
-            </div>
+            {% else %}
 
+                <div class="bill-missing">
+                    <i class="bi bi-receipt"></i>
+                    <p>No bill has been generated for this order yet.</p>
+                </div>
 
-        {% else %}
+            {% endif %}
 
-
-            <!-- No Bill -->
-
-            <div class="empty-row">
-
-                <i class="bi bi-receipt"></i>
-
-                <p>
-                    No bill has been generated for this order yet.
-                </p>
-
-            </div>
-
-
-        {% endif %}
+        </aside>
 
     </div>
-
 
 
     <!-- ==========================================
          BOTTOM ACTIONS
          ========================================== -->
 
-    <div class="page-header__actions">
+    <div class="order-foot">
 
         {% if order.order_status != 'Cancelled' %}
             <form method="POST"
                   action="{{ url_for('cancel_order', order_id=order.order_id) }}"
-                  style="display:inline;"
                   onsubmit="return confirm('Cancel Order #{{ order.order_id }}? The bill and complete order history will be preserved, and inventory will be restored.');">
                 <button type="submit" class="btn btn--delete">
                     <i class="bi bi-x-circle-fill"></i> Cancel Order
@@ -597,14 +561,10 @@
         <a
             href="{{ url_for('kitchen_display') }}"
             class="btn btn--ghost">
-
             <i class="bi bi-arrow-left"></i>
-
             Back to Kitchen
-
         </a>
 
     </div>
-
 
 {% endblock %}

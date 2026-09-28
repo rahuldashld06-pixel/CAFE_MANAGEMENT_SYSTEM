@@ -396,20 +396,26 @@
         to { opacity: 1; transform: translateY(0); }
     }
 
-.payment-status-toggle--paid {
-        background: #111;
-        color: #fff;
-        border: 1px solid #111;
+/* Settled, and the action that settles it, read as two different
+       things. It used to be the other way round: the button that marks a
+       bill paid was green, and a bill that had been paid was a black pill
+       from outside the palette that looked like something had broken.
+       Now a paid bill is a quiet sage tick, and an unpaid one is a copper
+       button with an empty circle that fills in when it is pressed. */
+    .payment-status-toggle--paid {
+        background: rgba(143, 187, 153, .14);
+        color: var(--sage);
+        border: 1px solid rgba(143, 187, 153, .38);
     }
 
     .payment-status-toggle--pending {
-        background: rgba(143, 187, 153, .15);
-        color: var(--sage);
-        border-color: rgba(143, 187, 153, .45);
+        background: rgba(var(--copper-rgb), .10);
+        color: var(--copper-light);
+        border-color: rgba(var(--copper-rgb), .55);
     }
 
     .payment-status-toggle--pending:hover {
-        background: rgba(143, 187, 153, .28);
+        background: rgba(var(--copper-rgb), .2);
     }
 
 
@@ -428,11 +434,19 @@
     }
 
     .payment-status-toggle--paid:disabled {
-        background: #111;
-        color: #fff;
-        border-color: #111;
+        background: rgba(143, 187, 153, .14);
+        color: var(--sage);
+        border-color: rgba(143, 187, 153, .38);
         opacity: 1;
-        cursor: not-allowed;
+        cursor: default;
+    }
+
+    /* The header band's capitals are wider than the words, and the money
+       columns here are measured to the pixel - so this table keeps its
+       headings as written, or SUBTOTAL runs into TAX. */
+    .billing-table thead th {
+        text-transform: none;
+        letter-spacing: 0;
     }
 
     .payment-status-toggle--disabled {
@@ -863,6 +877,128 @@
         .billing-table td > div[style*="min-width"] {
             min-width: 0 !important;
         }
+
+        /* ---- One bill, one compact card ----
+           Six columns so the money cells can sit three to a row and
+           everything else two. A cell given a starting column always
+           begins a fresh row, which keeps the pairs together however
+           many of Subtotal, Discount and Tax this page has. */
+        .billing-table tbody tr {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            padding: 6px 0 8px;
+            background: var(--surface-lift), var(--espresso-850);
+        }
+
+        .billing-table tbody td {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            gap: 4px;
+            padding: 7px 14px;
+            border-bottom: 0;
+            text-align: left;
+            min-width: 0;
+            grid-column: span 3;
+        }
+
+        .billing-table tbody td::before {
+            max-width: none;
+            font-size: 10px;
+            letter-spacing: .06em;
+        }
+
+        .billing-table tbody td[colspan] {
+            grid-column: 1 / -1;
+            align-items: center;
+        }
+
+        .billing-table tbody td .btn,
+        .billing-table tbody td form {
+            flex: 0 0 auto;
+        }
+
+        .billing-table td[data-label="Bill ID"] { order: 1; grid-column: 1 / span 3; }
+        .billing-table td[data-label="Order ID"] { order: 1; }
+        .billing-table td[data-label="Date"] { order: 2; grid-column: 1 / span 3; }
+        .billing-table td[data-label="Total"] { order: 2; }
+        .billing-table td[data-label="Items"] {
+            order: 3;
+            grid-column: 1 / -1;
+            margin: 2px 0;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            border-top: 1px solid var(--espresso-800);
+            border-bottom: 1px solid var(--espresso-800);
+        }
+        .billing-table td[data-label="Subtotal"],
+        .billing-table td[data-label="Discount"],
+        .billing-table td[data-label="Tax"] {
+            order: 4;
+            grid-column: span 2;
+        }
+        .billing-table td[data-label="Subtotal"] { grid-column: 1 / span 2; }
+        .billing-table td[data-label="Payment Mode"] { order: 5; grid-column: 1 / span 3; }
+        .billing-table td[data-label="Return"] { order: 5; }
+        .billing-table td[data-label="Status"] { order: 6; grid-column: 1 / span 3; }
+        .billing-table td[data-label="Receipt"] { order: 6; }
+
+        /* The bill's number is the card's name, and the total the figure
+           the card is for. */
+        .billing-table td.bill-id {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--cream);
+        }
+
+        .billing-table td.total-amount {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--copper-light);
+        }
+
+        .billing-table td.bill-id::before,
+        .billing-table td.total-amount::before {
+            font-family: var(--font-body);
+            font-weight: 700;
+        }
+
+        .billing-table td[data-label="Items"] > div {
+            gap: 6px !important;
+        }
+
+        .billing-table td[data-label="Payment Mode"] form,
+        .billing-table td[data-label="Payment Mode"] select,
+        .billing-table .return-cell {
+            width: 100%;
+        }
+
+        .billing-table td.print-bill-cell {
+            text-align: left;
+        }
+
+        /* Two dates side by side, then the two buttons. */
+        .billing-filter-panel .history-filter {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding-top: 12px;
+        }
+
+        .billing-filter-panel .history-filter .filter-field,
+        .billing-filter-panel .history-filter .btn {
+            width: auto;
+            min-width: 0;
+        }
+
+        .billing-filter-panel .filter-field input {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
     }
 </style>
 
@@ -896,10 +1032,10 @@
     {% endwith %}
 
     <!-- BILLING HISTORY PERIOD -->
-    <div class="panel billing-filter-panel">
+    <div class="panel panel--toolbar billing-filter-panel">
         <div class="panel-header">
             <div>
-                <h2><i class="bi bi-calendar3"></i> Billing History Period</h2>
+                <h2><i class="bi bi-calendar3"></i> Billing period</h2>
                 <p class="panel-subtitle">
                     {% if showing_today %}Showing today.
                     {% elif show_all %}Showing every bill ever saved.
@@ -1069,7 +1205,7 @@
                                            inputmode="decimal"
                                            class="cash-received-input"
                                            id="cash-received-{{ bill.bill_id }}"
-                                           placeholder="Amount received"
+                                           placeholder="Cash in"
                                            aria-label="Cash received for Bill #{{ bill.bill_id }}"
                                            oninput="calculateReturn({{ bill.bill_id }}, {{ bill.total_amount }})">
                                     <span class="return-amount" id="return-amount-{{ bill.bill_id }}">—</span>
@@ -1102,7 +1238,7 @@
                                     <button type="submit"
                                             class="payment-status-toggle payment-status-toggle--pending"
                                             title="Click once to mark this bill as Paid">
-                                        <i class="bi bi-check-circle-fill"></i> Paid
+                                        <i class="bi bi-circle"></i> Paid
                                     </button>
                                 </form>
                             {% endif %}
@@ -1110,8 +1246,9 @@
 
                         {# Not every customer wants a receipt, and printing
                            one for every order wastes a roll a day. This is
-                           here for the ones who ask. The kitchen ticket is
-                           a different thing and still prints by itself. #}
+                           here for the ones who ask. The kitchen ticket has
+                           its own button, on the Kitchen screen and in
+                           Order Status. #}
                         <td class="print-bill-cell" data-label="Receipt">
                             <button type="button"
                                     class="btn btn--sm btn--ghost print-bill-btn"
@@ -1292,7 +1429,7 @@
                             returnCell.innerHTML =
                                 '<div class="return-cell">' +
                                 '<input type="number" step="0.01" min="0" inputmode="decimal" class="cash-received-input" ' +
-                                'id="cash-received-' + billId + '" placeholder="Amount received" ' +
+                                'id="cash-received-' + billId + '" placeholder="Cash in" ' +
                                 'aria-label="Cash received for Bill #' + billId + '" ' +
                                 'oninput="calculateReturn(' + billId + ', ' + totalAttr + ')">' +
                                 '<span class="return-amount" id="return-amount-' + billId + '">—</span>' +

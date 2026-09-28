@@ -1388,6 +1388,71 @@ finally:
     application.TRUSTED_PROXY_HOPS = _hops
 
 
+
+print("\n=== Signing out stays signed out ===")
+# Every response carries the session cookie again - that is what keeps a
+# till in use signed in all day. So the answer to anything that left the
+# browser just before Log out (a live refresh, a page the menu fetched
+# ahead) lands after the logout's own answer and puts the signed-in
+# cookie back. Found in a real browser: Log out, then the sign-in page
+# sent it straight on to the dashboard. Replayed here exactly - keep the
+# cookie as it was, sign out, then have that cookie arrive late.
+late = app.test_client()
+late.post("/login", data={"username": "guardboss", "password": "password123"},
+          environ_overrides={"REMOTE_ADDR": "192.0.2.190"})
+signed_in = late.get_cookie("session")
+check("a signed-in browser holds a binding for its sign-in",
+      late.get_cookie("cafora_signin") is not None,
+      "no cafora_signin cookie after signing in")
+check("and is let in", late.get("/categories").status_code == 200,
+      "the sign-in did not take")
+
+late.get("/logout")
+check("Log out takes the binding away",
+      late.get_cookie("cafora_signin") is None,
+      "the binding outlived the sign-in it was for")
+
+late.set_cookie("session", signed_in.value)
+reply = late.get("/categories")
+check("a signed-in cookie that arrives after Log out does not sign back in",
+      reply.status_code == 302
+      and "/login" in reply.headers.get("Location", ""),
+      "status %s - the late cookie undid the Log out" % reply.status_code)
+check("and the sign-in page stays the sign-in page",
+      late.get("/login").status_code == 200,
+      "/login sent a signed-out browser on into the app")
+
+# Whoever keeps working is not caught by any of this.
+steady = app.test_client()
+steady.post("/login", data={"username": "guardboss",
+                            "password": "password123"},
+            environ_overrides={"REMOTE_ADDR": "192.0.2.191"})
+check("a sign-in in use stays in across many requests",
+      all(steady.get(path).status_code == 200
+          for path in ("/categories", "/foods", "/billing", "/categories")),
+      "an ordinary signed-in browser was turned away")
+
+# Sign-ins made before they carried an id are bound on their next
+# request, so their next Log out holds as well.
+older = app.test_client()
+older.post("/login", data={"username": "guardboss", "password": "password123"},
+           environ_overrides={"REMOTE_ADDR": "192.0.2.192"})
+with older.session_transaction() as sess:
+    sess.pop("signin_id", None)
+older.delete_cookie("cafora_signin")
+check("a sign-in from before ids still works",
+      older.get("/categories").status_code == 200,
+      "an existing sign-in was thrown out by the change")
+check("and is bound on the way through",
+      older.get_cookie("cafora_signin") is not None,
+      "it is still unbound, so its Log out can still be undone")
+kept = older.get_cookie("session").value
+older.get("/logout")
+older.set_cookie("session", kept)
+check("so its Log out holds too",
+      "/login" in older.get("/categories").headers.get("Location", ""),
+      "the late cookie signed an older sign-in back in")
+
 print("\n" + "=" * 62)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

@@ -114,6 +114,15 @@ function startKitchenScreen() {
                 + ' data-done="' + escapeHtml(order.order_id) + '">Done</button>'
             : '';
 
+        // The ticket, on paper, when somebody asks for it - on a finished
+        // order too, for the one that went missing. An icon: four tickets
+        // across leave no room in the footer for a word as well.
+        var print = '<button type="button" class="btn btn--ghost btn--sm kitchen-print"'
+            + ' data-print-kot="' + escapeHtml(order.order_id) + '"'
+            + ' title="Print the kitchen ticket"'
+            + ' aria-label="Print the kitchen ticket for order #' + number + '">'
+            + '<i class="bi bi-printer" aria-hidden="true"></i></button>';
+
         return '<article class="' + classes + '">'
             + '<header class="kitchen-ticket__head">'
             + '<span class="kitchen-ticket__id">#' + number + '</span>'
@@ -126,7 +135,7 @@ function startKitchenScreen() {
             + '</ul>'
             + '<footer class="kitchen-ticket__foot">'
             + '<span>' + escapeHtml(order.placed) + '</span>'
-            + '<span class="kitchen-ticket__actions">' + buttons + '</span>'
+            + '<span class="kitchen-ticket__actions">' + print + buttons + '</span>'
             + '</footer>'
             + '</article>';
     }
@@ -188,6 +197,15 @@ function startKitchenScreen() {
     }
 
     board.addEventListener("click", function (event) {
+        var kot = event.target.closest("[data-print-kot]");
+        if (kot) {
+            if (!window.CafeShell.printKot(kot.getAttribute("data-print-kot"))) {
+                kot.title = "Allow pop-ups for this site to print";
+                kot.classList.add("kitchen-print--blocked");
+            }
+            return;
+        }
+
         var tick = event.target.closest("[data-item]");
         if (tick) {
             send(tick, "/api/kitchen/item/" + tick.dataset.item);

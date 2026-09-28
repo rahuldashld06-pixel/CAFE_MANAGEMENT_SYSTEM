@@ -27,7 +27,7 @@
        carry this cafe's own name and icon. #}
     <link rel="manifest" href="{{ url_for('web_manifest') }}"
           crossorigin="use-credentials">
-    <meta name="theme-color" content="#170F0B">
+    <meta name="theme-color" content="#2A1C14">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -552,6 +552,20 @@
 window.CafeShell = {
     csrfToken: {{ csrf_token_value|tojson }},
 
+    /**
+     * Print one order's kitchen ticket, because somebody asked to.
+     *
+     * Opened where it can be seen; the ticket page prints itself once it
+     * has loaded, the same way a bill does. Nothing calls this except a
+     * button - nothing in the app prints by itself. Answers whether the
+     * browser let the window open, so a blocked pop-up can be said.
+     */
+    printKot: function (orderId) {
+        var ticket = window.open(
+            "/orders/" + encodeURIComponent(orderId) + "/kot", "_blank");
+        return !!ticket;
+    },
+
     applyCsrf: function (root) {
         (root || document)
             .querySelectorAll("form[method='POST'], form[method='post']")
@@ -1068,13 +1082,22 @@ window.CafeShell = {
                       '</button>'
                     : '<span class="order-status-badge ' + badgeClass(order.order_status) + '">' + escapeHtml(order.order_status) + '</span>';
 
+                const number = order.daily_no || order.order_id;
                 return (
                     '<div class="order-status-item">' +
                         '<div>' +
-                            '<div class="order-status-item__id">Order #' + (order.daily_no || order.order_id) + '</div>' +
+                            '<div class="order-status-item__id">Order #' + number + '</div>' +
                             '<div class="order-status-item__meta">' + escapeHtml(order.order_date) + ' · ₹' + escapeHtml(order.total_amount) + '</div>' +
                         '</div>' +
-                        statusTag +
+                        '<span class="order-status-item__actions">' +
+                            '<button type="button" class="order-status-print"' +
+                                ' data-print-kot="' + order.order_id + '"' +
+                                ' title="Print the kitchen ticket"' +
+                                ' aria-label="Print the kitchen ticket for order #' + number + '">' +
+                                '<i class="bi bi-printer" aria-hidden="true"></i>' +
+                            '</button>' +
+                            statusTag +
+                        '</span>' +
                     '</div>'
                 );
             }).join("");
@@ -1082,6 +1105,15 @@ window.CafeShell = {
             body.querySelectorAll("button.order-status-badge--pending").forEach(function (btn) {
                 btn.addEventListener("click", function () {
                     completeOrder(btn.getAttribute("data-order-id"), btn);
+                });
+            });
+
+            body.querySelectorAll("[data-print-kot]").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    if (!window.CafeShell.printKot(btn.getAttribute("data-print-kot"))) {
+                        btn.title = "Allow pop-ups for this site to print";
+                        btn.classList.add("order-status-print--blocked");
+                    }
                 });
             });
         }

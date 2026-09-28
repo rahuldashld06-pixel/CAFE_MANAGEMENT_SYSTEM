@@ -15,12 +15,14 @@
    get, with no second copy of the hexes to drift out of step.
    ========================================================== */
 
+/* Latte - the house colours. Its id stays "copper" because that is
+   what every cafe that has never changed it has stored. */
 .theme-copper,
 :root[data-theme="copper"] {
-    --copper: #E08A3E;
-    --copper-light: #F0A85F;
-    --copper-dark: #B96A28;
-    --copper-rgb: 224, 138, 62;
+    --copper: #D9AE80;
+    --copper-light: #EED6B6;
+    --copper-dark: #B8875A;
+    --copper-rgb: 217, 174, 128;
 }
 
 .theme-sage,

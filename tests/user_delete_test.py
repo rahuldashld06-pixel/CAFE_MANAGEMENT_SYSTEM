@@ -66,9 +66,10 @@ def user_ids(client):
     """username -> user_id, read off the rendered list."""
     html = client.get("/users").get_data(as_text=True)
     rows = re.findall(
-        r'/users/(\d+)/edit">Edit</a>.*?</tr>', html, re.S)
+        r'/users/(\d+)/edit">(?:<i[^>]*></i>\s*)?Edit</a>.*?</tr>', html, re.S)
     names = re.findall(
-        r'<td>([A-Za-z0-9_]+)</td>\s*<td>(?:Admin|Cashier|Manager|Staff)</td>',
+        r'<td>([A-Za-z0-9_]+)</td>\s*<td>(?:<span class="role-badge[^"]*">)?'
+        r'(?:Admin|Cashier|Manager|Staff)(?:</span>)?</td>',
         html)
     return dict(zip(names, rows))
 
@@ -87,7 +88,8 @@ def delete(client, user_id):
 def usernames(client):
     html = client.get("/users").get_data(as_text=True)
     return re.findall(
-        r'<td>([A-Za-z0-9_]+)</td>\s*<td>(?:Admin|Cashier|Manager|Staff)</td>',
+        r'<td>([A-Za-z0-9_]+)</td>\s*<td>(?:<span class="role-badge[^"]*">)?'
+        r'(?:Admin|Cashier|Manager|Staff)(?:</span>)?</td>',
         html)
 
 

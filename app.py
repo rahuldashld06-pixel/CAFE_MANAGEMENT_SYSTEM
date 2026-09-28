@@ -201,6 +201,60 @@ app.config.update(
 )
 
 
+# ---------------------------------------------------------------------
+# Signing out stays signed out
+#
+# The session cookie goes back to the browser on every response - that is
+# what keeps a till in use signed in all day. It also means a response to
+# anything that left the browser just before Log out - a live refresh, a
+# page fetched ahead for the menu - lands after the logout's own answer
+# and puts the signed-in cookie straight back. Its signature is good, so
+# it would be accepted, and whoever pressed Log out would still be in.
+#
+# So each sign-in carries an id, and the browser holds the same id in a
+# cookie of its own. Only signing in sets that cookie and only Log out
+# removes it; nothing else ever sends it, so no late response can restore
+# it. A session whose id the browser does not hold is dropped before
+# anything reads it.
+# ---------------------------------------------------------------------
+SIGN_IN_COOKIE = "cafora_signin"
+
+
+def bind_sign_in():
+    """Give this sign-in its id, and the browser the matching cookie."""
+    session["signin_id"] = g.sign_in_binding = secrets.token_urlsafe(18)
+
+
+@app.before_request
+def drop_unbound_session():
+    bound = session.get("signin_id")
+    if bound:
+        held = request.cookies.get(SIGN_IN_COOKIE, "")
+        if not hmac.compare_digest(held.encode("utf-8"), bound.encode("utf-8")):
+            session.clear()
+    elif session.get("user_id"):
+        # Signed in before sign-ins had ids. Bound from here on, so the
+        # next Log out holds too.
+        bind_sign_in()
+
+
+@app.after_request
+def send_sign_in_binding(response):
+    binding = g.pop("sign_in_binding", None)
+    if binding:
+        response.set_cookie(
+            SIGN_IN_COOKIE, binding,
+            # As long as a browser keeps any cookie. It proves nothing on
+            # its own - it only has to outlive the session it is paired
+            # with, which renews itself for as long as the till is used.
+            max_age=REMEMBERED_LOGIN_DAYS * 24 * 3600,
+            httponly=True, samesite="Lax", path="/",
+            secure=app.config["SESSION_COOKIE_SECURE"])
+    elif binding == "":
+        response.delete_cookie(SIGN_IN_COOKIE, path="/")
+    return response
+
+
 def _asset_version():
     """
     Cache-busting stamp for the static files, from their newest mtime.
@@ -3274,7 +3328,7 @@ STAFF_ALLOWED_ENDPOINTS = {
 # paints both the picker's swatch and the app itself, so a swatch can never
 # show a colour the theme does not actually use.
 THEMES = [
-    ("copper", "Copper", "The original. Warm and roasted."),
+    ("copper", "Latte", "Cream and caramel. The house colours."),
     ("sage", "Sage", "Soft green, easy on the eyes over a long shift."),
     ("ocean", "Ocean", "Cool blue against the dark surfaces."),
     ("berry", "Berry", "Deep red, high contrast."),
@@ -5432,11 +5486,16 @@ def add_order():
                 for row in cursor.fetchall()
             ]
 
-        def order_result(success, message, order_id=None, status_code=200):
+        def order_result(success, message, order_id=None, status_code=200,
+                         daily_no=None):
             if wants_json_response():
                 payload = {"success": success, "message": message}
                 if order_id is not None:
                     payload["order_id"] = order_id
+                # The number the kitchen calls out, which is what the
+                # till says back and what Print KOT is labelled with.
+                if daily_no is not None:
+                    payload["daily_no"] = daily_no
                 payload["foods"] = fetch_food_stock_summary()
                 return jsonify(payload), status_code
 
@@ -5532,8 +5591,9 @@ def add_order():
 
         return order_result(
             True,
-            f"Order #{order_id} created successfully!",
+            f"Order #{written.get('daily_no') or order_id} created successfully!",
             order_id=order_id,
+            daily_no=written.get("daily_no"),
         )
 
 
@@ -7469,6 +7529,8 @@ def login_resend_otp():
 @app.route("/logout")
 def logout():
     session.clear()
+    # The one thing a late response cannot put back. See bind_sign_in().
+    g.sign_in_binding = ""
     return redirect(url_for("login"))
 
 
@@ -7729,6 +7791,7 @@ def start_sign_in(remembered):
     """
     session["remembered"] = bool(remembered)
     session["seen_at"] = int(time.time())
+    bind_sign_in()
 
 
 def sign_in_is_stale():
@@ -9691,8 +9754,8 @@ def web_manifest():
         "display": "fullscreen",
         "display_override": ["fullscreen", "standalone", "minimal-ui"],
         "orientation": "any",
-        "background_color": "#170F0B",
-        "theme_color": "#170F0B",
+        "background_color": "#2A1C14",
+        "theme_color": "#2A1C14",
         "icons": icons,
     }
 

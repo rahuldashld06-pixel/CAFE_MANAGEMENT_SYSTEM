@@ -117,7 +117,7 @@ check("and the first cell of a row is the number, not the photo",
       re.match(r"\s*(?:\{#.*?#\}\s*)?<td>\d+</td>", first_row, re.S) is not None,
       "the row starts with %r" % first_row.strip()[:70])
 check("the photo cell follows it",
-      re.search(r"<td>\d+</td>\s*<td>\s*(?:<img|<span class=\"badge\")",
+      re.search(r"<td>\d+</td>\s*<td>\s*(?:<img|<span class=\"(?:badge|food-thumb))",
                 first_row, re.S) is not None,
       "photo is not the second cell")
 

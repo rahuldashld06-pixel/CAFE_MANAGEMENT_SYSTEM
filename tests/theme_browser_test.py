@@ -186,7 +186,7 @@ try:
     check("signed in", browser.evaluate("location.pathname") != "/login",
           "still on the login page")
 
-    print("\n=== 2. The default really is copper on screen ===")
+    print("\n=== 2. The default really is Latte on screen ===")
     browser.call("Page.navigate", url=BASE + "/orders/add")
     wait_for("document.readyState === 'complete'", "New Order")
 
@@ -194,13 +194,15 @@ try:
     copper_button = painted_button()
     check("the browser resolves an accent at all", bool(copper),
           "--copper resolved to nothing; theme.css may not have loaded")
-    check("and it is the original copper",
-          copper.upper().replace(" ", "") == "#E08A3E",
+    # The default theme's id is still "copper" - it is what every cafe
+    # row stores - but its colour is latte cream now.
+    check("and it is the house latte",
+          copper.upper().replace(" ", "") == "#D9AE80",
           "resolved to %r" % copper)
     # The button is a gradient of the light and dark ends of the accent,
     # so those are what to look for - the mid tone never appears in it.
     check("a primary button is painted in it",
-          "240, 168, 95" in copper_button and "185, 106, 40" in copper_button,
+          "238, 214, 182" in copper_button and "184, 135, 90" in copper_button,
           "the button is painted %r" % copper_button)
 
     print("\n=== 3. The picker shows six different colours ===")

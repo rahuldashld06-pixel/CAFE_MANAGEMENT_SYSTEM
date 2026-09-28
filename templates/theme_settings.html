@@ -61,11 +61,11 @@
                        class="colour-pick__well"
                        id="accentHex"
                        name="accent_hex"
-                       value="{{ cafe_colours.accent or '#e08a3e' }}"
+                       value="{{ cafe_colours.accent or '#d9ae80' }}"
                        aria-label="Custom accent colour">
 
                 <code class="colour-pick__value" data-value-for="accentHex">
-                    {{ cafe_colours.accent or '#e08a3e' }}
+                    {{ cafe_colours.accent or '#d9ae80' }}
                 </code>
 
                 <button type="button" class="btn btn--ghost btn--sm"
@@ -89,8 +89,8 @@
                            {% if not cafe_colours.surface %}checked{% endif %}>
                     <span>
                         <span class="colour-pick__well colour-pick__well--fixed"
-                              style="background:#170F0B"></span>
-                        Dark espresso &mdash; the original
+                              style="background:#2A1C14"></span>
+                        Coffee brown &mdash; the house colour
                     </span>
                 </label>
             </div>
@@ -107,11 +107,11 @@
                        class="colour-pick__well"
                        id="surfaceHex"
                        name="surface_hex"
-                       value="{{ cafe_colours.surface or '#170f0b' }}"
+                       value="{{ cafe_colours.surface or '#2a1c14' }}"
                        aria-label="Custom background colour">
 
                 <code class="colour-pick__value" data-value-for="surfaceHex">
-                    {{ cafe_colours.surface or '#170f0b' }}
+                    {{ cafe_colours.surface or '#2a1c14' }}
                 </code>
             </div>
         </div>

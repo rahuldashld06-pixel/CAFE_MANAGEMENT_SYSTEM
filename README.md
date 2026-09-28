@@ -210,7 +210,8 @@ branding, fully isolated from the others.
   tall enough for every section has no scrollbar at all; a shorter one
   scrolls the links under the name, which does not move.
 - **Theme colour.** An admin picks the accent the whole cafe's screens are
-  painted in. Copper by default.
+  painted in. By default the app is coffee-brown surfaces with latte cream
+  and caramel for everything you press (the "Latte" theme).
 - **Installs as an app.** A web manifest asking for fullscreen display, so
   "Install" in a browser or "Add to Home Screen" on a phone opens the site
   with no address bar and no browser chrome. In an ordinary tab a button in
@@ -365,6 +366,7 @@ tests/security_test.py Headers, login lockout, upload sniffing and tenant isolat
 tests/page_head_test.py robots.txt, the description a shared link shows, and the tab
 tests/qr_hold_test.py Real-browser suite for the minute before an order is sent
 tests/draft_restore_test.py Real-browser suite for forms that survive a closed browser
+tests/kot_button_test.py Real-browser suite for the Print KOT buttons
 tests/cdp.py         Minimal DevTools-protocol client used by that suite
 ```
 
@@ -389,6 +391,13 @@ in production. Signing in clears the session first, so a session id
 planted beforehand does not survive it. The app refuses to boot in
 production without `SECRET_KEY`, because a default key means anyone can
 forge a cookie for any café.
+
+Log out holds. Every response sends the session cookie again, which is
+what keeps a till in use signed in, so an answer to something that left
+the browser just before Log out used to land afterwards and sign it back
+in. Each sign-in now carries an id that the browser also holds in a
+cookie of its own, set only by signing in and removed only by Log out; a
+session whose id the browser no longer holds is dropped.
 
 **Doing things.** Every POST, PUT, PATCH and DELETE carries a CSRF
 token, compared in constant time. Every query is scoped to the café's
@@ -559,14 +568,15 @@ python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
 python tests/list_search_test.py  # expect PASSED: 109  FAILED: 0
 python tests/identity_test.py     # expect PASSED: 97   FAILED: 0
-python tests/security_test.py     # expect PASSED: 130  FAILED: 0
+python tests/security_test.py     # expect PASSED: 139  FAILED: 0
 python tests/page_head_test.py    # expect PASSED: 89   FAILED: 0
 python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
 python tests/draft_restore_test.py # expect PASSED: 35  FAILED: 0
+python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
 ```
 
-All thirty-six run in memory against a SQLite stand-in — no database or
-network needed. The seventeen that drive a browser use a headless Edge or
+All thirty-eight run in memory against a SQLite stand-in — no database or
+network needed. The nineteen that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
 Each browser suite binds its own fixed port. A run that is killed part
@@ -676,14 +686,17 @@ revenue left off. It checks the sidebar and the server guard
 agree, because a link that is hidden but still served is a hole.
 
 Nothing prints by itself. A kitchen ticket comes out when somebody presses
-Print KOT on the order, and a bill when somebody presses Print Bill - on
-Billing or on the order's own page. There used to be automatic printing,
+Print KOT - on each ticket on the Kitchen screen, on each row of Order
+Status, and on New Order straight after an order goes - and a bill when
+somebody presses Print Bill, on Billing or on the order's own page. There used to be automatic printing,
 with a settings page, a kitchen screen that checked in so the tills would
 stand down, and a queue the screens claimed tickets from; all of it is
 gone. `print_test.py` checks that no page prints on its own and that both
 buttons lead to real, printable pages, and `kitchen_screen_test.py` checks
 in a real browser that a ticket arriving on the kitchen screen reaches no
-printer. The old settings columns are left in the database, unread.
+printer. `kot_button_test.py` presses each Print KOT button and checks it
+opens that order's ticket, leaves the order as it was, and says so when the
+browser blocks the pop-up. The old settings columns are left in the database, unread.
 
 `billing_paid_test.py` pins down what settles a bill: only the Paid button.
 Choosing UPI or Card records how a bill will be paid, not that it has been,

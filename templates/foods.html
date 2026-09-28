@@ -74,9 +74,10 @@
                         <td>{{ food.food_no }}</td>
                         <td>
                             {% if food.image_path %}
-                                <img src="{{ food.image_path }}" alt="{{ food.food_name }}" style="width:64px;height:48px;object-fit:cover;border-radius:7px;">
+                                <img src="{{ food.image_path }}" alt="{{ food.food_name }}" class="food-thumb">
                             {% else %}
-                                <span class="badge"><i class="bi bi-image"></i> No Photo</span>
+                                <span class="food-thumb food-thumb--none" title="No photo yet"
+                                      aria-label="No photo yet"><i class="bi bi-image" aria-hidden="true"></i></span>
                             {% endif %}
                         </td>
                         <td class="cell-strong">{{ food.food_name }}</td>

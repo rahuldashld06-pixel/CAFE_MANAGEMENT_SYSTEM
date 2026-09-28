@@ -7,7 +7,7 @@
 <div class="page-header">
     <div>
         <h1><i class="bi bi-bar-chart-line"></i> Reports Management</h1>
-        <p class="page-subtitle">Analyze cafe sales, orders, billing and inventory</p>
+        <p class="page-subtitle">Sales, orders, payments and stock for a period</p>
     </div>
 
     <div class="page-header__actions">
@@ -20,10 +20,15 @@
 
 <!-- DATE FILTER -->
 
-<div class="panel">
+<div class="panel panel--toolbar">
 
     <div class="panel-header">
-        <h2><i class="bi bi-calendar3"></i> Report Period</h2>
+        <div>
+            <h2><i class="bi bi-calendar3"></i> Report period</h2>
+            <p class="panel-subtitle">
+                {% if from_date or to_date %}The dates below.{% else %}Everything so far.{% endif %}
+            </p>
+        </div>
     </div>
 
     <form method="GET" action="{{ url_for('reports') }}" class="filter-form">
@@ -66,37 +71,45 @@
 <div class="stats-grid">
 
     <div class="stat-card">
-        <div class="stat-icon">🛒</div>
+        <div class="stat-card__icon stat-card__icon--today">
+            <i class="bi bi-cart-check"></i>
+        </div>
         <div>
-            <h3>{{ total_orders }}</h3>
-            <p>Total Orders</p>
+            <div class="stat-card__label">Total Orders</div>
+            <div class="stat-card__value">{{ total_orders }}</div>
         </div>
     </div>
 
 
     <div class="stat-card">
-        <div class="stat-icon">🧾</div>
+        <div class="stat-card__icon stat-card__icon--categories">
+            <i class="bi bi-receipt"></i>
+        </div>
         <div>
-            <h3>{{ total_bills }}</h3>
-            <p>Total Bills</p>
+            <div class="stat-card__label">Total Bills</div>
+            <div class="stat-card__value">{{ total_bills }}</div>
         </div>
     </div>
 
 
     <div class="stat-card">
-        <div class="stat-icon">💰</div>
+        <div class="stat-card__icon stat-card__icon--sales">
+            <i class="bi bi-currency-rupee"></i>
+        </div>
         <div>
-            <h3>₹{{ "%.2f"|format(total_sales|float) }}</h3>
-            <p>Total Sales</p>
+            <div class="stat-card__label">Total Sales</div>
+            <div class="stat-card__value">₹{{ "%.2f"|format(total_sales|float) }}</div>
         </div>
     </div>
 
 
     <div class="stat-card">
-        <div class="stat-icon">❌</div>
+        <div class="stat-card__icon stat-card__icon--warning">
+            <i class="bi bi-x-octagon"></i>
+        </div>
         <div>
-            <h3>{{ cancelled_orders }}</h3>
-            <p>Cancelled Orders</p>
+            <div class="stat-card__label">Cancelled Orders</div>
+            <div class="stat-card__value">{{ cancelled_orders }}</div>
         </div>
     </div>
 
@@ -107,7 +120,9 @@
 
 <div class="panel">
 
-    <h2>💳 Payment Summary</h2>
+    <div class="panel-header">
+        <h2><i class="bi bi-credit-card-2-front"></i> Payment summary</h2>
+    </div>
 
     <table class="data-table">
 
@@ -156,7 +171,9 @@
 
 <div class="panel">
 
-    <h2>🍔 Food Sales Report</h2>
+    <div class="panel-header">
+        <h2><i class="bi bi-egg-fried"></i> Food sales</h2>
+    </div>
 
     <table class="data-table">
 
@@ -209,7 +226,9 @@
 
 <div class="panel">
 
-    <h2>📦 Inventory Report</h2>
+    <div class="panel-header">
+        <h2><i class="bi bi-boxes"></i> Inventory</h2>
+    </div>
 
     <table class="data-table">
 
@@ -287,7 +306,9 @@
 
 <div class="panel">
 
-    <h2>❌ Cancelled Orders</h2>
+    <div class="panel-header">
+        <h2><i class="bi bi-x-octagon"></i> Cancelled orders</h2>
+    </div>
 
     <table class="data-table">
 
@@ -311,7 +332,7 @@
                 </td>
 
                 <td>
-                    {{ order.order_date }}
+                    {{ order.order_date|local_time }}
                 </td>
 
                 <td>

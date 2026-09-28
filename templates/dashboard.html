@@ -12,36 +12,144 @@
         gap: 14px;
     }
 
+    /* Each tile in the colour of where it goes - the same tones the
+       cards above use - so the four read as four places at a glance. */
     .dashboard-action {
+        --tone: var(--copper-rgb);
+        position: relative;
         display: flex;
         align-items: center;
         gap: 12px;
         min-height: 76px;
         padding: 14px 16px;
-        background: var(--espresso-850);
+        background:
+            radial-gradient(130% 150% at 0% 0%, rgba(var(--tone), .16) 0%,
+                            rgba(var(--tone), 0) 60%),
+            var(--espresso-850);
         border: 1px solid var(--espresso-700);
         border-radius: var(--radius-md);
         color: var(--cream);
-        transition: background .18s ease, border-color .18s ease, transform .18s ease;
+        transition: background .18s ease, border-color .18s ease, transform .18s ease,
+                    box-shadow .18s ease;
     }
-
+    .dashboard-action--stock { --tone: 242, 201, 76; }
+    .dashboard-action--kitchen { --tone: 225, 97, 79; }
+    .dashboard-action--billing { --tone: 143, 187, 153; }
     .dashboard-action:hover {
-        background: var(--espresso-800);
-        border-color: var(--copper-dark);
+        border-color: rgba(var(--tone), .55);
         transform: translateY(-2px);
+        box-shadow: 0 16px 32px -18px rgba(var(--tone), .55);
     }
-
     .dashboard-action__icon {
         display: grid;
         place-items: center;
         width: 42px;
         height: 42px;
         flex: 0 0 42px;
-        border-radius: 10px;
-        background: rgba(var(--copper-rgb), .16);
-        color: var(--copper-light);
+        border-radius: 12px;
+        background: rgba(var(--tone), .18);
+        color: rgb(var(--tone));
         font-size: 18px;
     }
+    .dashboard-action__go {
+        margin-left: auto;
+        color: var(--cream-faint);
+        font-size: 15px;
+        opacity: .6;
+        transition: transform .18s ease, opacity .18s ease, color .18s ease;
+    }
+    .dashboard-action:hover .dashboard-action__go {
+        opacity: 1;
+        color: rgb(var(--tone));
+        transform: translateX(3px);
+    }
+
+    /* ---- The two blocks of figures ---- */
+    .dash-block { margin-bottom: 18px; }
+
+    .dash-block__title {
+        margin: 0 0 10px 2px;
+        font-family: var(--font-body);
+        font-size: 11.5px;
+        font-weight: 800;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+        color: var(--cream-faint);
+    }
+
+    .dash-block .stats-grid { margin-bottom: 0; }
+
+    /* Revenue widest when it is there - it is admin-only. */
+    @media (min-width: 1100px) {
+        .dash-block--today .stats-grid:has(.stat-card--hero) {
+            grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    .stat-card--hero { padding: 20px 22px; }
+    .stat-card--hero .stat-card__icon {
+        width: 54px;
+        height: 54px;
+        font-size: 23px;
+        border-radius: 15px;
+    }
+    .stat-card--hero .stat-card__value { font-size: 34px; }
+
+    /* On a phone, revenue has a row of its own and keeps its icon beside
+       the figure - it is the one card there is room to lay out wide. */
+    @media (max-width: 560px) {
+        .dash-block--today .stat-card--hero {
+            grid-column: 1 / -1;
+            flex-direction: row;
+            align-items: center;
+            gap: 14px;
+            padding: 16px;
+        }
+        .stat-card--hero .stat-card__icon {
+            width: 46px;
+            height: 46px;
+            font-size: 20px;
+            border-radius: 13px;
+        }
+        .stat-card--hero .stat-card__value { font-size: 28px; }
+
+        /* The three under it as one strip, rather than two and one left
+           over on a row of its own. */
+        .dash-block--today .stats-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .dash-block--today .stat-card:not(.stat-card--hero) {
+            padding: 12px;
+            gap: 8px;
+        }
+        .dash-block--today .stat-card:not(.stat-card--hero) .stat-card__icon {
+            width: 32px;
+            height: 32px;
+            font-size: 14px;
+            border-radius: 10px;
+        }
+        .dash-block--today .stat-card:not(.stat-card--hero) .stat-card__label {
+            font-size: 9.5px;
+            letter-spacing: .04em;
+        }
+        .dash-block--today .stat-card:not(.stat-card--hero) .stat-card__value {
+            font-size: 20px;
+        }
+    }
+
+    /* The running totals, quieter than today. */
+    .stats-grid--quiet .stat-card {
+        padding: 12px 16px;
+        box-shadow: none;
+    }
+    .stats-grid--quiet .stat-card::before { display: none; }
+    .stats-grid--quiet .stat-card__icon {
+        width: 38px;
+        height: 38px;
+        font-size: 16px;
+    }
+    .stats-grid--quiet .stat-card__value { font-size: 22px; }
 
     .dashboard-action strong {
         display: block;
@@ -88,7 +196,7 @@
 <div class="page-header">
     <div>
         <h1><i class="bi bi-speedometer2"></i> Cafe Dashboard</h1>
-        <p class="page-subtitle">Live overview of your cafe management system</p>
+        <p class="page-subtitle">How today is going, and what needs doing</p>
     </div>
 
     <div class="dashboard-live">
@@ -114,63 +222,27 @@
 
 
 <!-- ==========================================
-     MAIN STATISTICS
-     ========================================== -->
-
-<div class="stats-grid">
-
-    <div class="stat-card">
-        <div class="stat-card__icon">
-            <i class="bi bi-egg-fried"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Total Food Items</div>
-            <div class="stat-card__value" id="total-foods">{{ total_foods }}</div>
-        </div>
-    </div>
-
-
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--categories">
-            <i class="bi bi-tags-fill"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Categories</div>
-            <div class="stat-card__value" id="total-categories">{{ total_categories }}</div>
-        </div>
-    </div>
-
-
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--orders">
-            <i class="bi bi-receipt-cutoff"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Total Orders</div>
-            <div class="stat-card__value" id="total-orders">{{ total_orders }}</div>
-        </div>
-    </div>
-
-
-    <div class="stat-card">
-        <div class="stat-card__icon">
-            <i class="bi bi-boxes"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Inventory Items</div>
-            <div class="stat-card__value" id="total-inventory">{{ total_inventory }}</div>
-        </div>
-    </div>
-
-</div>
-
-
-<!-- ==========================================
      TODAY
+     What the day has done so far, and the two stock figures that need
+     somebody to act. Revenue first and widest: it is the number an owner
+     opens this page for.
      ========================================== -->
-
-<div class="stats-grid">
-
+<section class="dash-block dash-block--today" aria-labelledby="dashToday">
+    <h2 class="dash-block__title" id="dashToday">Today</h2>
+    <div class="stats-grid">
+    {% if session.get('role') == 'admin' %}
+    <div class="stat-card stat-card--hero">
+        <div class="stat-card__icon stat-card__icon--sales">
+            <i class="bi bi-currency-rupee"></i>
+        </div>
+        <div>
+            <div class="stat-card__label">Today's Revenue</div>
+            <div class="stat-card__value">
+                ₹<span id="today-revenue">{{ "%.2f"|format(today_revenue|float) }}</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
     <div class="stat-card">
         {# Bootstrap's calendar-day icon has the word "Fri" drawn into the
            font, so it read Friday on a Tuesday. The real day goes here
@@ -185,23 +257,6 @@
             <div class="stat-card__value" id="today-orders">{{ today_orders }}</div>
         </div>
     </div>
-
-
-    {% if session.get('role') == 'admin' %}
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--sales">
-            <i class="bi bi-currency-rupee"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Today's Revenue</div>
-            <div class="stat-card__value">
-                ₹<span id="today-revenue">{{ "%.2f"|format(today_revenue|float) }}</span>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-
     <div class="stat-card">
         <div class="stat-card__icon stat-card__icon--warning">
             <i class="bi bi-exclamation-triangle-fill"></i>
@@ -211,8 +266,6 @@
             <div class="stat-card__value" id="low-stock">{{ low_stock }}</div>
         </div>
     </div>
-
-
     <div class="stat-card">
         <div class="stat-card__icon stat-card__icon--warning">
             <i class="bi bi-x-circle-fill"></i>
@@ -222,9 +275,54 @@
             <div class="stat-card__value" id="unavailable">{{ unavailable }}</div>
         </div>
     </div>
+    </div>
+</section>
 
-</div>
-
+<!-- ==========================================
+     YOUR MENU
+     The running totals. Worth a glance, not a headline.
+     ========================================== -->
+<section class="dash-block" aria-labelledby="dashMenu">
+    <h2 class="dash-block__title" id="dashMenu">Your menu</h2>
+    <div class="stats-grid stats-grid--quiet">
+    <div class="stat-card">
+        <div class="stat-card__icon">
+            <i class="bi bi-egg-fried"></i>
+        </div>
+        <div>
+            <div class="stat-card__label">Total Food Items</div>
+            <div class="stat-card__value" id="total-foods">{{ total_foods }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__icon stat-card__icon--categories">
+            <i class="bi bi-tags-fill"></i>
+        </div>
+        <div>
+            <div class="stat-card__label">Categories</div>
+            <div class="stat-card__value" id="total-categories">{{ total_categories }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__icon stat-card__icon--orders">
+            <i class="bi bi-receipt-cutoff"></i>
+        </div>
+        <div>
+            <div class="stat-card__label">Total Orders</div>
+            <div class="stat-card__value" id="total-orders">{{ total_orders }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__icon">
+            <i class="bi bi-boxes"></i>
+        </div>
+        <div>
+            <div class="stat-card__label">Inventory Items</div>
+            <div class="stat-card__value" id="total-inventory">{{ total_inventory }}</div>
+        </div>
+    </div>
+    </div>
+</section>
 
 <!-- ==========================================
      QUICK ACTIONS — ONLY 4
@@ -235,14 +333,14 @@
     <div class="panel-header">
         <div>
             <h2><i class="bi bi-lightning-charge-fill"></i> Quick Actions</h2>
-            <p class="panel-subtitle">Open the most-used cafe modules</p>
+            <p class="panel-subtitle">The four places a day at the counter goes</p>
         </div>
     </div>
 
 
     <div class="dashboard-actions">
 
-        <a href="{{ url_for('add_order') }}" class="dashboard-action">
+        <a href="{{ url_for('add_order') }}" class="dashboard-action dashboard-action--order">
             <span class="dashboard-action__icon">
                 <i class="bi bi-cart-plus"></i>
             </span>
@@ -250,10 +348,11 @@
                 <strong>New Order</strong>
                 <small>Take a new customer order</small>
             </span>
+            <i class="bi bi-arrow-right dashboard-action__go" aria-hidden="true"></i>
         </a>
 
 
-        <a href="{{ url_for('inventory') }}" class="dashboard-action">
+        <a href="{{ url_for('inventory') }}" class="dashboard-action dashboard-action--stock">
             <span class="dashboard-action__icon">
                 <i class="bi bi-boxes"></i>
             </span>
@@ -261,10 +360,11 @@
                 <strong>Inventory</strong>
                 <small>Check and update stock</small>
             </span>
+            <i class="bi bi-arrow-right dashboard-action__go" aria-hidden="true"></i>
         </a>
 
 
-        <a href="{{ url_for('kitchen_display') }}" class="dashboard-action">
+        <a href="{{ url_for('kitchen_display') }}" class="dashboard-action dashboard-action--kitchen">
             <span class="dashboard-action__icon">
                 <i class="bi bi-fire"></i>
             </span>
@@ -272,10 +372,11 @@
                 <strong>Kitchen</strong>
                 <small>Today's orders, done and cancelled</small>
             </span>
+            <i class="bi bi-arrow-right dashboard-action__go" aria-hidden="true"></i>
         </a>
 
 
-        <a href="{{ url_for('billing') }}" class="dashboard-action">
+        <a href="{{ url_for('billing') }}" class="dashboard-action dashboard-action--billing">
             <span class="dashboard-action__icon">
                 <i class="bi bi-credit-card-2-front"></i>
             </span>
@@ -283,6 +384,7 @@
                 <strong>Billing Management</strong>
                 <small>Manage bills and payments</small>
             </span>
+            <i class="bi bi-arrow-right dashboard-action__go" aria-hidden="true"></i>
         </a>
 
     </div>

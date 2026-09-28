@@ -432,9 +432,14 @@ try:
           layout["brand"]["left"] < layout["profile"]["left"]
           and layout["brand"]["right"] <= layout["profile"]["left"] + 1,
           "they do not line up: %s" % layout)
-    check("and the menu button sits under the name, not beside it",
-          layout["toggle"]["top"] >= layout["brand"]["bottom"] - 1,
-          "the menu is still on the name's row: %s" % layout)
+    # One row: the menu, the name, then the controls. It was two rows -
+    # the name on one and the buttons under it - which cost a phone 60px
+    # of every screen for nothing a single row could not carry.
+    check("and the menu button leads the same row as the name",
+          layout["toggle"]["right"] <= layout["brand"]["left"] + 1
+          and layout["toggle"]["top"] < layout["brand"]["bottom"]
+          and layout["toggle"]["bottom"] > layout["brand"]["top"],
+          "the menu is not on the name's row, ahead of it: %s" % layout)
     check("and nothing pushes the page sideways",
           layout["scrollWidth"] <= layout["screen"] + 1,
           "the page scrolls sideways by %dpx"
@@ -801,7 +806,9 @@ try:
                     labelled: labelled,
                     widest: widest,
                     screen: window.innerWidth,
-                    stacked: getComputedStyle(row).display === 'block',
+                    // A block or a grid card; anything but a table row.
+                    stacked: ['block', 'grid', 'flex']
+                        .indexOf(getComputedStyle(row).display) !== -1,
                     sideways: wrap.scrollWidth > wrap.clientWidth + 1,
                     rowHeight: Math.round(row.getBoundingClientRect().height)
                 });

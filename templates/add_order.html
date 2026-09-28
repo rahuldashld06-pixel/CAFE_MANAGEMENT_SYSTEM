@@ -711,6 +711,27 @@
     margin-right: 8px;
 }
 
+/* ---- The order that just went, and its ticket ---- */
+.receipt-last {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 12px 20px 0;
+    padding: 9px 10px 9px 12px;
+    border-radius: 10px;
+    background: rgba(143, 187, 153, .12);
+    border: 1px solid rgba(143, 187, 153, .32);
+    color: var(--sage);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.receipt-last[hidden] { display: none; }
+
+.receipt-last span { flex: 1 1 auto; min-width: 0; }
+
+.receipt-last .btn { flex: 0 0 auto; }
+
 /* ---- A large screen: two columns, the order always open ---- */
 @media (min-width: 1401px),
        (min-width: 1025px) and (pointer: fine) {
@@ -806,6 +827,12 @@
     <div class="toast-success" id="orderPlacedToast" style="display:none;">
         <i class="bi bi-check-circle-fill"></i>
         <span id="orderPlacedToastText">Order has been placed.</span>
+        {# The kitchen ticket for the order that just went, if one is
+           wanted. Shown once the server has said which order it is. #}
+        <button type="button" class="btn btn--ghost btn--sm toast-success__action"
+                id="orderPlacedKot" hidden>
+            <i class="bi bi-printer"></i> Print KOT
+        </button>
     </div>
 
     {# Two columns on a large screen: the menu, and the order being
@@ -1029,6 +1056,18 @@
             id="orderSummaryStatus"
             style="display:none;"
             role="status"></div>
+
+        {# The order that went last, with its ticket a press away. It stays
+           until the next order goes, so a cashier who turned to the
+           customer first can still print it. #}
+        <div class="receipt-last" id="receiptLast" hidden>
+            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+            <span id="receiptLastText"></span>
+            <button type="button" class="btn btn--ghost btn--sm"
+                    id="receiptLastKot">
+                <i class="bi bi-printer"></i> Print KOT
+            </button>
+        </div>
 
         <div
             class="order-summary-popup__body"
@@ -1685,7 +1724,7 @@ document.addEventListener('draft:restored', syncHotMirrors);
             statusBox.style.display = "none";
         }
 
-        function showPageToast(message) {
+        function showPageToast(message, keepFor) {
 
             if (!pageToast) return;
 
@@ -1697,9 +1736,44 @@ document.addEventListener('draft:restored', syncHotMirrors);
             if (pageToastText) pageToastText.textContent = message;
             pageToast.style.display = "flex";
 
+            // A new order's notice starts without a button; one is only
+            // offered once the server has said which order it was.
+            const toastKot = document.getElementById("orderPlacedKot");
+            if (toastKot && !keepFor) toastKot.hidden = true;
+
             pageToastHideTimer = setTimeout(function () {
                 pageToast.style.display = "none";
-            }, 5000);
+            }, keepFor || 5000);
+        }
+
+        /* The ticket for the order that has just gone: in the notice,
+           which stays long enough to be pressed, and in the order panel,
+           which keeps it until the next order. */
+        function offerKot(orderId, dailyNo) {
+            const number = dailyNo || orderId;
+
+            function print(button) {
+                if (!(window.CafeShell && window.CafeShell.printKot(orderId))) {
+                    button.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Allow pop-ups to print';
+                }
+            }
+
+            const toastKot = document.getElementById("orderPlacedKot");
+            if (toastKot) {
+                toastKot.onclick = function () { print(toastKot); };
+            }
+            showPageToast("Order #" + number + " is in the kitchen.", 9000);
+            if (toastKot) toastKot.hidden = false;
+
+            const last = document.getElementById("receiptLast");
+            const lastText = document.getElementById("receiptLastText");
+            const lastKot = document.getElementById("receiptLastKot");
+            if (last && lastText && lastKot) {
+                lastText.textContent = "Order #" + number + " is in the kitchen";
+                lastKot.innerHTML = '<i class="bi bi-printer"></i> Print KOT';
+                lastKot.onclick = function () { print(lastKot); };
+                last.hidden = false;
+            }
         }
 
         /* What the stock will be once the order lands, worked out
@@ -1882,6 +1956,10 @@ document.addEventListener('draft:restored', syncHotMirrors);
                                only the database knows - the guess made
                                a moment ago is replaced here. */
                             applyStockUpdates(data.foods);
+
+                            // Which order it was, now the server has said,
+                            // and its kitchen ticket a press away.
+                            if (data.order_id) offerKot(data.order_id, data.daily_no);
 
                         } else {
 
