@@ -168,6 +168,7 @@ def sign_in(user):
     b.evaluate("""
         (function () {
             var f = document.querySelector('form');
+            f.querySelector('[name=cafe_name]').value = 'Draft Cafe';
             f.querySelector('[name=username]').value = %s;
             f.querySelector('[name=password]').value = 'password123';
             f.querySelector('[type=submit]').click();
