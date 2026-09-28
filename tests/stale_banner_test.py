@@ -142,8 +142,11 @@ def wait(expr, what, timeout=20):
 
 
 def banner_on_page():
+    # In the page, or floating in the notice host outside it, where the
+    # shell lifts every message a page brings.
     return b.evaluate(
-        "(document.getElementById('page-view') || document.body).innerText"
+        "((document.getElementById('page-view') || document.body).innerText"
+        " + ' ' + ((document.getElementById('toastHost') || {}).innerText || ''))"
         ".indexOf(%r) !== -1" % BANNER)
 
 
