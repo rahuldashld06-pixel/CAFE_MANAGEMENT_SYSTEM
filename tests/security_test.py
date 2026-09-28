@@ -1228,6 +1228,36 @@ check("and not at all outside production",
       ).headers.get("Strict-Transport-Security"),
       "a development run is pinning browsers to HTTPS")
 
+# The live site was found with APP_ENV=development copied into Render's
+# dashboard: no HSTS, cookies without Secure, no keep-awake. A host names
+# itself in the environment, and that decides it.
+import subprocess                                    # noqa: E402
+_probe = (
+    "import sys; sys.path.insert(0, '.');"
+    "from tests import mysql_shim; mysql_shim.install();"
+    "import logging; logging.disable(50);"
+    "import app as a;"
+    "r = a.app.test_client().get('/login', headers={'X-Forwarded-Proto': 'https'});"
+    "print(a.IS_PRODUCTION, a.app.config['SESSION_COOKIE_SECURE'],"
+    " bool(r.headers.get('Strict-Transport-Security')))")
+
+
+def run_as(**env):
+    full = dict(os.environ, APP_ENV="development", SECRET_KEY="k" * 40)
+    full.pop("RENDER", None)
+    # This suite switches secure cookies off for itself; the question
+    # here is what the app does when nobody has said.
+    full.pop("SESSION_COOKIE_SECURE", None)
+    full.update(env)
+    return subprocess.run([sys.executable, "-c", _probe], env=full, cwd=ROOT,
+                          capture_output=True, text=True).stdout.strip()
+
+
+check("on Render it is production, whatever a copied APP_ENV says",
+      run_as(RENDER="true") == "True True True", run_as(RENDER="true"))
+check("with secure cookies and HSTS; on a laptop it stays development",
+      run_as() == "False False False", run_as())
+
 
 # ==========================================================
 print("\n=== Nothing answers a server error ===")

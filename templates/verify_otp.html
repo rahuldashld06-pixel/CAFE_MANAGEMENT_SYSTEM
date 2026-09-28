@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include "_fonts.html" %}
     <title>Enter your code · {{ platform_name }}</title>
     {% include "_favicon.html" %}
 
@@ -66,7 +67,8 @@
             font-weight: 700;
         }
 
-        .otp-shell h2 {
+        .otp-shell h2,
+        .otp-shell .otp-title {
             margin: 9px 0 8px;
             font-size: 30px;
         }
@@ -182,22 +184,19 @@
     {# Same warm-up as the sign-in screen: admins reach the dashboard through
        this step, so the shell's stylesheet, navigation layer and fonts are
        fetched while they are still typing the code. #}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 
-    <link rel="prefetch" as="style" href="{{ asset_url('css/theme.css') }}">
-    <link rel="prefetch" as="style" href="{{ asset_url('css/style.css') }}">
-    <link rel="prefetch" as="script" href="{{ asset_url('js/instant.js') }}">
-    <link rel="prefetch" as="script" href="{{ asset_url('js/fullscreen.js') }}">
-    <link rel="prefetch" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" crossorigin>
-    <link rel="prefetch" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" crossorigin>
+    <link rel="prefetch" href="{{ asset_url('css/theme.css') }}">
+    <link rel="prefetch" href="{{ asset_url('css/style.css') }}">
+    <link rel="prefetch" href="{{ asset_url('js/instant.js') }}">
+    <link rel="prefetch" href="{{ asset_url('js/fullscreen.js') }}">
+    <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" crossorigin>
 
 </head>
 
 <body>
 
-<div class="otp-shell">
+<div class="otp-shell" role="main">
 
     {% if cafe_branding.logo %}
         <img
@@ -210,7 +209,7 @@
 
     <div class="eyebrow">Cafe Management System</div>
 
-    <h2>Verify it's you</h2>
+    <h1 class="otp-title">Verify it's you</h1>
 
     <p class="subtitle">
         {# Says which address or number it went to, because somebody

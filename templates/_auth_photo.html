@@ -1,0 +1,27 @@
+{# The picture behind the sign-in and register panels.
+
+   It is the biggest thing on those pages, so it is what Largest
+   Contentful Paint times. It used to be a CSS background, which the
+   browser only discovers once the styles are matched against the
+   element - so a preload in <head> stood in for it, and then drifted:
+   the sign-in page preloaded one photo while its stylesheet painted
+   another, and the register page's preload offered a bigger size than
+   the one painted. The browser fetched a picture nobody saw.
+
+   As an <img> in the page itself it is found by the first pass over the
+   HTML, fetched first (fetchpriority="high", never lazy), and the size
+   the browser chooses from srcset is the one it paints. #}
+{% macro auth_photo(photo) -%}
+{%- if photo %}
+<img class="auth-visual__photo" src="{{ photo }}" alt=""
+     fetchpriority="high">
+{%- else %}
+<img class="auth-visual__photo"
+     src="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=640&q=70"
+     srcset="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=640&q=70 640w,
+             https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1100&q=72 1100w"
+     sizes="(max-width: 900px) 100vw, 46vw"
+     width="640" height="800" alt=""
+     fetchpriority="high">
+{%- endif %}
+{%- endmacro %}

@@ -184,25 +184,49 @@ check("the app's scripts get a masked token too",
 # =====================================================================
 print("\n=== 4. The rest of what makes a phone quicker ===")
 # =====================================================================
-def blocking_fonts(html):
-    """Font stylesheets the browser must fetch before it paints anything."""
-    # A <noscript> copy is only for a browser that runs no script, which
-    # is the one that cannot switch the preload over by itself.
-    html = re.sub(r"<noscript>.*?</noscript>", "", html, flags=re.S)
-    return [tag for tag in re.findall(r"<link[^>]+>", html)
-            if "fonts.googleapis.com/css" in tag and 'rel="stylesheet"' in tag]
+def self_hosted_fonts(html):
+    """The typefaces come from this site, swap in, and ask nobody else."""
+    return ("@font-face" in html and "font-display: swap" in html
+            and "/static/fonts/manrope-latin.woff2" in html
+            and "fonts.googleapis" not in html and "fonts.gstatic" not in html)
 
 
 page = owner.get("/orders/add").get_data(as_text=True)
-check("the web fonts do not hold up the first paint",
-      "fonts.googleapis.com/css" in page and not blocking_fonts(page),
-      blocking_fonts(page))
+# From Google they were a DNS lookup and a TLS handshake to two more hosts
+# before a letter could change - and a crawler read the bare hosts named
+# in preconnect hints as broken links.
+check("the web fonts come from this site, and never hold up the first paint",
+      self_hosted_fonts(page))
+check("the reading face is fetched early",
+      re.search(r'<link rel="preload" as="font" type="font/woff2" crossorigin\s+'
+                r'href="/static/fonts/manrope-latin\.woff2', page) is not None)
 menu = app.test_client().get("/m/%s" % application.get_public_token(1)).get_data(as_text=True)
-check("nor on the customer's menu",
-      "fonts.googleapis.com/css" in menu and not blocking_fonts(menu),
-      blocking_fonts(menu))
-check("nor on the sign-in screen", not blocking_fonts(
-    app.test_client().get("/login").get_data(as_text=True)))
+check("so on the customer's menu", self_hosted_fonts(menu))
+check("and on the sign-in screen",
+      self_hosted_fonts(app.test_client().get("/login").get_data(as_text=True)))
+font = owner.get("/static/fonts/manrope-latin.woff2")
+check("the font file itself is served, and kept a long time",
+      font.status_code == 200 and len(font.get_data()) > 10000)
+
+# The picture beside the sign-in form is the largest thing on it, so it
+# is what Largest Contentful Paint times. It was a CSS background, found
+# late, with a preload in <head> standing in for it that had drifted to
+# a different photo altogether.
+for label, path in (("sign-in", "/login"), ("register", "/register")):
+    html = app.test_client().get(path).get_data(as_text=True)
+    photo = re.search(r'<img class="auth-visual__photo"[^>]*>', html, re.S)
+    tag = photo.group(0) if photo else ""
+    check("the %s picture is an image in the page itself" % label,
+          photo is not None and 'class="auth-visual"' in html, tag)
+    check("fetched first, and never lazily",
+          'fetchpriority="high"' in tag and "loading=" not in tag, tag)
+    check("with no preload of some other picture beside it",
+          'rel="preload" as="image"' not in html and "--login-photo" not in html)
+    body = html[html.index("<body"):]
+    first_img = re.search(r"<img[^>]*>", body)
+    check("and the first image the page asks for",
+          first_img is not None and "auth-visual__photo" in first_img.group(0),
+          first_img and first_img.group(0)[:80])
 
 
 print("\n" + "=" * 60)

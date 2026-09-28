@@ -354,6 +354,33 @@ check("answered to anybody, signed in or not",
       "it redirects to %s" % root_icon.headers.get("Location"))
 
 
+print("\n=== What a site scan reads: llms.txt, canonical, landmarks ===")
+# A scan reported llms.txt with no H1 and no links - it was reading the
+# sign-in page the missing file redirected to - and pages with no main
+# landmark and no level-one heading.
+_llms = app.test_client().get("/llms.txt", headers={"X-Forwarded-Proto": "https,http"})
+_text = _llms.get_data(as_text=True)
+check("llms.txt is answered signed out, as plain Markdown",
+      _llms.status_code == 200 and _llms.mimetype == "text/plain"
+      and "Location" not in _llms.headers, (_llms.status_code, _llms.mimetype))
+check("with an H1 title", _text.startswith("# Cafora\n"), _text[:40])
+check("and links to follow, as the visitor's https addresses",
+      "[Sign in](https://localhost/login)" in _text
+      and "(https://localhost/robots.txt)" in _text, _text)
+check("robots.txt points crawlers at it", "Allow: /llms.txt" in
+      app.test_client().get("/robots.txt").get_data(as_text=True))
+
+for _path in ("/login", "/register", "/forgot-password"):
+    _page = app.test_client().get(_path + "?next=/",
+                                  headers={"X-Forwarded-Proto": "https,http"}
+                                  ).get_data(as_text=True)
+    check("%s names one canonical address, without the query" % _path,
+          ('<link rel="canonical" href="https://localhost%s">' % _path) in _page)
+    check("%s has one main landmark and one level-one heading" % _path,
+          _page.count('role="main"') + _page.count("<main") == 1
+          and len(re.findall(r"<h1[\s>]", _page)) == 1)
+
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

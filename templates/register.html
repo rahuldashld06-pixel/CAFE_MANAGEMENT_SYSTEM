@@ -1,30 +1,18 @@
 {% from "_brand_mark.html" import coffee_mark %}
+{% from "_auth_photo.html" import auth_photo %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Set up a cafe: take orders at the counter or from a QR code on the table, and keep stock and billing in one place.">
-    {# The picture behind the panel is the biggest thing on this page,
-       so it is what Largest Contentful Paint times. As a CSS background
-       it was invisible to the preload scanner - the browser only learns
-       of it once the styles are matched against the element. Stated
-       here, it starts loading with the page.
-
-       Pointed at whichever picture will actually be used: the cafe's
-       own if it has uploaded one, otherwise the stock photo, which
-       lives on another host and needs that host found first. #}
-    {%- if cafe_branding.login_photo %}
-    <link rel="preload" as="image" fetchpriority="high"
-          href="{{ cafe_branding.login_photo }}">
-    {%- else %}
+    {% if not cafe_branding.login_photo %}
+    {# The stock photo lives on another host; finding it early helps
+       the <img> below, which is what the browser fetches first. #}
     <link rel="preconnect" href="https://images.unsplash.com" crossorigin>
-    <link rel="preload" as="image" fetchpriority="high"
-          href="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=640&q=70"
-          imagesrcset="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=640&q=70 640w, https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1000&q=85 1600w"
-          imagesizes="(max-width: 900px) 100vw, 50vw">
-    {%- endif %}
+    {% endif %}
     <title>Create an account · {{ platform_name }}</title>
+    <link rel="canonical" href="{{ public_url('register') }}">
     {% include "_favicon.html" %}
 
     {% include "_auth_style.html" %}
@@ -39,20 +27,18 @@
        moment the first real page appears. The pages themselves cannot be
        fetched yet - there is no session until sign-in finishes, so every
        one of them would come back as a redirect to here. #}
-    <link rel="prefetch" as="style" href="{{ asset_url('css/theme.css') }}">
-    <link rel="prefetch" as="style" href="{{ asset_url('css/style.css') }}">
-    <link rel="prefetch" as="script" href="{{ asset_url('js/instant.js') }}">
-    <link rel="prefetch" as="script" href="{{ asset_url('js/fullscreen.js') }}">
+    <link rel="prefetch" href="{{ asset_url('css/theme.css') }}">
+    <link rel="prefetch" href="{{ asset_url('css/style.css') }}">
+    <link rel="prefetch" href="{{ asset_url('js/instant.js') }}">
+    <link rel="prefetch" href="{{ asset_url('js/fullscreen.js') }}">
 </head>
 
 <body>
 
-<div class="auth-shell">
+<div class="auth-shell" role="main">
 
-    <section class="auth-visual"
-        {% if cafe_branding.login_photo %}
-        style="--login-photo: url('{{ cafe_branding.login_photo }}');"
-        {% endif %}>
+    <section class="auth-visual">
+        {{ auth_photo(cafe_branding.login_photo) }}
 
         <div class="brand">
             <span class="brand-mark">

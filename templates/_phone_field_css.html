@@ -1,0 +1,59 @@
+{# The phone field's look. Included inside a <style> in the <head> of
+   every page that can show the field - a <style> in the body is not
+   valid HTML. #}
+    /* Side by side where there is room, the country above the number
+       where there is not. */
+    .phone-field {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 10px;
+    }
+
+    .phone-field .phone-field__number {
+        position: relative;
+        min-width: 0;
+    }
+
+    /* Inside the box, on the left, in the box's own text colour but
+       quieter than what is typed after it. */
+    .phone-field .phone-field__code {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        font-weight: 600;
+        opacity: .7;
+        z-index: 1;
+    }
+
+    .phone-field .phone-field__number input {
+        width: 100%;
+        padding-left: var(--dial-room, 54px);
+        padding-right: 58px;
+    }
+
+    .phone-field .phone-field__count {
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        opacity: .65;
+    }
+
+    .phone-field .phone-field__count[data-state="done"] {
+        opacity: 1;
+        color: #8FBB99;
+    }
+
+    .phone-field__said {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+    }

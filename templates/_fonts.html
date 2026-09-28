@@ -1,0 +1,51 @@
+{#
+  The app's two typefaces - Manrope to read, Fraunces for headlines -
+  served from this site rather than from Google Fonts.
+
+  From Google they cost a DNS lookup and a TLS handshake to two more
+  hosts before a letter could change, most of a second on a phone's
+  mobile data, and they told Google about every visit. From here they
+  come over the connection the page already has, stamped and cached for
+  a year. Each is a variable font, so one file carries every weight;
+  latin-ext is only fetched for a character that needs it (the rupee
+  sign is one). Text draws at once in the fallback face and swaps over.
+
+  The reading face is preloaded: it is on every page from the first
+  line. The headline face is fetched when a headline asks for it.
+#}
+<link rel="preload" as="font" type="font/woff2" crossorigin
+      href="{{ asset_url('fonts/manrope-latin.woff2') }}">
+<style>
+@font-face {
+    font-family: 'Fraunces';
+    font-style: normal;
+    font-weight: 500 700;
+    font-display: swap;
+    src: url({{ asset_url('fonts/fraunces-latin-ext.woff2') }}) format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: 'Fraunces';
+    font-style: normal;
+    font-weight: 500 700;
+    font-display: swap;
+    src: url({{ asset_url('fonts/fraunces-latin.woff2') }}) format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Manrope';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url({{ asset_url('fonts/manrope-latin-ext.woff2') }}) format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: 'Manrope';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url({{ asset_url('fonts/manrope-latin.woff2') }}) format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>

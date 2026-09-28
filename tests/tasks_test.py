@@ -157,6 +157,8 @@ check("their own account is still theirs",
       client.get("/account/password").status_code == 200)
 check("and the order-status bell works for everyone",
       client.get("/api/order-status").status_code == 200)
+check("but it offers them no Done or print buttons they could not use",
+      "canFinishOrders: false" in text(client.get("/billing")))
 
 def hits(query):
     page = text(client.get("/search", query_string={"q": query}))
@@ -208,6 +210,31 @@ team = text(owner.get("/users"))
 check("the team list shows each teammate's tasks",
       re.search(r'data-username="cashy".*?task-chips.*?Dashboard.*?Billing.*?Reports',
                 team, re.S) is not None)
+
+
+# =====================================================================
+print("\n=== 3b. Every button on a page works for whoever can open it ===")
+# =====================================================================
+cook = add("cook", "staff", ["kitchen"])
+client, _ = sign_in("cook")
+owner.post("/categories/add", data={"category_name": "Coffee", "description": "",
+                                    "_csrf_token": csrf(owner)})
+cat = re.search(r'<option value="(\d+)">', text(owner.get("/foods/add"))).group(1)
+owner.post("/foods/add", data={"food_name": "Latte", "category_id": cat, "price": "100",
+                               "quantity": "20", "minimum_stock": "1", "description": "",
+                               "diet": "veg", "_csrf_token": csrf(owner)})
+latte = db("SELECT food_id FROM foods")[0][0]
+owner.post("/orders/add", data={"quantity_%d" % latte: "1", "_csrf_token": csrf(owner)})
+order_id = db("SELECT order_id FROM orders ORDER BY order_id DESC")[0][0]
+client.get("/kitchen")
+cancelled = client.post("/orders/cancel/%d" % order_id,
+                        data={"_csrf_token": csrf(client)},
+                        headers={"X-Requested-With": "XMLHttpRequest"})
+check("the Kitchen screen's own Cancel works for someone given Kitchen",
+      db("SELECT order_status FROM orders WHERE order_id = ?", (order_id,))
+      == [("Cancelled",)], cancelled.status_code)
+check("and the popup offers them Done",
+      "canFinishOrders: true" in text(client.get("/kitchen")))
 
 
 # =====================================================================

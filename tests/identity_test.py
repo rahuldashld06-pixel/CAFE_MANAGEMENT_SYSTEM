@@ -241,11 +241,10 @@ check("the sign-in, register and reset screens share one look",
       % [p for p, page in _screens.items() if 'class="auth-shell' not in page])
 
 check("and none of them waits on its typefaces to draw",
-      all('rel="preload" as="style"' in page
-          and "fonts.googleapis.com/css2" in page
-          and 'rel="stylesheet" href="https://fonts.googleapis' not in page
+      all("@font-face" in page and "font-display: swap" in page
+          and "fonts.googleapis" not in page
           for page in _screens.values()),
-      "a font stylesheet is blocking the first paint of a sign-in screen")
+      "a sign-in screen fetches its typefaces from elsewhere, or waits for them")
 
 
 # ==========================================================

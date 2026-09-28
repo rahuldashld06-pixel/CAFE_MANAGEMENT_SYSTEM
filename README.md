@@ -414,6 +414,14 @@ trip, an order's page two or three instead of eight, and the status check
 one instead of three. An order writes all its dishes in the same few
 trips however many there are, where it was four trips a dish.
 
+The typefaces (Manrope and Fraunces, both open-licensed) are served from
+`static/fonts` rather than Google Fonts: two fewer hosts to find and shake
+hands with before the first letter can change, nothing said to Google about
+each visit, and the reading face preloaded. The picture beside the sign-in
+and register forms, which is what Largest Contentful Paint times there, is
+an `<img>` in the page with `fetchpriority="high"` rather than a CSS
+background the browser only finds late.
+
 On a phone the other half was bytes. Pages, the stylesheet and the
 scripts now go out gzipped to any browser that takes it (about a fifth
 of the size; files are compressed once per version and kept), the web
@@ -503,7 +511,7 @@ tests/colour_browser_test.py Real-browser colour-picker and page-swap suite
 tests/list_search_test.py Real-browser phone-header, list-search and billing-layout suite
 tests/identity_test.py Phone numbers by country, and signing in by email
 tests/security_test.py Headers, login lockout, upload sniffing and tenant isolation
-tests/page_head_test.py robots.txt, the description a shared link shows, and the tab
+tests/page_head_test.py robots.txt, llms.txt, canonical addresses, landmarks, the description a shared link shows, and the tab
 tests/qr_hold_test.py Real-browser suite for the minute before an order is sent
 tests/draft_restore_test.py Real-browser suite for forms that survive a closed browser
 tests/kot_button_test.py Real-browser suite for the Print KOT buttons
@@ -554,7 +562,13 @@ any redirect follows it.
 every response, plus `nosniff`, `frame-ancestors 'none'` (and
 `X-Frame-Options` for anything that does not read CSP),
 `Referrer-Policy`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`.
-HSTS is sent in production over HTTPS only. Taking a card payment hands
+HSTS is sent in production over HTTPS only. Production is also whatever
+runs on a hosting platform (Render, Railway, Heroku, Fly.io name themselves
+in the environment): the live site was once found running with the
+`APP_ENV=development` line of `.env.example` copied into Render's dashboard
+- no HSTS, session cookies without `Secure`, and the keep-awake timer off.
+A copied `development` there is now overridden, with a warning in the log;
+set `APP_ENV=production` (or leave it out) to make that explicit. Taking a card payment hands
 the browser to Razorpay, so that one route gets its own policy rather
 than opening the whole app up.
 
@@ -713,8 +727,8 @@ python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
 python tests/list_search_test.py  # expect PASSED: 109  FAILED: 0
 python tests/identity_test.py     # expect PASSED: 97   FAILED: 0
-python tests/security_test.py     # expect PASSED: 139  FAILED: 0
-python tests/page_head_test.py    # expect PASSED: 89   FAILED: 0
+python tests/security_test.py     # expect PASSED: 141  FAILED: 0
+python tests/page_head_test.py    # expect PASSED: 99   FAILED: 0
 python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
 python tests/draft_restore_test.py # expect PASSED: 35  FAILED: 0
 python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
@@ -724,12 +738,12 @@ python tests/shell_browser_test.py # expect PASSED: 58  FAILED: 0
 python tests/order_type_test.py   # expect PASSED: 45   FAILED: 0
 python tests/review_test.py       # expect PASSED: 46   FAILED: 0
 python tests/menu_marks_test.py   # expect PASSED: 99   FAILED: 0
-python tests/compression_test.py  # expect PASSED: 32   FAILED: 0
+python tests/compression_test.py  # expect PASSED: 42   FAILED: 0
 python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
 python tests/account_fields_browser_test.py # expect PASSED: 26  FAILED: 0
 python tests/sign_in_cafe_test.py # expect PASSED: 41   FAILED: 0
 python tests/table_order_test.py  # expect PASSED: 30   FAILED: 0
-python tests/tasks_test.py        # expect PASSED: 42   FAILED: 0
+python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0
 python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0
 ```
 

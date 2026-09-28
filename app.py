@@ -116,7 +116,22 @@ app.config["CAFE_LOGO"] = os.environ.get("CAFE_LOGO", "")
 # "production" everywhere except your own machine. Controls the fail-fast
 # checks below and the secure-cookie default.
 APP_ENV = os.environ.get("APP_ENV", "production").strip().lower()
-IS_PRODUCTION = APP_ENV not in {"development", "dev", "local", "test"}
+
+# A hosting platform is production whatever APP_ENV says. The live site
+# was found running with APP_ENV=development - the first line of
+# .env.example, copied into the dashboard - and so, on a public HTTPS
+# address: no HSTS, session cookies without Secure, templates re-read
+# from disk on every page, and the keep-awake timer switched off, which
+# is why the first visit after a quiet spell took so long. Each platform
+# names itself in the environment (Render sets RENDER=true), so a host
+# is recognised rather than trusted to be configured.
+HOSTED_ON = next((name for name, flag in (("Render", "RENDER"),
+                                          ("Railway", "RAILWAY_ENVIRONMENT"),
+                                          ("Heroku", "DYNO"),
+                                          ("Fly.io", "FLY_APP_NAME"))
+                  if os.environ.get(flag)), None)
+IS_PRODUCTION = (APP_ENV not in {"development", "dev", "local", "test"}
+                 or HOSTED_ON is not None)
 
 _DEFAULT_DEV_SECRET = "dev-only-change-me"
 _secret_key = os.environ.get("SECRET_KEY", "").strip()
@@ -649,8 +664,6 @@ def _no_store_pages(response):
 # *fetched* from anywhere unexpected, the page cannot be framed, forms
 # cannot post elsewhere, and no plugin or base-tag trick is available.
 _CSP_SELF = "'self'"
-_FONTS = "https://fonts.googleapis.com"
-_FONT_FILES = "https://fonts.gstatic.com"
 _CDN = "https://cdn.jsdelivr.net"
 _PHOTOS = "https://images.unsplash.com"
 
@@ -660,8 +673,10 @@ _BASE_CSP = {
     # Inline style is genuinely needed: the cafe's own colours are an
     # inline style attribute on <html>, and a good deal of layout is
     # written the same way.
-    "style-src": [_CSP_SELF, "'unsafe-inline'", _FONTS, _CDN],
-    "font-src": [_CSP_SELF, _FONT_FILES, _CDN, "data:"],
+    "style-src": [_CSP_SELF, "'unsafe-inline'", _CDN],
+    # The typefaces are served from here (static/fonts); the icon font
+    # still comes from the CDN.
+    "font-src": [_CSP_SELF, _CDN, "data:"],
     # data: for the QR codes and the generated marks; the photo host is
     # the default sign-in backdrop.
     "img-src": [_CSP_SELF, "data:", "blob:", _PHOTOS],
@@ -755,6 +770,26 @@ def _reached_over_https():
                for hop in forwarded.split(","))
 
 
+def public_root():
+    """
+    This site's own address as the visitor typed it - https behind the
+    proxies, where the last hop is plain http and url_for(_external=True)
+    would say http://.
+    """
+    root = request.url_root.rstrip("/")
+    if root.startswith("http://") and _reached_over_https():
+        root = "https://" + root[len("http://"):]
+    return root
+
+
+def public_url(endpoint, **values):
+    """An absolute address for a page, for canonical links and llms.txt."""
+    return public_root() + url_for(endpoint, **values)
+
+
+app.jinja_env.globals["public_url"] = public_url
+
+
 @app.after_request
 def _security_headers(response):
     """
@@ -828,6 +863,11 @@ if IS_PRODUCTION:
         "[%(asctime)s] %(levelname)s in %(module)s: %(message)s"
     ))
     app.logger.addHandler(_handler)
+    if HOSTED_ON and APP_ENV in {"development", "dev", "local", "test"}:
+        app.logger.warning(
+            "APP_ENV=%s is set, but this is running on %s: treated as "
+            "production. Set APP_ENV=production (or remove it) in the "
+            "dashboard to make that explicit.", APP_ENV, HOSTED_ON)
 
 
 def login_required(f):
@@ -3758,7 +3798,7 @@ TASKS = [
       "cancel_order", "complete_order"}),
     ("kitchen", "Kitchen", "bi-fire", "kitchen_display",
      {"kitchen_display", "kitchen_board", "kitchen_item_made",
-      "order_details", "print_kot", "complete_order"}),
+      "order_details", "print_kot", "complete_order", "cancel_order"}),
     ("billing", "Billing", "bi-credit-card-2-front", "billing",
      {"billing", "mark_bill_paid", "start_online_payment",
       "verify_online_payment", "edit_bill", "order_details", "print_bill"}),
@@ -9574,6 +9614,9 @@ def require_login():
         "login", "login_verify_otp", "login_resend_otp",
         "register", "forgot_password", "static", "razorpay_webhook",
         "healthz", "cafe_media", "robots_txt",
+        # What the site is, for a language model - read signed out, like
+        # robots.txt.
+        "llms_txt",
         # The manifest is what lets the site be installed as an app.
         # It falls back to the platform name with no session, so it
         # is safe to answer before sign-in.
@@ -12269,9 +12312,52 @@ def robots_txt():
         "Allow: /$",
         "Allow: /login",
         "Allow: /register",
+        "Allow: /llms.txt",
         "",
     ])
     return Response(rules, mimetype="text/plain")
+
+
+@app.route("/llms.txt")
+def llms_txt():
+    """
+    What this site is, for a language model reading it (llmstxt.org).
+
+    Markdown: a title, a line saying what the site is, and the links worth
+    following. Like robots.txt it is a route, answered before the sign-in
+    guard - asked for signed out, it used to fall through to a redirect,
+    and a checker read the sign-in page's HTML as the file ("missing H1",
+    "no links").
+    """
+    base = public_root()
+    body = "\n".join([
+        "# Cafora",
+        "",
+        "> Cafora runs a café or restaurant: orders at the counter and "
+        "from a QR code on the table, a kitchen screen, stock, billing, "
+        "customer reviews and reports - for each café on its own.",
+        "",
+        "Nearly everything here is behind a sign-in and belongs to one "
+        "café, so there is little for a crawler to read. A café's table "
+        "menu (under /m/) is for the customers sitting at its tables, "
+        "and is not for indexing or training.",
+        "",
+        "## Start here",
+        "",
+        "- [Sign in](%s/login): for a café's owner, admins and staff" % base,
+        "- [Create an account](%s/register): set up a new café or "
+        "restaurant" % base,
+        "- [Reset a password](%s/forgot-password): for owners and "
+        "admins" % base,
+        "",
+        "## Optional",
+        "",
+        "- [robots.txt](%s/robots.txt): what may be crawled" % base,
+        "- [Web app manifest](%s/manifest.webmanifest): installing Cafora "
+        "as an app" % base,
+        "",
+    ])
+    return Response(body, mimetype="text/plain")
 
 
 @app.route("/healthz")

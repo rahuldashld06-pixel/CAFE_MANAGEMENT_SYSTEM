@@ -49,7 +49,7 @@
                name="phone_number"
                value="{{ value or '' }}"
                inputmode="numeric"
-               autocomplete="tel-national"
+               autocomplete="tel"
                placeholder="{{ digits ~ '-digit mobile number' if digits else 'Mobile number' }}"
                {% if required %}required{% endif %}
                aria-describedby="{{ prefix }}phone_hint">
@@ -61,65 +61,6 @@
    description. Nobody sighted needs it - the box says the same thing. #}
 <span id="{{ prefix }}phone_hint" class="phone-field__said"
       data-phone-hint>{{ digits ~ ' digits' if digits else '' }}</span>
-
-<style>
-    /* Side by side where there is room, the country above the number
-       where there is not. */
-    .phone-field {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-        gap: 10px;
-    }
-
-    .phone-field .phone-field__number {
-        position: relative;
-        min-width: 0;
-    }
-
-    /* Inside the box, on the left, in the box's own text colour but
-       quieter than what is typed after it. */
-    .phone-field .phone-field__code {
-        position: absolute;
-        left: 14px;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        font-weight: 600;
-        opacity: .7;
-        z-index: 1;
-    }
-
-    .phone-field .phone-field__number input {
-        width: 100%;
-        padding-left: var(--dial-room, 54px);
-        padding-right: 58px;
-    }
-
-    .phone-field .phone-field__count {
-        position: absolute;
-        right: 14px;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        font-size: 12px;
-        font-variant-numeric: tabular-nums;
-        opacity: .65;
-    }
-
-    .phone-field .phone-field__count[data-state="done"] {
-        opacity: 1;
-        color: #8FBB99;
-    }
-
-    .phone-field__said {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        white-space: nowrap;
-    }
-</style>
 
 <script>
     /* Keeps the dial code and the number of digits in step with the
@@ -173,7 +114,9 @@
             if (shown) shown.textContent = "+" + code;
             makeRoom();
 
-            box.setAttribute("maxlength", String(most));
+            // Room for a number filled in whole - "+<code><number>" - which
+            // is trimmed back to the number as soon as it lands.
+            box.setAttribute("maxlength", String(most + code.length + 1));
             box.setAttribute("placeholder",
                              spoken(wanted) + "-digit mobile number");
             if (said) said.textContent = spoken(wanted) + " digits";
@@ -195,6 +138,14 @@
             /* Digits only. People paste spaces and brackets, and none
                of it is part of the number. */
             var only = (box.value || "").replace(/\D/g, "");
+            // A number filled in whole, country code first: the code is
+            // already beside the box.
+            var code = picker.options[picker.selectedIndex]
+                             .getAttribute("data-code") || "";
+            if (code && only.indexOf(code) === 0
+                    && lengths().indexOf(only.length - code.length) !== -1) {
+                only = only.slice(code.length);
+            }
             if (only !== box.value) box.value = only;
             sync();
         });
