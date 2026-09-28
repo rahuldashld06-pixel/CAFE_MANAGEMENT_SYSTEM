@@ -262,14 +262,14 @@ try:
     chrome = b.evaluate("""
         Math.round(document.querySelector('.topbar').getBoundingClientRect().bottom)
     """)
-    # Two rows, by request: the name and the two controls on the first,
-    # the menu button on the second. Both stay at the top when the page
-    # scrolls, which is the trade that was chosen deliberately.
-    check("the bar stays to two modest rows",
-          0 < chrome < 150, "chrome above content is %spx tall" % chrome)
+    # One row: the menu, the name, and the controls at the right.
+    check("the header is one modest row",
+          0 < chrome < 90, "chrome above content is %spx tall" % chrome)
     check("the sidebar takes no room in the layout while closed",
-          b.evaluate("Math.round(document.querySelector('.main').getBoundingClientRect().top)") < 5,
-          "the page still starts below a nav block")
+          b.evaluate("Math.round(document.querySelector('.main').getBoundingClientRect().left)") < 5
+          and b.evaluate("Math.round(document.querySelector('.main').getBoundingClientRect().top)")
+          <= chrome + 2,
+          "the page starts beside or below a nav block, not under the header")
 
     print("\n=== Tapping the hamburger ===")
     tap("#navToggle")
@@ -354,12 +354,23 @@ try:
     check("the page actually scrolled", after["scrolled"] > 50,
           "only moved %(scrolled)spx - the check below would prove nothing"
           % after)
-    # The bar slides away on the way down and comes back on the way up -
-    # a quarter of a phone screen is too much to hold permanently. What
-    # matters is that it is always one short swipe from reach.
-    check("the bar gets out of the way on the way down",
-          after["top"] < -10,
-          "it stayed at %spx while scrolling down" % after["top"])
+    # One row is little enough to keep, so it stays - and frosts over, so
+    # the page passing under it shows through softly.
+    check("the header stays at the top on the way down",
+          -2 <= after["top"] <= 2,
+          "it is at %spx while scrolling down" % after["top"])
+    check("and turns to glass over the page",
+          b.evaluate("document.documentElement.classList.contains('is-scrolled')")
+          and b.evaluate("""
+              (function () {
+                  var cs = getComputedStyle(document.querySelector('.topbar'));
+                  var filter = cs.backdropFilter || cs.webkitBackdropFilter || '';
+                  // color-mix() reads back as color(srgb ... / a).
+                  return filter.indexOf('blur') > -1
+                         && /rgba\(|\/\s*0?\.\d/.test(cs.backgroundColor);
+              }())
+          """),
+          "the header is still a solid bar with the page scrolled under it")
 
     b.evaluate("window.scrollTo(0, Math.max(0, window.scrollY - 300))")
     time.sleep(0.6)
@@ -369,7 +380,7 @@ try:
             return JSON.stringify({top: Math.round(r.top)});
         })()
     """))
-    check("and comes straight back on the way up",
+    check("and is still there on the way up",
           -2 <= back["top"] <= 2,
           "it is at %spx after scrolling back up" % back["top"])
     check("the hamburger is tappable again once it is back",
@@ -450,15 +461,15 @@ try:
 
     b.evaluate("window.scrollTo(0, document.body.scrollHeight)")
     time.sleep(0.6)
-    check("it goes away with the bar on the way down",
+    check("it stays with the header on the way down",
           int(b.evaluate(
               "Math.round(document.querySelector('.topbar-brand')"
-              ".getBoundingClientRect().bottom)")) < 10,
-          "it stayed on screen while scrolling down")
+              ".getBoundingClientRect().top)")) >= 0,
+          "the name scrolled away with the page")
 
     b.evaluate("window.scrollTo(0, Math.max(0, window.scrollY - 300))")
     time.sleep(0.6)
-    check("and returns with it on the way up",
+    check("and is still there on the way up",
           int(b.evaluate(
               "Math.round(document.querySelector('.topbar-brand')"
               ".getBoundingClientRect().top)")) >= -2,
@@ -608,10 +619,11 @@ try:
                      ".overflowY") in ("auto", "scroll"),
           "the drawer scrolls as one block")
 
-    print("\n=== The page's own title stays while the page scrolls ===")
-    # Scrolling a long list used to leave nothing on screen saying which
-    # page you were on. The page's title stays at the top while the
-    # content passes underneath it.
+    print("\n=== A large screen: the header across the top, the rail down the side ===")
+    # The header runs the full width above the rail, like any site's, and
+    # stays while the page scrolls under it. The page's own title belongs
+    # to the page and scrolls with it; the tab and the rail still say
+    # where you are.
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=680,
            deviceScaleFactor=1, mobile=False)
     b.call("Emulation.setTouchEmulationEnabled", enabled=False)
@@ -635,57 +647,53 @@ try:
     check("the page actually scrolled", scrolled > 100,
           "only reached %dpx - the checks below would prove nothing"
           % scrolled)
-    # A large screen has no bar across the top any more: what it held -
-    # the profile and the full-screen button - sits at the foot of the
-    # sidebar with Order Status, and the page's own title takes the top.
-    check("there is no bar across the top of a large screen",
-          b.evaluate("getComputedStyle(document.querySelector('.topbar'))"
-                     ".display") == "none",
-          "the top bar is still drawn on a 1440px screen")
-    check("the page title is still on screen, at the very top",
-          -2 <= box(".page-header", "top") <= 2
-          and box(".page-header", "bottom") < 680,
-          "the title is at %dpx" % box(".page-header", "top"))
-    check("and it still says which page this is",
+    check("the header runs the full width of a large screen",
+          box(".topbar", "left") <= 0
+          and box(".topbar", "right") >= 1438,
+          "it spans %d to %d" % (box(".topbar", "left"), box(".topbar", "right")))
+    check("and stays at the top while the page scrolls",
+          -2 <= box(".topbar", "top") <= 2,
+          "it is at %dpx" % box(".topbar", "top"))
+    check("the rail starts under it, not beside it",
+          box("#appSidebar", "top") >= box(".topbar", "bottom") - 1,
+          "the rail reaches up to %dpx, under a %dpx header"
+          % (box("#appSidebar", "top"), box(".topbar", "bottom")))
+    check("the page's own title scrolled away with its page",
+          box(".page-header", "bottom") < box(".topbar", "bottom"),
+          "the title is still pinned at %dpx" % box(".page-header", "top"))
+    check("and it says which page this is",
           "Food Management" in title, "it reads %r" % title)
 
-    foot = b.evaluate("""
+    import json as _json
+    placed = _json.loads(b.evaluate("""
         (function () {
-            var foot = document.getElementById('sidebarFoot');
-            var me = document.getElementById('profileTrigger');
-            var box = me.getBoundingClientRect();
-            var side = document.getElementById('appSidebar')
-                               .getBoundingClientRect();
+            var bar = document.querySelector('.topbar');
             return JSON.stringify({
-                inFoot: foot.contains(me),
-                inside: box.left >= side.left - 1 && box.right <= side.right + 1,
-                low: box.bottom > window.innerHeight - 120,
-                full: foot.contains(document.getElementById('fullscreenBtn')),
-                status: foot.contains(document.getElementById('orderStatusFab'))
+                profile: bar.contains(document.getElementById('profileTrigger')),
+                full: bar.contains(document.getElementById('fullscreenBtn')),
+                status: bar.contains(document.getElementById('orderStatusFab')),
+                search: bar.contains(document.getElementById('topSearchInput')),
+                brand: getComputedStyle(bar.querySelector('.topbar-brand')).display
             });
         }())
-    """)
-    import json as _json
-    foot = _json.loads(foot)
-    check("the profile is at the foot of the sidebar",
-          foot["inFoot"] and foot["inside"] and foot["low"],
-          "the profile is not where the sidebar ends: %s" % foot)
-    check("with the full-screen button and Order Status beside it",
-          foot["full"] and foot["status"],
-          "one of them was left behind: %s" % foot)
+    """))
+    check("the profile, full screen and Order Status are in the header",
+          placed["profile"] and placed["full"] and placed["status"],
+          "one of them is somewhere else: %s" % placed)
+    check("with the search box and the cafe's name",
+          placed["search"] and placed["brand"] != "none", placed)
 
-    # Narrowed to a phone, all three go back to the bar and the corner -
-    # there the sidebar is a drawer that is shut - and the title's offset
-    # is the bar's real, measured height.
+    # Narrowed to a phone, the header is the same header, and the rail's
+    # offset is its real, measured height.
     b.call("Emulation.setDeviceMetricsOverride", width=390, height=780,
            deviceScaleFactor=2, mobile=True)
     time.sleep(0.8)
-    check("on a phone the profile is back in the top bar",
+    check("on a phone the profile is still in the header",
           b.evaluate("document.querySelector('.topbar')"
                      ".contains(document.getElementById('profileTrigger'))"),
-          "the profile stayed in the drawer, out of sight")
+          "the profile went into the drawer, out of sight")
 
-    check("the measured bar height is what the title uses",
+    check("the measured header height is what the layout uses",
           b.evaluate("""
               (function () {
                   var declared = parseInt(getComputedStyle(
@@ -719,9 +727,9 @@ try:
           int(b.evaluate("Math.round(window.scrollY)")) > 100,
           "hiding the scrollbar stopped the page scrolling")
 
-    print("\n=== On a phone the title bar costs one row, not half the screen ===")
-    # The header stacks on a narrow screen and its actions go full width.
-    # Sticky, that was most of the viewport on every page.
+    print("\n=== On a phone the title costs one row, not half the screen ===")
+    # The page header stacks on a narrow screen and its actions go full
+    # width. It is kept to one row, and it scrolls with its page.
     b.call("Emulation.setDeviceMetricsOverride", **PHONE)
     b.call("Emulation.setTouchEmulationEnabled", enabled=True,
            maxTouchPoints=5)
@@ -731,32 +739,29 @@ try:
     time.sleep(0.7)
 
     header_height = box(".page-header", "height")
-    check("the sticky title is a single row",
+    check("the title is a single row",
           header_height <= 90,
           "it is %dpx tall, which is most of the screen" % header_height)
-    # Two rows of bar plus the page title is about a quarter of a phone
-    # screen - the cost of keeping the menu and the profile one tap away
-    # at all times.
-    check("the content starts below both bars, inside a quarter of the screen",
+    # The header and the title together, before any content: well inside
+    # a quarter of a phone screen.
+    check("the content starts inside a quarter of the screen",
           box(".page-header", "bottom") <= 215,
           "content does not begin until %dpx down"
           % box(".page-header", "bottom"))
 
-    # Scrolled down the bar is away, so the title takes the top itself.
+    # Scrolled down, the title goes with the page and the header stays.
     b.evaluate("window.scrollTo(0, 700)")
     time.sleep(0.7)
-    check("with the bar away, the title takes the top",
-          -2 <= box(".page-header", "top") <= 2,
-          "the title sits at %dpx, leaving a gap where the bar was"
-          % box(".page-header", "top"))
+    check("scrolled, the title goes with its page",
+          box(".page-header", "bottom") <= box(".topbar", "bottom"),
+          "the title is still at %dpx" % box(".page-header", "top"))
+    check("and the header stays",
+          -2 <= box(".topbar", "top") <= 2,
+          "the header is at %dpx" % box(".topbar", "top"))
 
-    # Scrolled back up, the two meet again.
-    b.evaluate("window.scrollTo(0, Math.max(0, window.scrollY - 300))")
-    time.sleep(0.7)
-    gap = box(".page-header", "top") - box(".topbar", "bottom")
-    check("and once the bar is back the two meet again", -2 <= gap <= 2,
-          "there is a %dpx gap between them" % gap)
-    check("and the name is still readable up there",
+    b.evaluate("window.scrollTo(0, 0)")
+    time.sleep(0.5)
+    check("and the name is readable at the top",
           b.evaluate("""
               (function () {
                   var h = document.querySelector('.page-header h1');
@@ -852,12 +857,24 @@ try:
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=900,
            deviceScaleFactor=1, mobile=False)
     time.sleep(0.6)
-    check("the hamburger is hidden again",
-          b.evaluate("getComputedStyle(document.getElementById('navToggle')).display") == "none")
-    check("the sidebar is back on screen permanently", sidebar_on_screen())
-    check("and the top bar's copy of the brand steps aside",
+    # The menu button stays: on a large screen it opens the rail out into
+    # the full guide, the way YouTube's does.
+    check("the menu button is in the header here too",
+          b.evaluate("getComputedStyle(document.getElementById('navToggle')).display") != "none")
+    check("the rail is on screen permanently",
+          b.evaluate("""
+              (function () {
+                  var s = document.getElementById('appSidebar');
+                  var r = s.getBoundingClientRect();
+                  return getComputedStyle(s).visibility === 'visible'
+                         && r.left >= -1 && r.width > 60
+                         && getComputedStyle(s).position !== 'fixed';
+              }())
+          """),
+          "the side is not a rail on a desktop")
+    check("and the sidebar's own copy of the brand steps aside",
           b.evaluate("getComputedStyle("
-                     "document.querySelector('.topbar-brand')).display")
+                     "document.querySelector('.sidebar-brand')).display")
           == "none",
           "the cafe name is drawn twice on a desktop")
 

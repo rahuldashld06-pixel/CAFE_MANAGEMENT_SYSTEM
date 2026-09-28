@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}{% if query %}{{ query }} - Search{% else %}Search{% endif %}{% endblock %}
+
+{% block content %}
+
+<style>
+    .search-page { max-width: 980px; }
+
+    .search-again {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 22px;
+    }
+
+    .search-again input {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 46px;
+        padding: 0 16px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-pill);
+        background: var(--espresso-900);
+        color: var(--cream);
+        font: inherit;
+        font-size: 15px;
+    }
+
+    .search-again input:focus {
+        outline: none;
+        border-color: var(--copper);
+        box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .18);
+    }
+
+    .search-group { margin-bottom: 18px; }
+
+    .search-group__title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 10px 4px;
+        font-family: var(--font-body);
+        font-size: 11.5px;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: var(--cream-faint);
+    }
+
+    .search-list {
+        margin: 0;
+        padding: 6px;
+        list-style: none;
+        border: 1px solid var(--espresso-800);
+        border-radius: var(--radius-lg);
+        background: var(--surface-lift), var(--espresso-900);
+    }
+
+    .search-hit {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 12px;
+        border-radius: var(--radius-md);
+        color: var(--cream);
+    }
+
+    .search-hit:hover,
+    .search-hit:focus-visible {
+        background: var(--espresso-850);
+    }
+
+    .search-hit__icon {
+        display: grid;
+        place-items: center;
+        flex: 0 0 40px;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: rgba(var(--copper-rgb), .14);
+        color: var(--copper-light);
+        font-size: 17px;
+        overflow: hidden;
+    }
+
+    .search-hit__icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .search-hit__text { flex: 1 1 auto; min-width: 0; }
+
+    .search-hit__name {
+        display: block;
+        font-weight: 700;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .search-hit__meta {
+        display: block;
+        font-size: 12.5px;
+        color: var(--cream-faint);
+    }
+
+    .search-hit__aside {
+        flex: 0 0 auto;
+        font-weight: 700;
+        color: var(--copper-light);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .search-hit__go { color: var(--cream-faint); }
+
+    .search-empty {
+        display: grid;
+        justify-items: center;
+        gap: 8px;
+        padding: 44px 16px;
+        text-align: center;
+        color: var(--cream-faint);
+    }
+
+    .search-empty i { font-size: 30px; color: var(--espresso-600); }
+</style>
+
+<div class="search-page">
+
+    <div class="page-header">
+        <div>
+            <div class="eyebrow">Search</div>
+            <h1>{% if query %}Results for &ldquo;{{ query }}&rdquo;{% else %}Search{% endif %}</h1>
+            <p class="page-subtitle">
+                {% if not query %}Pages, food, categories, orders{% if session.get('role') == 'admin' %} and people{% endif %}.
+                {% elif total == 1 %}One match.
+                {% else %}{{ total }} matches.{% endif %}
+            </p>
+        </div>
+    </div>
+
+    <form class="search-again" method="GET" action="{{ url_for('search') }}"
+          role="search" data-no-draft>
+        <input type="search" name="q" value="{{ query }}"
+               placeholder="A dish, a page, or an order number like #12"
+               aria-label="Search" autocomplete="off">
+        <button type="submit" class="btn btn--primary">
+            <i class="bi bi-search"></i> Search
+        </button>
+    </form>
+
+    {% if query and not total %}
+        <div class="search-empty">
+            <i class="bi bi-search"></i>
+            <p>Nothing matches &ldquo;{{ query }}&rdquo;. Try part of a dish's name, or an order number.</p>
+        </div>
+    {% endif %}
+
+    {% if found.pages %}
+    <section class="search-group">
+        <h2 class="search-group__title"><i class="bi bi-compass"></i> Pages</h2>
+        <ul class="search-list">
+            {% for hit in found.pages %}
+            <li><a class="search-hit" href="{{ hit.url }}">
+                <span class="search-hit__icon"><i class="bi {{ hit.icon }}"></i></span>
+                <span class="search-hit__text"><span class="search-hit__name">{{ hit.label }}</span></span>
+                <i class="bi bi-arrow-right search-hit__go" aria-hidden="true"></i>
+            </a></li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if found.orders %}
+    <section class="search-group">
+        <h2 class="search-group__title"><i class="bi bi-receipt"></i> Orders</h2>
+        <ul class="search-list">
+            {% for hit in found.orders %}
+            <li><a class="search-hit" href="{{ hit.url }}">
+                <span class="search-hit__icon"><i class="bi bi-receipt-cutoff"></i></span>
+                <span class="search-hit__text">
+                    <span class="search-hit__name">Order #{{ hit.number }}</span>
+                    <span class="search-hit__meta">{{ hit.status }} &middot; {{ hit.when }}</span>
+                </span>
+                <span class="search-hit__aside">₹{{ "%.2f"|format(hit.total) }}</span>
+            </a></li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if found.foods %}
+    <section class="search-group">
+        <h2 class="search-group__title"><i class="bi bi-egg-fried"></i> Food</h2>
+        <ul class="search-list">
+            {% for hit in found.foods %}
+            <li><a class="search-hit" href="{{ hit.url }}">
+                <span class="search-hit__icon">
+                    {% if hit.image %}<img src="{{ hit.image }}" alt="">{% else %}<i class="bi bi-egg-fried"></i>{% endif %}
+                </span>
+                <span class="search-hit__text">
+                    <span class="search-hit__name">{{ hit.name }}</span>
+                    <span class="search-hit__meta">{{ hit.category }} &middot; {% if hit.quantity > 0 %}{{ hit.quantity }} in stock{% else %}Out of stock{% endif %}</span>
+                </span>
+                <span class="search-hit__aside">₹{{ "%.2f"|format(hit.price) }}</span>
+            </a></li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if found.categories %}
+    <section class="search-group">
+        <h2 class="search-group__title"><i class="bi bi-tags"></i> Categories</h2>
+        <ul class="search-list">
+            {% for hit in found.categories %}
+            <li><a class="search-hit" href="{{ hit.url }}">
+                <span class="search-hit__icon"><i class="bi bi-tag"></i></span>
+                <span class="search-hit__text"><span class="search-hit__name">{{ hit.name }}</span></span>
+                <i class="bi bi-arrow-right search-hit__go" aria-hidden="true"></i>
+            </a></li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if found.people %}
+    <section class="search-group">
+        <h2 class="search-group__title"><i class="bi bi-people"></i> People</h2>
+        <ul class="search-list">
+            {% for hit in found.people %}
+            <li><a class="search-hit" href="{{ hit.url }}">
+                <span class="search-hit__icon"><i class="bi bi-person"></i></span>
+                <span class="search-hit__text">
+                    <span class="search-hit__name">{{ hit.name }}</span>
+                    <span class="search-hit__meta">@{{ hit.username }} &middot; {{ hit.role }}</span>
+                </span>
+                <i class="bi bi-arrow-right search-hit__go" aria-hidden="true"></i>
+            </a></li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+</div>
+
+{% endblock %}

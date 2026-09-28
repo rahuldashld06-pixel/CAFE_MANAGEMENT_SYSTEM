@@ -3248,227 +3248,6 @@ body.nav-locked {
 .brand-preview .brand-glyph { width: 62%; height: 62%; }
 
 /* ============================================================
-   The page's own title stays while the page scrolls
-
-   Opening Billing and scrolling a long history used to leave nothing
-   on screen saying which page you were on. The heading and its
-   actions stay at the top now and the content passes underneath.
-
-   Two bars stack: the top bar with the profile, then the page title
-   under it. --topbar-h is the measured height of the first, set on
-   :root by the shell so this does not have to guess it. The value
-   here is only the fallback for the moment before that runs.
-   ============================================================ */
-:root {
-    --topbar-h: 64px;
-}
-
-.topbar {
-    position: sticky;
-    top: 0;
-    z-index: 1150;
-    /* Bleeds across the content gutter, or what scrolls past shows in
-       the margins either side. */
-    margin-left: calc(var(--main-pad-x) * -1);
-    margin-right: calc(var(--main-pad-x) * -1);
-    padding: 10px var(--main-pad-x);
-    background: var(--espresso-950);
-}
-
-.page-header {
-    position: sticky;
-    /* Where the bar above ends. --title-top is the measured height while
-       the bar is showing and zero while it has slid away, so the title
-       moves up into the space rather than leaving a gap. */
-    top: var(--title-top, var(--topbar-h));
-    z-index: 1100;
-    margin-left: calc(var(--main-pad-x) * -1);
-    margin-right: calc(var(--main-pad-x) * -1);
-    padding: 4px var(--main-pad-x) 14px;
-    background: var(--espresso-950);
-    border-bottom: 1px solid var(--espresso-850);
-}
-
-/* The drawer sits above both bars, so neither may paint over its
-   backdrop while it is open. */
-.app-shell.nav-open .topbar,
-.app-shell.nav-open .page-header {
-    z-index: 1;
-}
-
-/* ==========================================================
-   Frosted glass
-
-   The bars that float over the page - the top bar, the page
-   title bar, and the controls sitting in them.
-
-   Everything here is built from the theme's own surface and
-   accent colours, so a cafe that has chosen its own
-   background gets glass made of that background rather than
-   a grey pane laid on top of it.
-
-   The solid colour stays the rule and the glass is layered
-   on top only where the browser supports it. Without that,
-   a browser with no backdrop-filter shows a see-through bar
-   with the page's own text sliding about underneath it,
-   which is a good deal worse than no effect at all.
-   ========================================================== */
-
-:root {
-    /* How much of the page shows through, and how far it is blurred.
-       Enough to read as glass; not so much that text sitting on it has
-       to compete with whatever is passing behind. */
-    /* Raised from 86%. At that strength the page behind still read
-       through the bar clearly enough to compete with what is written
-       on it; this keeps the frosting without the traffic. */
-    --glass-tint: 93%;
-    --glass-blur: 28px;
-    --glass-saturate: 150%;
-}
-
-@supports (backdrop-filter: blur(1px)) or
-          (-webkit-backdrop-filter: blur(1px)) {
-
-    .topbar,
-    .page-header {
-        background: color-mix(in srgb,
-                    var(--espresso-950) var(--glass-tint), transparent);
-        -webkit-backdrop-filter: blur(var(--glass-blur))
-                                 saturate(var(--glass-saturate));
-        backdrop-filter: blur(var(--glass-blur))
-                         saturate(var(--glass-saturate));
-    }
-
-    /* The edges, which are what say glass when nothing happens to be
-       passing behind the pane - on a wide screen the page under the bar
-       is mostly empty dark, and a blur with nothing to blur looks like
-       a flat panel.
-
-       Light along the top, the cafe's accent along the bottom, and a
-       shadow below saying the bar sits above the page rather than in
-       it. Drawn as shadows rather than a pseudo-element: a ::before
-       would have needed position:relative on bars that are
-       position:sticky, and quietly overriding that is a strange way to
-       lose a sticky header. */
-    .topbar,
-    .page-header {
-        box-shadow:
-            inset 0 1px 0 rgba(var(--copper-rgb), .10),
-            inset 0 -1px 0 rgba(var(--copper-rgb), .24),
-            0 14px 34px -24px rgba(0, 0, 0, .9);
-    }
-
-    /* The faintest fall of tone down the pane. Glass is never one flat
-       colour; this is about two percent of one, which is enough to stop
-       it reading as paint.
-
-       ::before, not ::after. The top bar's ::after is already spoken
-       for - it is a zero-height, full-width flex item used as a row
-       break, which is the only way flexbox has of saying "wrap here",
-       and it is what puts the menu button on its own row on a phone.
-       Taking it for a gradient put the menu back up beside the cafe's
-       name. */
-    .topbar::before,
-    .page-header::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background: linear-gradient(
-            180deg,
-            rgba(var(--copper-rgb), .045) 0%,
-            rgba(var(--copper-rgb), 0) 62%);
-    }
-
-    /* The ::after needs a positioned ancestor and already has one:
-       both bars are position:sticky at every width, which measures as
-       sticky on a 1440px desktop too. Setting position:relative here
-       to "be safe" would override that and cost both sticky bars -
-       which is exactly how they were nearly lost once already. */
-
-    /* The controls that ride on the glass are made of the same
-       material, a shade brighter so they read as raised rather than
-       cut out of it. */
-    .profile-trigger,
-    .page-header .btn--ghost,
-    .page-header__actions .btn--ghost {
-        background: color-mix(in srgb,
-                    var(--espresso-800) 58%, transparent);
-        -webkit-backdrop-filter: blur(12px) saturate(140%);
-        backdrop-filter: blur(12px) saturate(140%);
-        border-color: color-mix(in srgb,
-                      var(--cream) 14%, transparent);
-    }
-
-    .profile-trigger:hover,
-    .page-header .btn--ghost:hover,
-    .page-header__actions .btn--ghost:hover {
-        background: color-mix(in srgb,
-                    var(--espresso-700) 66%, transparent);
-        border-color: color-mix(in srgb,
-                      var(--copper) 55%, transparent);
-    }
-
-    /* The two floating buttons, so the whole floating layer is one
-       material rather than glass bars above solid pills. */
-    .order-status-fab,
-    .order-summary-trigger {
-        -webkit-backdrop-filter: blur(14px) saturate(150%);
-        backdrop-filter: blur(14px) saturate(150%);
-    }
-
-    /* The menu that drops out of the profile chip belongs to the same
-       layer, and a solid panel hanging off a glass one looks like two
-       different surfaces. */
-    .profile-dropdown {
-        background: color-mix(in srgb,
-                    var(--espresso-900) 88%, transparent);
-        -webkit-backdrop-filter: blur(22px) saturate(150%);
-        backdrop-filter: blur(22px) saturate(150%);
-    }
-}
-
-/* ============================================================
-   The masthead starts where it ends up
-
-   Both bars are sticky, so on a wide screen they are flush with
-   the top of the window the moment anything is scrolled: the 34px
-   of page padding above the top bar and the 22px between the two
-   collapse, and the whole top of the app tightens by 56px.
-
-   That tightened state is the one worth looking at, and it was
-   only ever reachable by scrolling. A page opened and left alone
-   showed a band of bare background above the bar and a gap between
-   the bars that closed the instant you touched the wheel - the
-   same shell looking like two different designs depending on
-   whether anybody had moved yet.
-
-   Starting them where they are going to end up means the top of
-   the app never moves at all here. Nothing shifts under the
-   pointer on the first scroll, and every page is the shape it is
-   going to keep from the moment it opens.
-
-   Wide screens only, and this is exactly the set of screens the
-   slide-away leaves alone. On a phone and on a tablet the bar gets
-   out of the way on the way down the page and comes back on the
-   way up, and the room above it is part of how that reads.
-   ============================================================ */
-@media (min-width: 1401px),
-       (min-width: 1025px) and (pointer: fine) {
-
-    .main {
-        padding-top: 0;
-    }
-
-    /* The page title bar sticks at the top bar's lower edge, so any
-       gap here is space that exists until the first scroll and never
-       comes back. */
-    .topbar {
-        margin-bottom: 0;
-    }
-}
-
-/* ============================================================
    No scrollbars anywhere
 
    Everything still scrolls - wheel, trackpad, touch, keyboard and
@@ -3598,55 +3377,6 @@ body.nav-locked {
     color: var(--cream);
 }
 
-/* ============================================================
-   The top bar on a small screen
-
-   Two rows rather than one cramped line:
-
-     [cup  Cafora] ............ [full screen] [profile]
-     [menu]
-
-   The name leads, the two controls sit in the right corner, and the
-   menu button drops to the left of a second row. Both rows stay at
-   the top when the page scrolls - the menu is the only way off a page
-   on a phone, so it cannot be the part that scrolls away.
-
-   Order is set rather than markup rearranged: the same bar has to read
-   left-to-right as menu-then-name on a desktop, where there are no rows
-   to speak of.
-   ============================================================ */
-@media (max-width: 1024px),
-       (max-width: 1400px) and (pointer: coarse) {
-
-    .topbar {
-        flex-wrap: wrap;
-        align-items: center;
-        row-gap: 8px;
-    }
-
-    .topbar-brand {
-        order: 1;
-        margin-right: auto;
-    }
-
-    .fullscreen-btn { order: 2; margin-left: 0; }
-    .profile-menu { order: 3; }
-
-    /* A zero-height full-width item forces everything after it onto a
-       new line. Flexbox has no other way to say "break here". */
-    .topbar::after {
-        content: "";
-        order: 4;
-        flex-basis: 100%;
-        height: 0;
-    }
-
-    .nav-toggle {
-        order: 5;
-        margin-right: auto;
-    }
-}
-
 /* The day name in the Today card, in place of an icon. Small caps-ish
    and tight, so three letters sit in the same round slot an icon had. */
 .day-chip {
@@ -3671,43 +3401,6 @@ body.nav-locked {
    nothing scrolls sideways: the whole bill, or food, or stock row
    is on screen at once.
    ============================================================ */
-/* One row again, on a screen that is short rather than narrow.
-
-   The bar splits onto two rows below 1024px because the cafe's name and
-   the menu button do not share a line on a phone held upright. Rotate
-   it and there are 844px to play with, where they share one easily -
-   and the second row was costing about a row and a half of bills on a
-   screen with 390px to spend. */
-@media (orientation: landscape) and (max-height: 520px) {
-    .topbar {
-        flex-wrap: nowrap;
-        row-gap: 0;
-        padding-top: 6px;
-        padding-bottom: 6px;
-    }
-
-    /* The spacer that forced the break. */
-    .topbar::after {
-        display: none;
-    }
-
-    .nav-toggle {
-        order: 0;
-        margin-right: 10px;
-    }
-
-    .topbar-brand { margin-right: auto; }
-
-    /* The mark and the name, smaller. */
-    .topbar-brand__logo,
-    .topbar-brand img {
-        width: 30px;
-        height: 30px;
-    }
-
-    .topbar-brand__name { font-size: 15px; }
-}
-
 /* Cards, not a table, on a narrow screen.
 
    Not on a short one. A phone held sideways is about 844px across,
@@ -3818,35 +3511,6 @@ body.nav-locked {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-/* ============================================================
-   The top bar gets out of the way
-
-   Two rows of bar plus the page title is a lot of a phone screen to
-   hold permanently. It slides away when the page is scrolled down
-   and comes back the moment it is scrolled up, so it is always one
-   short swipe from reach and never in the way while reading.
-
-   The page title takes its place at the top rather than leaving a
-   gap: --title-top is the measured height of the bar while it is
-   showing, and zero while it is away.
-   ============================================================ */
-@media (max-width: 1024px),
-       (max-width: 1400px) and (pointer: coarse) {
-
-    .topbar {
-        transition: transform .22s ease;
-        will-change: transform;
-    }
-
-    :root.bar-away .topbar {
-        transform: translateY(-105%);
-    }
-
-    .page-header {
-        transition: top .22s ease;
-    }
 }
 
 /* ---------- The table code, on the settings page ---------- */
@@ -4611,184 +4275,12 @@ body.tour-open { overflow: hidden; }
 }
 
 /* ============================================================
-   A large screen has no top bar
-
-   On a laptop, desktop or TV the bar across the top held the
-   full-screen button and the profile, and cost every page 64px.
-   Both now sit at the foot of the sidebar with Order Status
-   above them (moved there by a script in base.html), and every
-   page's own title bar takes the top of the screen.
-
-   Colours are untouched: everything here reuses the rules the
-   same elements already had, and changes only where they sit.
-   Phones and tablets - the drawer layout - are left exactly as
-   they were.
-   ============================================================ */
-.sidebar-foot { display: none; }
-
-@media (min-width: 1401px),
-       (min-width: 1025px) and (pointer: fine) {
-
-    .topbar { display: none; }
-
-    /* The page title bar sticks at the very top now, and brings its own
-       breathing room rather than borrowing the bar's. */
-    .main { padding-top: 0; }
-
-    .page-header {
-        top: 0;
-        padding-top: 22px;
-    }
-
-    /* A notice above a page's title would otherwise touch the top of the
-       screen. */
-    #page-view > .flash-stack:first-child { margin-top: 18px; }
-
-    /* ---- The foot of the sidebar ---- */
-    .sidebar-foot {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        flex: 0 0 auto;
-        margin-top: 14px;
-        padding-top: 14px;
-        border-top: 1px solid var(--espresso-800);
-    }
-
-    .sidebar-foot__me {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        min-width: 0;
-    }
-
-    .sidebar-foot__status:empty { display: none; }
-
-    /* Order Status: the same copper pill, at the full width of the
-       sidebar instead of floating over the corner of it. */
-    .sidebar-foot .order-status-fab {
-        position: static;
-        width: 100%;
-        justify-content: flex-start;
-        transform: none;
-        box-shadow: none;
-        border-radius: var(--radius-md);
-        padding: 11px 14px;
-    }
-
-    .sidebar-foot .order-status-fab:hover { transform: none; }
-
-    .sidebar-foot .order-status-fab__badge { margin-left: auto; }
-
-    /* The profile: avatar, name and role across the sidebar, with the
-       menu opening upwards from it. */
-    .sidebar-foot .profile-menu {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-    .sidebar-foot .profile-trigger {
-        width: 100%;
-        border-radius: var(--radius-md);
-        padding: 7px 10px 7px 7px;
-    }
-
-    .sidebar-foot .profile-id {
-        flex: 1 1 auto;
-        min-width: 0;
-        text-align: left;
-    }
-
-    .sidebar-foot .profile-name,
-    .sidebar-foot .profile-role {
-        display: block;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    /* Upwards, and no wider than the sidebar: the sidebar clips what
-       hangs outside it, and a menu cut off at its edge is worse than a
-       narrower one. */
-    .sidebar-foot .profile-dropdown {
-        top: auto;
-        bottom: calc(100% + 10px);
-        left: 0;
-        right: auto;
-        width: calc(100% + 48px);
-        max-width: 224px;
-        max-height: calc(100vh - 150px);
-        overflow-y: auto;
-        transform: translateY(6px);
-    }
-
-    .sidebar-foot .profile-menu.open .profile-dropdown {
-        transform: translateY(0);
-    }
-
-    .sidebar-foot .fullscreen-btn {
-        flex: 0 0 auto;
-        margin-left: 0;
-    }
-}
-
-/* ============================================================
    The refresh: what is new rather than changed
 
    One section, at the end, so it is clear what the redesign
    added. The palette is unchanged - every colour is one of the
    theme's own variables.
    ============================================================ */
-
-/* ---- The phone's top bar, on one row ----
-   Menu, then the cafe's name, then the controls - one row of 60px
-   instead of two. The name gives way to the controls and ends in an
-   ellipsis, which is what the second row was protecting against: a
-   long cafe name pushing the menu or the profile off the screen. */
-@media (max-width: 1024px),
-       (max-width: 1400px) and (pointer: coarse) {
-
-    .topbar {
-        flex-wrap: nowrap;
-        row-gap: 0;
-        gap: 10px;
-        padding-top: 9px;
-        padding-bottom: 9px;
-    }
-
-    .topbar::after { display: none; }
-
-    .nav-toggle {
-        order: 0;
-        margin-right: 0;
-        flex: 0 0 auto;
-    }
-
-    .topbar-brand {
-        order: 1;
-        flex: 1 1 auto;
-        min-width: 0;
-        margin-right: 0;
-    }
-
-    .topbar-brand__name {
-        display: block;
-        min-width: 0;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-    }
-
-    .topbar-brand__name small {
-        display: block;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .fullscreen-btn { order: 2; flex: 0 0 auto; }
-    .profile-menu { order: 3; flex: 0 0 auto; }
-}
 
 /* ---- Lists as compact cards on a phone ----
    Each row was a column of "LABEL ........ value" lines, nine to a
@@ -4961,9 +4453,14 @@ body.tour-open { overflow: hidden; }
     color: var(--berry) !important;
 }
 
+/* Square, and sized by itself rather than by its icon: the icon font
+   arrives after the first paint, and a button whose width is its glyph
+   is a sliver until then. */
 .kitchen-print {
-    padding-left: 9px;
-    padding-right: 9px;
+    min-width: 38px;
+    justify-content: center;
+    padding-left: 8px;
+    padding-right: 8px;
 }
 
 /* ---- A page's eyebrow and its line of explanation ----
@@ -5127,38 +4624,584 @@ body.tour-open { overflow: hidden; }
     }
 }
 
-/* ---- The title meets the bar on a phone and a tablet ----
-   A 12px strip of page between the two read as a gap in the chrome
-   rather than as breathing room: two lines with nothing between them. */
+
+/* ============================================================
+   The shell: a header across the top, a guide down the side
+
+   The header runs the full width above everything, in the page's
+   own colour and with no line under it, so at the top of a page the
+   two are one surface. Once the page scrolls under it the header
+   frosts over - it is glass from then on, and the page shows
+   through it softly.
+
+   Down the side, on a laptop or desktop: a rail of icons with their
+   names under them, which the menu button opens out into the full
+   list with its sections, and folds back. On a phone or tablet the
+   side is the drawer it has always been, and the header stays.
+   ============================================================ */
+:root {
+    --topbar-h: 64px;
+    --guide-rail: 84px;
+    --guide-open: 244px;
+    --guide-w: var(--guide-rail);
+}
+
+:root.guide-full { --guide-w: var(--guide-open); }
+
+.sr-only {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.app-shell {
+    display: grid;
+    grid-template-columns: var(--guide-w) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+}
+
+/* ---- The header ---- */
+.topbar {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    position: sticky;
+    top: 0;
+    z-index: 1150;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 16px;
+    min-height: 64px;
+    margin: 0;
+    padding: 0 20px 0 14px;
+    background: var(--espresso-950);
+    border: 0;
+    box-shadow: none;
+    transition: background-color .2s ease, box-shadow .2s ease;
+}
+
+.topbar::before,
+.topbar::after { display: none; }
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    :root.is-scrolled .topbar {
+        background: color-mix(in srgb, var(--espresso-950) 72%, transparent);
+        -webkit-backdrop-filter: blur(18px) saturate(160%);
+        backdrop-filter: blur(18px) saturate(160%);
+        box-shadow: 0 10px 30px -22px rgba(0, 0, 0, .9);
+    }
+}
+
+@supports (padding: max(0px)) {
+    .topbar {
+        padding-top: max(0px, env(safe-area-inset-top));
+        min-height: calc(64px + env(safe-area-inset-top));
+    }
+}
+
+.topbar__start {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.topbar__end {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+/* The menu button: three bars on nothing, a soft disc behind it on hover. */
+.nav-toggle,
+.topbar .nav-toggle {
+    display: inline-flex;
+    order: 0;
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    margin: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+}
+
+.nav-toggle:hover,
+.nav-toggle[aria-expanded="true"] { background: var(--espresso-850); }
+
+/* The mark and the name, like any site's own. */
+.topbar-brand,
+.topbar .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    order: 0;
+    flex: 0 1 auto;
+    min-width: 0;
+    margin: 0;
+    color: var(--cream);
+}
+
+.topbar-brand__mark {
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+}
+
+.topbar-brand__name {
+    font-family: var(--font-display);
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: -.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.topbar-brand__name small { display: none; }
+
+/* ---- Search ---- */
+.topbar-search {
+    display: flex;
+    align-items: center;
+    flex: 0 1 620px;
+    min-width: 0;
+    margin: 0 auto;
+}
+
+.topbar-search__field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 42px;
+    padding: 0 12px 0 16px;
+    border: 1px solid var(--espresso-700);
+    border-right: 0;
+    border-radius: 999px 0 0 999px;
+    background: var(--espresso-900);
+    color: var(--cream-faint);
+    cursor: text;
+}
+
+.topbar-search__field:focus-within {
+    border-color: var(--copper);
+    box-shadow: inset 0 0 0 1px var(--copper);
+}
+
+.topbar-search__field input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--cream);
+    font: inherit;
+    font-size: 14.5px;
+    outline: none;
+    box-shadow: none;
+}
+
+.topbar-search__field input::placeholder { color: var(--cream-faint); }
+
+.topbar-search__key {
+    padding: 1px 7px;
+    border: 1px solid var(--espresso-700);
+    border-radius: 6px;
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--cream-faint);
+}
+
+.topbar-search__go {
+    display: grid;
+    place-items: center;
+    flex: 0 0 62px;
+    height: 42px;
+    border: 1px solid var(--espresso-700);
+    border-radius: 0 999px 999px 0;
+    background: var(--espresso-850);
+    color: var(--cream-dim);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.topbar-search__go:hover { background: var(--espresso-800); color: var(--cream); }
+
+.topbar-search__back,
+.topbar .icon-btn.topbar-search-open { display: none; }
+
+/* ---- The things at the right ---- */
+.topbar-create {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 40px;
+    margin-right: 4px;
+    padding: 0 16px 0 12px;
+    border: 1px solid var(--espresso-700);
+    border-radius: 999px;
+    background: var(--espresso-850);
+    color: var(--cream);
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.topbar-create i { font-size: 17px; }
+
+.topbar-create:hover { background: var(--espresso-800); border-color: var(--espresso-600); }
+
+.topbar .icon-btn,
+.topbar .order-status-fab {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--cream-dim);
+    font-size: 19px;
+    box-shadow: none;
+    transform: none;
+    z-index: auto;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+.topbar .fullscreen-btn[hidden] { display: none; }
+
+.topbar .icon-btn:hover,
+.topbar .order-status-fab:hover {
+    background: var(--espresso-850);
+    color: var(--cream);
+    transform: none;
+}
+
+.topbar .order-status-fab__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.topbar .order-status-fab__badge {
+    position: absolute;
+    top: 3px;
+    right: 1px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    font-size: 10px;
+    box-shadow: 0 0 0 2px var(--espresso-950);
+}
+
+/* The profile: the picture alone, as on any site. The name and role are
+   still read out, and written at the head of the menu it opens. */
+.topbar .profile-trigger {
+    gap: 0;
+    padding: 3px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+.topbar .profile-trigger:hover { background: var(--espresso-850); }
+
+.topbar .profile-caret { display: none; }
+
+.topbar .profile-id {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.topbar .profile-avatar {
+    width: 34px;
+    height: 34px;
+}
+
+.topbar .profile-dropdown { top: calc(100% + 8px); }
+
+/* Order Status drops from the header, beside the bell that opened it. */
+.order-status-overlay {
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: calc(var(--topbar-h) + 4px) 18px 18px;
+    background: rgba(0, 0, 0, .3);
+}
+
+/* ---- Where the page itself starts ----
+   The title scrolls with its page now; only the header stays. */
+.page-header {
+    position: static;
+    top: auto;
+    z-index: auto;
+    margin: 0 0 22px;
+    padding: 18px 0 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+.page-header::before,
+.page-header::after { display: none; }
+
+.main {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    --main-pad-x: 32px;
+    padding: 4px var(--main-pad-x) 56px;
+}
+
+.app-watermark {
+    top: var(--topbar-h);
+    left: var(--guide-w);
+}
+
+/* ---- The guide, on a laptop or desktop ---- */
+@media (min-width: 1401px),
+       (min-width: 1025px) and (pointer: fine) {
+
+    .sidebar {
+        grid-column: 1;
+        grid-row: 2;
+        position: sticky;
+        top: var(--topbar-h);
+        align-self: start;
+        width: var(--guide-w);
+        height: calc(100vh - var(--topbar-h));
+        padding: 4px 8px 16px;
+        background: var(--espresso-950);
+        border: 0;
+        overflow: hidden;
+    }
+
+    .sidebar::before,
+    .sidebar::after,
+    .sidebar-brand { display: none; }
+
+    .sidebar-nav {
+        gap: 2px;
+        padding: 0;
+    }
+
+    /* The rail: each icon over its name. */
+    .nav-section { display: none; }
+
+    .nav-link {
+        flex-direction: column;
+        justify-content: center;
+        gap: 6px;
+        padding: 14px 2px 11px;
+        border-radius: 12px;
+        color: var(--cream-dim);
+        font-size: 10.5px;
+        font-weight: 600;
+        line-height: 1.2;
+        text-align: center;
+        box-shadow: none;
+    }
+
+    .nav-link i {
+        width: auto;
+        font-size: 20px;
+        color: var(--cream-dim);
+    }
+
+    .nav-link:hover {
+        background: var(--espresso-850);
+        color: var(--cream);
+        transform: none;
+    }
+
+    .nav-link.active {
+        background: rgba(var(--copper-rgb), .14);
+        color: var(--cream);
+        box-shadow: none;
+    }
+
+    .nav-link.active i { color: var(--copper-light); }
+
+    /* The full guide: a row each, in sections. */
+    :root.guide-full .sidebar { padding: 4px 12px 20px; }
+
+    :root.guide-full .sidebar-nav { overflow-y: auto; }
+
+    :root.guide-full .nav-link {
+        flex-direction: row;
+        justify-content: flex-start;
+        gap: 20px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        text-align: left;
+    }
+
+    :root.guide-full .nav-link i {
+        width: 22px;
+        font-size: 18px;
+    }
+
+    :root.guide-full .nav-link.active {
+        background: var(--espresso-850);
+        font-weight: 700;
+    }
+
+    :root.guide-full .nav-section {
+        display: block;
+        margin: 12px 4px 6px;
+        padding: 14px 10px 0;
+        border-top: 1px solid var(--espresso-800);
+        font-size: 11.5px;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: var(--cream-faint);
+    }
+}
+
+/* ---- The drawer, on a phone or tablet ---- */
 @media (max-width: 1024px),
        (max-width: 1400px) and (pointer: coarse) {
-    .topbar { margin-bottom: 0; }
+
+    .app-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto 1fr;
+    }
+
+    .main {
+        grid-column: 1;
+        --main-pad-x: 18px;
+        padding: 0 var(--main-pad-x) 40px;
+    }
+
+    .app-watermark { left: 0; }
+
+    .topbar {
+        gap: 10px;
+        padding-right: 12px;
+        padding-left: 8px;
+    }
+
+    .topbar-search { flex: 1 1 auto; margin: 0 4px; }
+
+    .topbar-search__key { display: none; }
+
+    .topbar-create { padding: 0 12px; }
+
+    .topbar-create span { display: none; }
+
+    /* The drawer's own sections, labelled. */
+    .nav-section {
+        display: block;
+        margin: 10px 8px 4px;
+        padding-top: 10px;
+        border-top: 1px solid var(--espresso-800);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: var(--cream-faint);
+    }
 }
 
-/* ---- A header whose buttons are the point of the page ----
-   The order page's two print buttons cannot give up their words the
-   way "+ Add" can, and three buttons beside a title do not fit a phone.
-   So the title has its row and the buttons share the next one. */
-@media (max-width: 820px) {
-    .page-header--wrap .page-header__actions {
-        width: 100%;
-        flex-wrap: nowrap;
+/* ---- A phone: search is an icon that opens across the header ---- */
+@media (max-width: 760px) {
+
+    .topbar {
+        gap: 4px;
+        padding-right: 8px;
+        padding-left: 4px;
     }
 
-    .page-header--wrap .page-header__actions .btn {
-        width: auto;
-        flex: 1 1 0;
-        min-width: 0;
+    .topbar__start { gap: 4px; }
+
+    .topbar-brand__mark { flex-basis: 30px; width: 30px; height: 30px; }
+
+    .topbar-brand__name { font-size: 19px; }
+
+    .topbar-create { display: none; }
+
+    .topbar-search { display: none; }
+
+    .topbar .icon-btn.topbar-search-open { display: inline-grid; }
+
+    .topbar__end { gap: 0; }
+
+    .topbar .icon-btn,
+    .topbar .order-status-fab { width: 40px; height: 40px; font-size: 18px; }
+
+    .topbar.search-open .topbar-search {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        display: flex;
+        gap: 6px;
+        margin: 0;
+        padding: max(0px, env(safe-area-inset-top)) 10px 0 4px;
+        background: var(--espresso-950);
+    }
+
+    .topbar.search-open .topbar-search__back {
+        display: inline-grid;
+        place-items: center;
+        flex: 0 0 42px;
+        width: 42px;
+        height: 42px;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--cream);
+        font-size: 19px;
+    }
+
+    .topbar.search-open .topbar-search__go { flex-basis: 52px; }
+
+    .page-header { padding-top: 12px; margin-bottom: 16px; }
+
+    .order-status-overlay {
+        justify-content: center;
+        padding: calc(var(--topbar-h) + 4px) 8px 8px;
     }
 }
 
-@media (max-width: 560px) {
-    .page-header.page-header--wrap {
-        flex-wrap: wrap;
-        row-gap: 10px;
-    }
-
-    .page-header--wrap > div:first-child {
-        flex: 1 1 100%;
-    }
+@media (max-width: 360px) {
+    .topbar-brand__name { font-size: 17px; }
 }

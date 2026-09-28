@@ -1808,6 +1808,9 @@ _COLUMN_MIGRATIONS = [
     # When a kitchen screen last said it was watching. Stale means
     # nobody is there, and the other screens take the job back.
     ("cafes", "kitchen_seen_at", "DATETIME NULL"),
+    # When somebody last signed in, for the team list. Stamped at sign-in
+    # only; a request after that writes nothing.
+    ("users", "last_login_at", "DATETIME NULL"),
     # Per-café tax rate. 5.00 is what every bill was hard-coded to before
     # this was configurable, so existing cafés keep their current totals.
     ("cafes", "tax_percent", "DECIMAL(5,2) NOT NULL DEFAULT 5.00"),
@@ -3320,6 +3323,9 @@ STAFF_ALLOWED_ENDPOINTS = {
     # The screen that lives in the kitchen, and its own feed.
     "kitchen_display", "kitchen_board",
     "kitchen_item_made",
+    # The box in the top bar. Its results are held to what each role can
+    # open, so being able to search shows nobody anything new.
+    "search",
 }
 
 
@@ -5287,6 +5293,240 @@ def stock_alerts(cursor, owner_id):
     }
 
 
+# ---------------------------------------------------------------------
+# The dashboard's picture of a period
+#
+# Every figure here counts a day the way the rest of the app already
+# does - the day an order or a bill is stamped with, against today's
+# date - so the dashboard cannot disagree with Billing or Reports about
+# what happened today. Sales are paid bills of orders that were not
+# cancelled, which is what Reports calls sales. Only the hours on the
+# curve are read on the cafe's own clock, because that is the clock the
+# people reading them work to.
+# ---------------------------------------------------------------------
+DASHBOARD_PERIODS = {
+    "today": {"label": "Today", "days": 1,
+              "versus": "vs. this time yesterday"},
+    "week": {"label": "Last 7 days", "days": 7,
+             "versus": "vs. the 7 days before"},
+    "month": {"label": "Last 30 days", "days": 30,
+              "versus": "vs. the 30 days before"},
+}
+LIVE_ORDER_ROWS = 5
+POPULAR_ROWS = 5
+
+
+def stored_stamp(value):
+    """A stored timestamp as a naive UTC datetime, whatever shape it came in."""
+    if not value:
+        return None
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+    return None
+
+
+def percent_change(now, before):
+    """How far now is from before, in percent; None with nothing to compare."""
+    if not before:
+        return None
+    return round((now - before) / before * 100.0, 1)
+
+
+def hour_label(moment):
+    return "%d %s" % (moment.hour % 12 or 12, "AM" if moment.hour < 12 else "PM")
+
+
+def dashboard_insights(cursor, owner_id, period):
+    key = period if period in DASHBOARD_PERIODS else "today"
+    spec = DASHBOARD_PERIODS[key]
+    days = spec["days"]
+    # The day on the clock the rows are stamped with. On the server that
+    # is the same day CURDATE() gives; on a machine that is not on UTC it
+    # is still the day the stamps belong to.
+    now = utc_now()
+    today = now.date()
+    first = today - timedelta(days=days - 1)
+    before = first - timedelta(days=days)
+
+    # One statement for all three figures and the curve, over this period
+    # and the one before it. A day of margin at the start: the day a row
+    # belongs to is decided below, not by the database.
+    cursor.execute("""
+        SELECT o.order_date, o.order_status,
+               b.total_amount AS bill_total, b.payment_status, b.bill_date
+        FROM orders o
+        LEFT JOIN bills b ON b.order_id = o.order_id
+        WHERE o.user_id = %s
+          AND o.order_date >= %s
+    """, (owner_id, datetime.combine(before - timedelta(days=1),
+                                     datetime.min.time())))
+
+    figures = {side: {"sales": 0.0, "paid": 0, "orders": 0}
+               for side in ("now", "before")}
+    by_day, by_hour = {}, {}
+
+    def side_of(stamp):
+        if stamp is None:
+            return None
+        day = stamp.date()
+        if first <= day <= today:
+            return "now"
+        if before <= day < first:
+            # Today is not over, so it is set against the same part of
+            # yesterday rather than all of it - otherwise every morning
+            # would read as a slump.
+            if days == 1 and stamp.time() > now.time():
+                return None
+            return "before"
+        return None
+
+    for row in cursor.fetchall():
+        if (row["order_status"] or "").lower() == "cancelled":
+            continue
+        placed = stored_stamp(row["order_date"])
+        side = side_of(placed)
+        if side:
+            figures[side]["orders"] += 1
+
+        if row["bill_total"] is None or \
+                (row["payment_status"] or "").lower() != "paid":
+            continue
+        billed = stored_stamp(row["bill_date"]) or placed
+        side = side_of(billed)
+        if not side:
+            continue
+        amount = float(row["bill_total"] or 0)
+        figures[side]["sales"] += amount
+        figures[side]["paid"] += 1
+        if side == "now":
+            by_day[billed.date()] = by_day.get(billed.date(), 0.0) + amount
+            if days == 1:
+                hour = as_cafe_time(billed).replace(
+                    minute=0, second=0, microsecond=0)
+                by_hour[hour] = by_hour.get(hour, 0.0) + amount
+
+    # ---- the curve ----
+    points = []
+    if days == 1:
+        this_hour = cafe_now().replace(minute=0, second=0, microsecond=0)
+        start = this_hour.replace(hour=min(9, this_hour.hour))
+        if by_hour:
+            start = min(start, min(by_hour))
+        if this_hour - start < timedelta(hours=5):
+            start = this_hour - timedelta(hours=5)
+        step = start
+        while step <= this_hour:
+            points.append({"label": hour_label(step),
+                           "value": round(by_hour.get(step, 0.0), 2)})
+            step += timedelta(hours=1)
+    else:
+        for offset in range(days):
+            day = first + timedelta(days=offset)
+            label = (day.strftime("%a") if days <= 7
+                     else "%d %s" % (day.day, day.strftime("%b")))
+            points.append({"label": label,
+                           "value": round(by_day.get(day, 0.0), 2)})
+
+    peak = max(points, key=lambda p: p["value"]) if points else None
+    if not peak or peak["value"] <= 0:
+        story = "No paid bills yet"
+    elif days == 1:
+        story = "Busiest at %s so far" % peak["label"]
+    else:
+        story = "Best day: %s" % peak["label"]
+
+    def average(side):
+        paid = figures[side]["paid"]
+        return figures[side]["sales"] / paid if paid else 0.0
+
+    # ---- today's orders, open ones first ----
+    cursor.execute("""
+        SELECT o.order_id, o.daily_no, o.order_status, o.source,
+               o.total_amount,
+               (SELECT COALESCE(SUM(oi.quantity), 0)
+                  FROM order_items oi
+                 WHERE oi.order_id = o.order_id) AS items,
+               (SELECT COUNT(*) FROM orders p
+                 WHERE p.user_id = o.user_id AND p.order_day = o.order_day
+                   AND p.order_status = 'Pending') AS waiting
+        FROM orders o
+        WHERE o.user_id = %s AND o.order_day = %s
+        ORDER BY CASE WHEN o.order_status = 'Pending' THEN 0 ELSE 1 END,
+                 o.order_id DESC
+        LIMIT %s
+    """, (owner_id, date.today(), LIVE_ORDER_ROWS))
+    live, waiting = [], 0
+    for row in cursor.fetchall():
+        waiting = int(row["waiting"] or 0)
+        live.append({
+            "order_id": row["order_id"],
+            "number": row["daily_no"] or row["order_id"],
+            "status": row["order_status"] or "Pending",
+            "source": "Table QR" if row["source"] == "qr" else "At the counter",
+            "items": int(row["items"] or 0),
+            "total": float(row["total_amount"] or 0),
+        })
+
+    # ---- what sold best over the period ----
+    cursor.execute("""
+        SELECT oi.food_id,
+               MAX(COALESCE(f.food_name, oi.item_name)) AS name,
+               MAX(c.category_name) AS category,
+               MAX(f.image_version) AS image_version,
+               MAX(CASE WHEN f.image_blob IS NOT NULL THEN 1 ELSE 0 END)
+                   AS has_image,
+               SUM(oi.quantity) AS sold,
+               SUM(oi.subtotal) AS takings
+        FROM order_items oi
+        INNER JOIN orders o ON o.order_id = oi.order_id
+        LEFT JOIN foods f ON f.food_id = oi.food_id
+        LEFT JOIN categories c ON c.category_id = f.category_id
+        WHERE o.user_id = %s
+          AND LOWER(COALESCE(o.order_status, '')) != 'cancelled'
+          AND o.order_date >= %s
+          AND oi.food_id IS NOT NULL
+        GROUP BY oi.food_id
+        ORDER BY sold DESC, takings DESC
+        LIMIT %s
+    """, (owner_id, datetime.combine(first, datetime.min.time()),
+          POPULAR_ROWS))
+    popular = [{
+        "name": row["name"] or "Removed item",
+        "category": row["category"] or UNCATEGORISED_LABEL,
+        "image": (food_image_url(row["food_id"], row["image_version"])
+                  if row["has_image"] else None),
+        "sold": int(row["sold"] or 0),
+        "takings": float(row["takings"] or 0),
+    } for row in cursor.fetchall()]
+
+    return {
+        "period": key,
+        "label": spec["label"],
+        "versus": spec["versus"],
+        "sales": {"value": round(figures["now"]["sales"], 2),
+                  "change": percent_change(figures["now"]["sales"],
+                                           figures["before"]["sales"])},
+        "orders": {"value": figures["now"]["orders"],
+                   "change": percent_change(figures["now"]["orders"],
+                                            figures["before"]["orders"])},
+        "average": {"value": round(average("now"), 2),
+                    "change": percent_change(average("now"),
+                                             average("before"))},
+        "curve": points,
+        "story": story,
+        "live": live,
+        "waiting": waiting,
+        "popular": popular,
+    }
+
+
 UNCATEGORISED_LABEL = "Other"
 
 # How far back "hot selling" looks, and how many items it lifts to the top
@@ -7142,6 +7382,198 @@ def dashboard_stats():
             connection.close()
 
 
+@app.route("/api/dashboard-insights")
+def dashboard_insights_feed():
+    """The dashboard's curve, live orders, best sellers and comparisons."""
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        return jsonify(dashboard_insights(
+            cursor, scope_user_id(), request.args.get("period", "today")))
+    except mysql.connector.Error as error:
+        return jsonify({"error": database_error(error, "the dashboard")}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+# ---------------------------------------------------------------------
+# Search, from the box in the top bar
+#
+# Pages first - "tax" should find the page that sets it - then the
+# cafe's own things. Everything is scoped the way the page it links to
+# is scoped, and a place somebody cannot open is never offered to them.
+# ---------------------------------------------------------------------
+SEARCH_PAGES = [
+    # endpoint, label, icon, other words it answers to, admin only
+    ("home", "Dashboard", "bi-speedometer2",
+     "home overview today sales figures", True),
+    ("categories", "Categories", "bi-tags", "menu groups sections", False),
+    ("foods", "Food Management", "bi-egg-fried",
+     "foods menu dishes items prices photos", False),
+    ("inventory", "Inventory", "bi-boxes",
+     "stock restock quantity shelf", False),
+    ("add_order", "New Order", "bi-cart-plus",
+     "order counter till take sell", False),
+    ("kitchen_display", "Kitchen", "bi-fire",
+     "kitchen tickets kot cooking orders", False),
+    ("billing", "Billing", "bi-credit-card-2-front",
+     "bills payments paid receipts cash upi card", False),
+    ("reports", "Reports", "bi-bar-chart-line",
+     "sales analytics totals", True),
+    ("users", "User Management", "bi-people",
+     "users staff accounts team people", True),
+    ("change_password", "Change Password", "bi-shield-lock",
+     "password account security", False),
+    ("account_photo", "Profile Photo", "bi-person-circle",
+     "profile photo picture avatar", False),
+    ("branding", "Name & Symbol", "bi-bookmark-star",
+     "branding name logo symbol tagline", True),
+    ("tax_settings", "Tax & Discount", "bi-percent",
+     "tax discount gst rates", True),
+    ("timezone_settings", "Time Zone", "bi-clock", "time zone clock", True),
+    ("theme_settings", "Colours", "bi-palette",
+     "colours colors theme palette", True),
+    ("qr_settings", "Table QR Code", "bi-qr-code",
+     "qr code table menu customers", True),
+]
+SEARCH_ROWS = 12
+
+
+def like_pattern(text):
+    """text as a LIKE pattern that matches it anywhere, taken literally.
+
+    '!' is the escape rather than a backslash, which MySQL reads inside a
+    string literal and the SQLite stand-in does not - one character that
+    means the same thing to both."""
+    escaped = (text.replace("!", "!!").replace("%", "!%")
+               .replace("_", "!_"))
+    return "%" + escaped + "%"
+
+
+@app.route("/search")
+def search():
+    query = (request.args.get("q") or "").strip()[:80]
+    admin = session.get("role") == "admin"
+    found = {"pages": [], "foods": [], "categories": [], "orders": [],
+             "people": []}
+
+    if query:
+        words = query.lower().split()
+        for endpoint, label, icon, extra, admin_only in SEARCH_PAGES:
+            if admin_only and not admin:
+                continue
+            haystack = (label + " " + extra).lower()
+            if all(word in haystack for word in words):
+                found["pages"].append({"label": label, "icon": icon,
+                                       "url": url_for(endpoint)})
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(dictionary=True)
+            owner = scope_user_id()
+            pattern = like_pattern(query)
+
+            cursor.execute("""
+                SELECT f.food_id, f.food_name, f.price, f.image_version,
+                       (f.image_blob IS NOT NULL) AS has_image,
+                       c.category_name, COALESCE(i.quantity, 0) AS quantity
+                FROM foods f
+                LEFT JOIN categories c ON c.category_id = f.category_id
+                LEFT JOIN inventory i ON i.food_id = f.food_id
+                WHERE f.user_id = %s
+                  AND (f.food_name LIKE %s ESCAPE '!'
+                       OR f.description LIKE %s ESCAPE '!'
+                       OR c.category_name LIKE %s ESCAPE '!')
+                ORDER BY f.food_name
+                LIMIT %s
+            """, (owner, pattern, pattern, pattern, SEARCH_ROWS))
+            for row in cursor.fetchall():
+                found["foods"].append({
+                    "name": row["food_name"],
+                    "category": row["category_name"] or UNCATEGORISED_LABEL,
+                    "price": float(row["price"] or 0),
+                    "quantity": int(row["quantity"] or 0),
+                    "image": (food_image_url(row["food_id"],
+                                             row["image_version"])
+                              if row["has_image"] else None),
+                    "url": url_for("edit_food", food_id=row["food_id"]),
+                })
+
+            cursor.execute("""
+                SELECT category_id, category_name
+                FROM categories
+                WHERE user_id = %s AND category_name LIKE %s ESCAPE '!'
+                ORDER BY category_name
+                LIMIT %s
+            """, (owner, pattern, SEARCH_ROWS))
+            for row in cursor.fetchall():
+                found["categories"].append({
+                    "name": row["category_name"],
+                    "url": url_for("edit_category",
+                                   category_id=row["category_id"]),
+                })
+
+            # "#12" or "12": today's order 12, as the kitchen calls it, or
+            # the order with that id.
+            number = query.lstrip("#").strip()
+            if number.isdigit() and len(number) <= 9:
+                cursor.execute("""
+                    SELECT order_id, daily_no, order_status, total_amount,
+                           order_date, order_day
+                    FROM orders
+                    WHERE user_id = %s
+                      AND ((daily_no = %s AND order_day = %s)
+                           OR order_id = %s)
+                    ORDER BY order_id DESC
+                    LIMIT 5
+                """, (owner, int(number), date.today(), int(number)))
+                for row in cursor.fetchall():
+                    found["orders"].append({
+                        "number": row["daily_no"] or row["order_id"],
+                        "status": row["order_status"] or "Pending",
+                        "total": float(row["total_amount"] or 0),
+                        "when": format_order_time(row["order_date"]),
+                        "url": url_for("order_details",
+                                       order_id=row["order_id"]),
+                    })
+
+            if admin:
+                cursor.execute("""
+                    SELECT user_id, username, full_name, role
+                    FROM users
+                    WHERE cafe_id = %s
+                      AND (full_name LIKE %s ESCAPE '!'
+                           OR username LIKE %s ESCAPE '!')
+                    ORDER BY full_name
+                    LIMIT %s
+                """, (get_current_cafe_id(), pattern, pattern, SEARCH_ROWS))
+                for row in cursor.fetchall():
+                    found["people"].append({
+                        "name": row["full_name"] or row["username"],
+                        "username": row["username"],
+                        "role": (row["role"] or "").capitalize(),
+                        "url": url_for("edit_user", user_id=row["user_id"]),
+                    })
+        except mysql.connector.Error as error:
+            flash(database_error(error, "searching"))
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    total = sum(len(rows) for rows in found.values())
+    return render_template("search.html", query=query, found=found,
+                           total=total)
+
+
 # START FLASK
 
 
@@ -7792,6 +8224,61 @@ def start_sign_in(remembered):
     session["remembered"] = bool(remembered)
     session["seen_at"] = int(time.time())
     bind_sign_in()
+    note_sign_in(session.get("user_id"))
+
+
+def note_sign_in(user_id):
+    """
+    Stamp the time somebody signed in, for the team list.
+
+    Its own short connection, and never allowed to stop a sign-in: a
+    column a stale deployment has not added yet, or a database that
+    blinks, costs the list one "last active" and nothing more.
+    """
+    if not user_id:
+        return
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute("UPDATE users SET last_login_at = %s WHERE user_id = %s",
+                       (utc_now(), user_id))
+        connection.commit()
+    except Exception:                   # noqa: BLE001 - never block a sign-in
+        pass
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+def last_active_label(value):
+    """A sign-in time as the team list says it: Today, 11:48 AM / Yesterday."""
+    moment = as_cafe_time(stored_stamp(value)) if value else None
+    if not moment:
+        return "Not yet"
+    today = cafe_now().date()
+    if moment.date() == today:
+        return "Today, " + moment.strftime("%I:%M %p").lstrip("0")
+    if moment.date() == today - timedelta(days=1):
+        return "Yesterday"
+    if moment.year == today.year:
+        return "%d %s" % (moment.day, moment.strftime("%b"))
+    return "%d %s %d" % (moment.day, moment.strftime("%b"), moment.year)
+
+
+# What each role can reach, said once for the team page. Every role other
+# than admin is held to STAFF_ALLOWED_ENDPOINTS, so the three of them see
+# the same pages - the page says so rather than implying a difference.
+ROLE_GUIDE = [
+    ("owner", "Owner", "Every page and setting, and the team. Cannot be removed."),
+    ("admin", "Admin", "Every page and setting, including the team, reports and figures."),
+    ("manager", "Manager", "Orders, kitchen, billing, the menu and stock."),
+    ("cashier", "Cashier", "Orders, kitchen, billing, the menu and stock."),
+    ("staff", "Staff", "Orders, kitchen, billing, the menu and stock."),
+]
 
 
 def sign_in_is_stale():
@@ -7990,19 +8477,42 @@ def users():
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
         cursor.execute("""
-            SELECT user_id, username, full_name, role, is_active, created_at, phone_number
+            SELECT user_id, username, full_name, role, is_active, created_at,
+                   phone_number, email, last_login_at, photo_version,
+                   (photo_blob IS NOT NULL) AS has_photo
             FROM users
             WHERE cafe_id = %s
             ORDER BY user_id DESC
         """, (require_cafe_session(),))
         user_list = cursor.fetchall()
+
+        owner_id = get_cafe_owner_id()
+        me = session.get("user_id")
+        counts = dict((key, 0) for key, _, _ in ROLE_GUIDE)
+        for person in user_list:
+            person["is_owner"] = person["user_id"] == owner_id
+            person["kind"] = "owner" if person["is_owner"] else person["role"]
+            person["role_label"] = ("Owner" if person["is_owner"]
+                                    else (person["role"] or "").capitalize())
+            words = (person["full_name"] or person["username"] or "?").split()
+            person["initials"] = "".join(w[0] for w in words[:2]).upper()
+            person["last_active"] = ("Now" if person["user_id"] == me
+                                     else last_active_label(person["last_login_at"]))
+            counts[person["kind"]] = counts.get(person["kind"], 0) + 1
+
+        # The owner first, then everyone else as they were added.
+        user_list.sort(key=lambda p: (not p["is_owner"],))
+
         return render_template(
             "users.html",
             users=user_list,
             # The owner account cannot be deleted; the template uses this to
             # leave the button off that row rather than offer an action that
             # would just come back refused.
-            cafe_owner_id=get_cafe_owner_id(),
+            cafe_owner_id=owner_id,
+            roles=[{"key": key, "label": label, "does": does,
+                    "count": counts.get(key, 0)}
+                   for key, label, does in ROLE_GUIDE],
         )
     finally:
         if cursor:

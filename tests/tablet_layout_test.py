@@ -156,6 +156,7 @@ def layout():
             var link = document.querySelector('.sidebar-nav .nav-link');
             return JSON.stringify({
                 hamburger: getComputedStyle(toggle).display !== 'none',
+                drawer: getComputedStyle(side).position === 'fixed',
                 sidebarVisible: getComputedStyle(side).visibility === 'visible',
                 mainLeft: Math.round(main.getBoundingClientRect().left),
                 mainWidth: Math.round(main.getBoundingClientRect().width),
@@ -194,8 +195,8 @@ try:
         state = layout()
 
         check("%s (%4dpx) shows the hamburger" % (label, width),
-              state["hamburger"],
-              "got the laptop sidebar instead: %s" % state)
+              state["hamburger"] and state["drawer"],
+              "got the laptop rail instead: %s" % state)
         check("%s (%4dpx) gives the page full width" % (label, width),
               state["mainLeft"] < 5 and state["mainWidth"] >= width - 5,
               "page starts at %(mainLeft)spx and is %(mainWidth)spx wide" % state)
@@ -311,8 +312,9 @@ try:
     # case width alone cannot separate.
     viewport(1366, 768, touch=False)
     state = layout()
-    check("a 1366px laptop keeps its sidebar",
-          not state["hamburger"] and state["sidebarVisible"],
+    check("a 1366px laptop keeps its rail",
+          not state["drawer"] and state["sidebarVisible"]
+          and 60 < state["mainLeft"] < 300,
           "the laptop layout was replaced with the drawer: %s" % state)
     check("the stylesheet sees a fine pointer there", not state["coarse"],
           "touch emulation did not reset, so the next check proves nothing")
@@ -330,24 +332,20 @@ try:
 
     viewport(1440, 900, touch=False)
     state = layout()
-    check("a full desktop is unchanged",
-          not state["hamburger"] and state["sidebarVisible"] and state["mainLeft"] > 100,
+    check("a full desktop keeps its rail beside the page",
+          not state["drawer"] and state["sidebarVisible"]
+          and 60 < state["mainLeft"] < 300,
           "%s" % state)
 
 
     # =================================================================
-    print("\n=== The top of the app does not move on a big screen ===")
+    print("\n=== The header does not move on a big screen ===")
     # =================================================================
-    # Both bars are sticky, so on a wide screen they end up flush with
-    # the top of the window as soon as anything is scrolled. That left
-    # the same shell looking like two different designs: opened and left
-    # alone it carried a band of bare background above the top bar and a
-    # gap between the two, and both closed the moment you touched the
-    # wheel.
-    #
-    # Reported as one page looking right and another looking wrong -
-    # which they did, because the two screenshots were of the same shell
-    # at different scroll positions.
+    # The header is sticky and starts flush with the top of the window,
+    # so nothing about it shifts on the first scroll. The page's own
+    # title is part of the page: it starts just under the header and
+    # scrolls away with the page, which is what makes the header the one
+    # fixed thing at the top.
 
     def make_scrollable():
         """Give the page room to scroll, whatever is on it.
@@ -419,38 +417,38 @@ try:
               "it rests %dpx down, on a band of bare background that "
               "disappears on the first scroll" % rest["barTop"])
 
-        check("%dx%d: the page title sits on the bar above it"
+        check("%dx%d: the page title starts just under the header"
               % (width, height),
-              abs(rest["headTop"] - rest["barBottom"]) <= 1,
-              "a %dpx gap between the two bars, which closes as soon as "
-              "anything is scrolled"
+              0 <= rest["headTop"] - rest["barBottom"] <= 24,
+              "a %dpx gap between the header and the title"
               % (rest["headTop"] - rest["barBottom"]))
 
         if rest["scrollable"]:
             b.evaluate("window.scrollTo(0, 400)")
             time.sleep(0.5)
             moved = masthead()
-            check("%dx%d: and neither moves when the page is scrolled"
+            check("%dx%d: the header stays put when the page is scrolled"
                   % (width, height),
-                  moved["barTop"] == rest["barTop"] and
-                  moved["headTop"] == rest["headTop"],
-                  "at rest %s; scrolled to %d it is %s - the top of "
-                  "the app shifts under the pointer" % (rest, moved["y"],
-                                                        moved))
+                  moved["barTop"] == rest["barTop"],
+                  "at rest %s; scrolled to %d it is %s - the header "
+                  "shifts under the pointer" % (rest, moved["y"], moved))
+            check("%dx%d: and the title goes with the page"
+                  % (width, height),
+                  moved["headTop"] == rest["headTop"] - moved["y"],
+                  "the title moved %dpx for a %dpx scroll"
+                  % (rest["headTop"] - moved["headTop"], moved["y"]))
             b.evaluate("window.scrollTo(0, 0)")
             time.sleep(0.3)
 
-    # The other half: a touch device still gets its own spacing, and
-    # still slides the bar away on the way down the page. That behaviour
-    # is the reason the change above is scoped to wide mouse-driven
-    # screens rather than applied to every size.
+    # A touch tablet: the same header, staying at the top and frosting
+    # over the page as it scrolls under it.
     viewport(834, 1112, touch=True)
     b.call("Page.navigate", url=BASE + "/foods")
     wait("!!document.querySelector('.page-header')", "tablet foods header")
     time.sleep(0.8)
 
     check("the tablet page can be scrolled at all", make_scrollable(),
-          "a page that cannot move cannot show the bar moving")
+          "a page that cannot move cannot show the header staying")
 
     b.evaluate("window.scrollTo(0, 0)")
     time.sleep(0.3)
@@ -460,11 +458,14 @@ try:
         time.sleep(0.05)
     time.sleep(0.6)
 
-    check("a tablet still gets its bar out of the way on the way down",
-          b.evaluate(
-              "document.documentElement.classList.contains('bar-away')"),
-          "the bar stayed put on a touch screen, so the wide-screen rule "
-          "has leaked onto the devices that need the room back")
+    check("a tablet keeps its header on the way down, as glass",
+          b.evaluate("window.scrollY") > 100
+          and -1 <= b.evaluate(
+              "Math.round(document.querySelector('.topbar')"
+              ".getBoundingClientRect().top)") <= 1
+          and b.evaluate(
+              "document.documentElement.classList.contains('is-scrolled')"),
+          "the header left the top of a scrolled tablet, or stayed solid")
 
 finally:
     try:

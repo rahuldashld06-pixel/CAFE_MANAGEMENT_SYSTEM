@@ -1,75 +1,504 @@
 {% extends "base.html" %}
 {% block title %}User Management{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <div class="eyebrow">Security</div>
-    <h1><i class="bi bi-people"></i> User Management</h1>
-    <p>Create and manage individual staff accounts.</p>
-  </div>
-  <a href="{{ url_for('add_user') }}" class="btn btn--primary"><i class="bi bi-person-plus"></i> Add User</a>
+
+<style>
+    .team-head { align-items: flex-end; }
+    .team-head h1 { font-size: 34px; letter-spacing: -.4px; }
+    .team-head .btn { height: 42px; padding: 0 18px; white-space: nowrap; }
+    .team-head__tools { display: flex; gap: 10px; }
+
+    /* ---- Your team ---- */
+    .team-panel__head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+    }
+
+    .team-panel__head h2,
+    .team-card h2 { font-size: 21px; letter-spacing: -.2px; }
+
+    .team-panel__head p,
+    .team-card > p {
+        margin-top: 3px;
+        font-size: 13px;
+        color: var(--cream-faint);
+    }
+
+    .team-filter { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .team-filter input,
+    .team-filter select {
+        height: 42px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-950);
+        color: var(--cream);
+        font: inherit;
+        font-size: 13.5px;
+    }
+
+    .team-filter input { width: 240px; padding: 0 14px; }
+    .team-filter select { padding: 0 34px 0 14px; font-weight: 700; cursor: pointer; }
+
+    .team-filter input:focus,
+    .team-filter select:focus {
+        outline: none;
+        border-color: var(--copper);
+        box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .16);
+    }
+
+    /* The row menus hang below their row; a scrolling box would cut the
+       last one off. The table fits without one at every width. */
+    .team-panel .table-wrap { overflow: visible; }
+
+    #roles h2 { font-size: 21px; letter-spacing: -.2px; }
+
+    .team-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+    }
+
+    .team-table th {
+        padding: 0 12px 12px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--cream-faint);
+        border-bottom: 1px solid var(--espresso-800);
+    }
+
+    .team-table td {
+        padding: 14px 12px;
+        border-bottom: 1px solid var(--espresso-800);
+        color: var(--cream-dim);
+        vertical-align: middle;
+    }
+
+    .team-table tbody tr:last-child td { border-bottom: 0; }
+
+    .team-table tbody tr:hover td { background: rgba(var(--copper-rgb), .035); }
+
+    .member {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        color: var(--cream);
+        font-weight: 700;
+    }
+
+    .member__face {
+        display: grid;
+        place-items: center;
+        flex: 0 0 40px;
+        width: 40px;
+        height: 40px;
+        overflow: hidden;
+        border-radius: 50%;
+        background: rgba(var(--copper-rgb), .16);
+        color: var(--copper-light);
+        font-family: var(--font-display);
+        font-size: 14px;
+        font-weight: 700;
+    }
+
+    .member__face img { width: 100%; height: 100%; object-fit: cover; }
+
+    .member small {
+        display: block;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--cream-faint);
+    }
+
+    .team-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 11px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .team-pill--active { background: rgba(143, 187, 153, .14); color: var(--sage); }
+    .team-pill--inactive { background: rgba(225, 97, 79, .14); color: var(--berry); }
+
+    .team-role { color: var(--cream); font-weight: 600; }
+
+    /* ---- The menu at the end of each row ---- */
+    .row-menu { position: relative; display: inline-block; }
+
+    .row-menu > summary {
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        color: var(--cream-dim);
+        font-size: 18px;
+        cursor: pointer;
+        list-style: none;
+    }
+
+    .row-menu > summary::-webkit-details-marker { display: none; }
+
+    .row-menu > summary:hover,
+    .row-menu[open] > summary { background: var(--espresso-850); color: var(--cream); }
+
+    .row-menu__list {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 6px);
+        z-index: 30;
+        display: grid;
+        gap: 2px;
+        min-width: 190px;
+        padding: 6px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-850);
+        box-shadow: var(--shadow-soft);
+    }
+
+    .row-menu__list form { margin: 0; }
+
+    .row-menu__item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 9px 12px;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: var(--cream);
+        font: inherit;
+        font-size: 13.5px;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .row-menu__item:hover { background: var(--espresso-800); }
+    .row-menu__item i { width: 18px; color: var(--cream-faint); }
+    .row-menu__item--danger,
+    .row-menu__item--danger i { color: var(--berry); }
+
+    /* Filtered out, or nothing to say - whatever a row's layout at this
+       width, hidden means hidden. */
+    .team-table tr[hidden] { display: none !important; }
+
+    .team-none {
+        padding: 26px 8px;
+        text-align: center;
+        color: var(--cream-faint);
+    }
+
+    /* ---- Roles, and adding people safely ---- */
+    .team-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
+    }
+
+    .team-row > .panel { margin-bottom: 0; }
+
+    .role-list { margin: 12px 0 0; padding: 0; list-style: none; }
+
+    .role-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 13px 2px;
+        border-bottom: 1px solid var(--espresso-800);
+    }
+
+    .role-list li:last-child { border-bottom: 0; }
+
+    .role-line strong { display: block; color: var(--cream); font-size: 14.5px; }
+    .role-line small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--cream-faint); }
+
+    .count-pill {
+        flex: 0 0 auto;
+        padding: 4px 11px;
+        border-radius: 999px;
+        background: rgba(var(--copper-rgb), .12);
+        color: var(--copper-light);
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .count-pill--none { background: var(--espresso-850); color: var(--cream-faint); }
+
+    .team-card p { line-height: 1.6; }
+
+    .team-card ul {
+        margin: 14px 0 18px;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 9px;
+        font-size: 13px;
+        color: var(--cream-dim);
+    }
+
+    .team-card li { display: flex; gap: 9px; }
+    .team-card li i { color: var(--sage); }
+
+    @media (max-width: 1100px) {
+        .team-row { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    /* A person per card on a phone: who they are across the top, their
+       role, when they were last in and whether they can sign in under it. */
+    @media (max-width: 760px) {
+        .page-header.team-head { flex-wrap: wrap; }
+        .team-head h1 { font-size: 28px; white-space: normal; }
+        .team-head__tools { width: 100%; }
+        .team-head__tools .btn { flex: 1 1 0; }
+        .team-filter, .team-filter input { width: 100%; }
+        .team-filter input { flex: 1 1 auto; }
+
+        .team-table thead { display: none; }
+        .team-table, .team-table tbody { display: block; }
+        .team-table tbody tr {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 6px 10px;
+            padding: 14px 4px;
+            border-bottom: 1px solid var(--espresso-800);
+        }
+        .team-table tbody tr:last-child { border-bottom: 0; }
+        .team-table td { display: block; padding: 0; border: 0; }
+        .team-table tbody tr:hover td { background: none; }
+        .team-table td.team-cell-member { grid-column: 1; grid-row: 1; }
+        .team-table td.team-cell-actions { grid-column: 2; grid-row: 1; }
+        .team-table td.team-cell-user { display: none; }
+        .team-table td.team-cell-role,
+        .team-table td.team-cell-seen,
+        .team-table td.team-cell-status {
+            grid-column: 1 / -1;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding-left: 52px;
+            font-size: 12.5px;
+        }
+        .team-table td.team-cell-role::before,
+        .team-table td.team-cell-seen::before {
+            content: attr(data-label);
+            color: var(--cream-faint);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+        }
+    }
+</style>
+
+<div class="page-header team-head">
+    <div>
+        <div class="eyebrow">Café operations</div>
+        <h1>User management</h1>
+        <p class="page-subtitle">Give each teammate the right access for their role.</p>
+    </div>
+
+    <div class="team-head__tools">
+        <a href="#roles" class="btn btn--ghost" data-no-instant>
+            <i class="bi bi-shield-check"></i> Roles &amp; access
+        </a>
+        <a href="{{ url_for('add_user') }}" class="btn btn--primary">
+            <i class="bi bi-person-plus"></i> Add teammate
+        </a>
+    </div>
 </div>
 
-<div class="panel">
-  <div class="table-wrap">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>User</th><th>Username</th><th>Role</th><th>Mobile</th>
-          <th>Status</th><th>Created</th><th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for u in users %}
-        <tr>
-          <td><strong>{{ u.full_name }}</strong></td>
-          <td>{{ u.username }}</td>
-          <td><span class="role-badge role-badge--{{ u.role }}">{{ u.role|capitalize }}</span></td>
-          <td>
-            {% if u.phone_number %}
-              {{ u.phone_number }}
-            {% elif u.role == 'admin' %}
-              <span class="status-badge status-badge--danger">Not set</span>
-            {% else %}
-              —
-            {% endif %}
-          </td>
-          <td>
-            {% if u.is_active %}
-              <span class="status-badge status-badge--success">Active</span>
-            {% else %}
-              <span class="status-badge status-badge--danger">Inactive</span>
-            {% endif %}
-          </td>
-          <td>{{ u.created_at|local_time }}</td>
-          <td class="cell-actions">
-            <a class="btn btn--edit btn--small" href="{{ url_for('edit_user', user_id=u.user_id) }}"><i class="bi bi-pencil"></i> Edit</a>
-            {% if u.user_id != session.get('user_id') %}
-            <form method="POST" action="{{ url_for('toggle_user', user_id=u.user_id) }}" style="display:inline;">
-              <button class="btn btn--ghost btn--small" type="submit">
-                {% if u.is_active %}<i class="bi bi-pause-circle"></i> Deactivate{% else %}<i class="bi bi-play-circle"></i> Activate{% endif %}
-              </button>
-            </form>
 
-            {# Deleting is permanent, so it is offered only where it is
-               actually allowed: never your own account, and never the café
-               owner, whose id every food, category and order row carries. #}
-            {% if u.user_id != cafe_owner_id %}
-            <form method="POST"
-                  action="{{ url_for('delete_user', user_id=u.user_id) }}"
-                  style="display:inline;"
-                  onsubmit="return confirm('Delete {{ (u.full_name or u.username)|e }} permanently? Orders and bills they handled are kept.');">
-              <button class="btn btn--small btn--delete" type="submit"><i class="bi bi-trash3"></i> Delete</button>
-            </form>
-            {% endif %}
-            {% endif %}
-          </td>
-        </tr>
-      {% else %}
-        <tr><td colspan="7">No users found.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
+<section class="panel team-panel" aria-labelledby="teamTitle">
+    <div class="team-panel__head">
+        <div>
+            <h2 id="teamTitle">Your team</h2>
+            <p>Who can sign in to {{ cafe_branding.cafe_name }}, and as what.</p>
+        </div>
+        <div class="team-filter">
+            <input type="search" id="teamSearch" placeholder="Search team"
+                   aria-label="Search team" autocomplete="off">
+            <select id="teamRole" aria-label="Show a role">
+                <option value="">All roles</option>
+                {% for role in roles %}
+                <option value="{{ role.key }}">{{ role.label }}{% if role.key != 'staff' %}s{% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+        <table class="team-table">
+            <thead>
+                <tr>
+                    <th>Team member</th>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Last active</th>
+                    <th>Status</th>
+                    <th><span class="sr-only">Actions</span></th>
+                </tr>
+            </thead>
+            <tbody id="teamRows">
+            {% for u in users %}
+                <tr data-user-id="{{ u.user_id }}" data-username="{{ u.username }}"
+                    data-kind="{{ u.kind }}"
+                    data-find="{{ (u.full_name ~ ' ' ~ u.username ~ ' ' ~ u.role_label ~ ' ' ~ (u.email or ''))|lower }}">
+                    <td class="team-cell-member">
+                        <span class="member">
+                            <span class="member__face">
+                                {% if u.has_photo %}
+                                <img src="{{ url_for('user_media', user_id=u.user_id, v=u.photo_version or 1) }}" alt="">
+                                {% else %}
+                                {{ u.initials }}
+                                {% endif %}
+                            </span>
+                            <span>
+                                {{ u.full_name or u.username }}
+                                {% if u.phone_number or u.email %}
+                                <small>{{ u.phone_number or u.email }}</small>
+                                {% elif u.role == 'admin' %}
+                                <small>No mobile or email for a sign-in code</small>
+                                {% endif %}
+                            </span>
+                        </span>
+                    </td>
+                    <td class="team-cell-user">{{ u.username }}</td>
+                    <td class="team-cell-role" data-label="Role"><span class="team-role role-badge role-badge--{{ u.role }}">{{ u.role_label }}</span></td>
+                    <td class="team-cell-seen" data-label="Last active">{{ u.last_active }}</td>
+                    <td class="team-cell-status">
+                        {% if u.is_active %}
+                        <span class="team-pill team-pill--active">Active</span>
+                        {% else %}
+                        <span class="team-pill team-pill--inactive">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="team-cell-actions">
+                        <details class="row-menu">
+                            <summary aria-label="More for {{ u.full_name or u.username }}">
+                                <i class="bi bi-three-dots" aria-hidden="true"></i>
+                            </summary>
+                            <div class="row-menu__list">
+                                <a class="row-menu__item" href="{{ url_for('edit_user', user_id=u.user_id) }}"><i class="bi bi-pencil"></i> Edit</a>
+                                {% if u.user_id != session.get('user_id') %}
+                                <form method="POST" action="{{ url_for('toggle_user', user_id=u.user_id) }}">
+                                    <button class="row-menu__item" type="submit">
+                                        {% if u.is_active %}<i class="bi bi-pause-circle"></i> Deactivate{% else %}<i class="bi bi-play-circle"></i> Activate{% endif %}
+                                    </button>
+                                </form>
+
+                                {# Deleting is permanent, so it is offered only where it is
+                                   actually allowed: never your own account, and never the café
+                                   owner, whose id every food, category and order row carries. #}
+                                {% if u.user_id != cafe_owner_id %}
+                                <form method="POST"
+                                      action="{{ url_for('delete_user', user_id=u.user_id) }}"
+                                      onsubmit="return confirm('Delete {{ (u.full_name or u.username)|e }} permanently? Orders and bills they handled are kept.');">
+                                    <button class="row-menu__item row-menu__item--danger" type="submit"><i class="bi bi-trash3"></i> Delete</button>
+                                </form>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </details>
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="team-none">No users found.</td></tr>
+            {% endfor %}
+                <tr id="teamNone" hidden><td colspan="6" class="team-none">Nobody on the team matches that.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+
+<div class="team-row">
+
+    <section class="panel" id="roles" aria-labelledby="rolesTitle">
+        <h2 id="rolesTitle">Role overview</h2>
+        <ul class="role-list">
+            {% for role in roles %}
+            <li class="role-line">
+                <span>
+                    <strong>{{ role.label }}</strong>
+                    <small>{{ role.does }}</small>
+                </span>
+                <span class="count-pill{% if not role.count %} count-pill--none{% endif %}">
+                    {{ role.count }} member{% if role.count != 1 %}s{% endif %}
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <section class="panel team-card" aria-labelledby="safeTitle">
+        <h2 id="safeTitle">Add people safely</h2>
+        <p>Give each teammate only the tools they need for their shift. You can change it any time.</p>
+        <ul>
+            <li><i class="bi bi-check2-circle"></i> One account each, so every order and bill says who took it.</li>
+            <li><i class="bi bi-check2-circle"></i> Deactivate rather than delete when somebody leaves for a while.</li>
+            <li><i class="bi bi-check2-circle"></i> Keep admin for the people who run the café.</li>
+        </ul>
+        <a href="{{ url_for('add_user') }}" class="btn btn--primary">
+            <i class="bi bi-person-plus"></i> Add a teammate
+        </a>
+    </section>
+
 </div>
+
+<script>
+(function () {
+    var search = document.getElementById("teamSearch");
+    var role = document.getElementById("teamRole");
+    var rows = document.querySelectorAll("#teamRows tr[data-user-id]");
+    var none = document.getElementById("teamNone");
+
+    function apply() {
+        var words = (search.value || "").toLowerCase().trim().split(/\s+/).filter(Boolean);
+        var kind = role.value;
+        var shown = 0;
+        rows.forEach(function (row) {
+            var text = row.getAttribute("data-find") || "";
+            var fits = (!kind || row.getAttribute("data-kind") === kind) &&
+                       words.every(function (word) { return text.indexOf(word) > -1; });
+            row.hidden = !fits;
+            if (fits) shown++;
+        });
+        if (none) none.hidden = shown > 0 || !rows.length;
+    }
+
+    if (search) search.addEventListener("input", apply);
+    if (role) role.addEventListener("change", apply);
+
+    // One row's menu open at a time, and a click anywhere else closes it.
+    document.addEventListener("click", function (event) {
+        document.querySelectorAll(".row-menu[open]").forEach(function (menu) {
+            if (!menu.contains(event.target)) menu.removeAttribute("open");
+        });
+    });
+    document.addEventListener("keydown", function (event) {
+        if (event.key !== "Escape") return;
+        document.querySelectorAll(".row-menu[open]").forEach(function (menu) {
+            menu.removeAttribute("open");
+        });
+    });
+}());
+</script>
+
 {% endblock %}

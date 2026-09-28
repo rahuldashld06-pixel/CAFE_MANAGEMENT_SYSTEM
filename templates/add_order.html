@@ -761,7 +761,7 @@
     .quantity-input { width: 40px; height: 34px; }
 
     /* The sheet, docked: in the second column, stopping just under the
-       title bar while the menu scrolls past it. */
+       header while the menu scrolls past it. */
     .order-summary-trigger { display: none !important; }
 
     .order-summary-overlay,
@@ -775,9 +775,9 @@
 
     .order-summary-popup {
         position: sticky;
-        top: calc(var(--order-head-h, 110px) + 16px);
+        top: calc(var(--topbar-h, 64px) + 16px);
         width: auto;
-        max-height: calc(100vh - var(--order-head-h, 110px) - 32px);
+        max-height: calc(100vh - var(--topbar-h, 64px) - 32px);
         margin: 0;
         box-shadow: none;
     }

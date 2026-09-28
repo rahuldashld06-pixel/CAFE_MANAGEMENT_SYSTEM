@@ -1,0 +1,40 @@
+{# The dashboard's Stock to check list.
+
+   The two-second poll rebuilds this same markup in JavaScript
+   (stockList() in dashboard.html) - change both together. Out of stock
+   first, then running low with the fewest left first; both capped at
+   the same number of names, with the rest counted. #}
+
+{% if unavailable == 0 and low_stock == 0 %}
+<div class="stock-clear">
+    <i class="bi bi-check2-circle"></i>
+    <span>Everything is stocked above its minimum.</span>
+</div>
+{% else %}
+<ul class="stock-rows">
+    {% for item in unavailable_items %}
+    <li class="stock-row stock-row--out">
+        <span class="stock-row__text">
+            <strong class="stock-row__name">{{ item.name }}</strong>
+            <small>None left</small>
+        </span>
+        <span class="stock-pill stock-pill--out">Out</span>
+    </li>
+    {% endfor %}
+    {% if unavailable > unavailable_items|length %}
+    <li class="stock-more">and {{ unavailable - unavailable_items|length }} more out of stock</li>
+    {% endif %}
+    {% for item in low_stock_items %}
+    <li class="stock-row stock-row--low">
+        <span class="stock-row__text">
+            <strong class="stock-row__name">{{ item.name }}</strong>
+            <small><b class="stock-row__left">{{ item.quantity }}</b> left &middot; minimum {{ item.minimum }}</small>
+        </span>
+        <span class="stock-pill stock-pill--low">Low</span>
+    </li>
+    {% endfor %}
+    {% if low_stock > low_stock_items|length %}
+    <li class="stock-more">and {{ low_stock - low_stock_items|length }} more running low</li>
+    {% endif %}
+</ul>
+{% endif %}

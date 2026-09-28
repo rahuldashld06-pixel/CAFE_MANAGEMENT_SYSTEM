@@ -63,15 +63,13 @@ def sign_in(client, username):
 
 
 def user_ids(client):
-    """username -> user_id, read off the rendered list."""
+    """username -> user_id, read off the rendered list.
+
+    Each row names its person and id on itself, so one row can never be
+    paired with another's id however the table is laid out."""
     html = client.get("/users").get_data(as_text=True)
-    rows = re.findall(
-        r'/users/(\d+)/edit">(?:<i[^>]*></i>\s*)?Edit</a>.*?</tr>', html, re.S)
-    names = re.findall(
-        r'<td>([A-Za-z0-9_]+)</td>\s*<td>(?:<span class="role-badge[^"]*">)?'
-        r'(?:Admin|Cashier|Manager|Staff)(?:</span>)?</td>',
-        html)
-    return dict(zip(names, rows))
+    return dict((name, uid) for uid, name in re.findall(
+        r'<tr data-user-id="(\d+)" data-username="([^"]+)"', html))
 
 
 def message(response):
@@ -87,10 +85,7 @@ def delete(client, user_id):
 
 def usernames(client):
     html = client.get("/users").get_data(as_text=True)
-    return re.findall(
-        r'<td>([A-Za-z0-9_]+)</td>\s*<td>(?:<span class="role-badge[^"]*">)?'
-        r'(?:Admin|Cashier|Manager|Staff)(?:</span>)?</td>',
-        html)
+    return re.findall(r'<tr data-user-id="\d+" data-username="([^"]+)"', html)
 
 
 print("\n=== 1. An admin can delete a staff account ===")

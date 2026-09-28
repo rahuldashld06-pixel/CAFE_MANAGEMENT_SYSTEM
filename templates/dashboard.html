@@ -5,555 +5,1099 @@
 {% block content %}
 
 <style>
-    /* Dashboard quick actions */
-    .dashboard-actions {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 14px;
+    /* ================================================================
+       The dashboard
+
+       Four figures across the top, each against the period before it;
+       then the day's sales as a curve beside the orders still being
+       made; then what sold best beside the stock that needs checking.
+       Every colour is one of the theme's own.
+       ================================================================ */
+
+    .dash-head {
+        align-items: flex-end;
+        margin-bottom: 22px;
     }
 
-    /* Each tile in the colour of where it goes - the same tones the
-       cards above use - so the four read as four places at a glance. */
-    .dashboard-action {
-        --tone: var(--copper-rgb);
-        position: relative;
+    .dash-head h1 {
+        font-size: 34px;
+        letter-spacing: -.4px;
+    }
+
+    .dash-head__tools {
         display: flex;
         align-items: center;
-        gap: 12px;
-        min-height: 76px;
-        padding: 14px 16px;
-        background:
-            radial-gradient(130% 150% at 0% 0%, rgba(var(--tone), .16) 0%,
-                            rgba(var(--tone), 0) 60%),
-            var(--espresso-850);
+        gap: 10px;
+    }
+
+    /* A native select, dressed as a button: the keyboard and a phone's
+       own picker still work. */
+    .dash-select {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .dash-select select {
+        appearance: none;
+        -webkit-appearance: none;
+        height: 42px;
+        padding: 0 36px 0 16px;
         border: 1px solid var(--espresso-700);
         border-radius: var(--radius-md);
+        background: var(--espresso-900);
         color: var(--cream);
-        transition: background .18s ease, border-color .18s ease, transform .18s ease,
-                    box-shadow .18s ease;
+        font: inherit;
+        font-size: 13.5px;
+        font-weight: 700;
+        cursor: pointer;
     }
-    .dashboard-action--stock { --tone: 242, 201, 76; }
-    .dashboard-action--kitchen { --tone: 225, 97, 79; }
-    .dashboard-action--billing { --tone: 143, 187, 153; }
-    .dashboard-action:hover {
-        border-color: rgba(var(--tone), .55);
-        transform: translateY(-2px);
-        box-shadow: 0 16px 32px -18px rgba(var(--tone), .55);
+
+    .dash-select select:hover { border-color: var(--espresso-600); }
+
+    .dash-select select:focus-visible {
+        outline: 2px solid var(--copper-light);
+        outline-offset: 2px;
     }
-    .dashboard-action__icon {
+
+    .dash-select i {
+        position: absolute;
+        right: 13px;
+        pointer-events: none;
+        font-size: 12px;
+        color: var(--cream-faint);
+    }
+
+    .dash-head .btn--primary { height: 42px; padding: 0 18px; white-space: nowrap; }
+
+    /* The title and the two controls share a row where they fit and
+       stack where they do not - a phone's one-row header would cut the
+       word Dashboard short to make room for them. */
+    .page-header.dash-head { flex-wrap: wrap; }
+    .page-header.dash-head h1 { white-space: normal; overflow: visible; }
+
+    /* ---- The four figures ---- */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .kpi {
+        position: relative;
+        min-width: 0;
+        padding: 20px 22px 18px;
+        border: 1px solid var(--espresso-800);
+        border-radius: var(--radius-lg);
+        background: var(--surface-lift), var(--espresso-900);
+        box-shadow: var(--inset-light), var(--shadow-soft);
+    }
+
+    .kpi__top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .kpi__label {
+        font-size: 13.5px;
+        font-weight: 600;
+        color: var(--cream-dim);
+    }
+
+    .kpi__icon {
         display: grid;
         place-items: center;
-        width: 42px;
-        height: 42px;
-        flex: 0 0 42px;
-        border-radius: 12px;
-        background: rgba(var(--tone), .18);
-        color: rgb(var(--tone));
-        font-size: 18px;
-    }
-    .dashboard-action__go {
-        margin-left: auto;
-        color: var(--cream-faint);
-        font-size: 15px;
-        opacity: .6;
-        transition: transform .18s ease, opacity .18s ease, color .18s ease;
-    }
-    .dashboard-action:hover .dashboard-action__go {
-        opacity: 1;
-        color: rgb(var(--tone));
-        transform: translateX(3px);
-    }
-
-    /* ---- The two blocks of figures ---- */
-    .dash-block { margin-bottom: 18px; }
-
-    .dash-block__title {
-        margin: 0 0 10px 2px;
-        font-family: var(--font-body);
-        font-size: 11.5px;
-        font-weight: 800;
-        letter-spacing: .14em;
-        text-transform: uppercase;
-        color: var(--cream-faint);
-    }
-
-    .dash-block .stats-grid { margin-bottom: 0; }
-
-    /* Revenue widest when it is there - it is admin-only. */
-    @media (min-width: 1100px) {
-        .dash-block--today .stats-grid:has(.stat-card--hero) {
-            grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr));
-        }
-    }
-
-    .stat-card--hero { padding: 20px 22px; }
-    .stat-card--hero .stat-card__icon {
-        width: 54px;
-        height: 54px;
-        font-size: 23px;
-        border-radius: 15px;
-    }
-    .stat-card--hero .stat-card__value { font-size: 34px; }
-
-    /* On a phone, revenue has a row of its own and keeps its icon beside
-       the figure - it is the one card there is room to lay out wide. */
-    @media (max-width: 560px) {
-        .dash-block--today .stat-card--hero {
-            grid-column: 1 / -1;
-            flex-direction: row;
-            align-items: center;
-            gap: 14px;
-            padding: 16px;
-        }
-        .stat-card--hero .stat-card__icon {
-            width: 46px;
-            height: 46px;
-            font-size: 20px;
-            border-radius: 13px;
-        }
-        .stat-card--hero .stat-card__value { font-size: 28px; }
-
-        /* The three under it as one strip, rather than two and one left
-           over on a row of its own. */
-        .dash-block--today .stats-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
-        }
-        .dash-block--today .stat-card:not(.stat-card--hero) {
-            padding: 12px;
-            gap: 8px;
-        }
-        .dash-block--today .stat-card:not(.stat-card--hero) .stat-card__icon {
-            width: 32px;
-            height: 32px;
-            font-size: 14px;
-            border-radius: 10px;
-        }
-        .dash-block--today .stat-card:not(.stat-card--hero) .stat-card__label {
-            font-size: 9.5px;
-            letter-spacing: .04em;
-        }
-        .dash-block--today .stat-card:not(.stat-card--hero) .stat-card__value {
-            font-size: 20px;
-        }
-    }
-
-    /* The running totals, quieter than today. */
-    .stats-grid--quiet .stat-card {
-        padding: 12px 16px;
-        box-shadow: none;
-    }
-    .stats-grid--quiet .stat-card::before { display: none; }
-    .stats-grid--quiet .stat-card__icon {
-        width: 38px;
-        height: 38px;
+        flex: 0 0 36px;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: rgba(var(--copper-rgb), .14);
+        color: var(--copper-light);
         font-size: 16px;
     }
-    .stats-grid--quiet .stat-card__value { font-size: 22px; }
 
-    .dashboard-action strong {
-        display: block;
-        font-size: 13.5px;
+    .kpi__icon .day-chip {
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: .04em;
     }
 
-    .dashboard-action small {
-        display: block;
-        margin-top: 3px;
+    .kpi--warn .kpi__icon {
+        background: rgba(225, 97, 79, .16);
+        color: var(--berry);
+    }
+
+    .kpi__value {
+        margin: 10px 0 6px;
+        font-family: var(--font-display);
+        font-size: 36px;
+        font-weight: 700;
+        line-height: 1.05;
+        color: var(--cream);
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+    }
+
+    .kpi__foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        min-height: 18px;
+        font-size: 12.5px;
         color: var(--cream-faint);
-        font-size: 11px;
     }
 
-    .dashboard-live {
+    .kpi__trend {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-weight: 800;
+    }
+
+    .kpi__trend--up { color: var(--sage); }
+    .kpi__trend--down { color: var(--berry); }
+    .kpi__trend--flat { color: var(--cream-dim); }
+    .kpi__alert { color: var(--berry); font-weight: 800; }
+    .kpi__ok { color: var(--sage); font-weight: 800; }
+    .kpi__none { color: var(--cream-faint); }
+    #stock-note > span { white-space: nowrap; }
+
+    /* ---- The two rows of panels ---- */
+    .dash-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+        gap: 18px;
+        margin-bottom: 18px;
+        align-items: stretch;
+    }
+
+    .dash-row > .panel { margin-bottom: 0; min-width: 0; }
+
+    .dash-panel__head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .dash-panel__head h2 {
+        font-size: 21px;
+        letter-spacing: -.2px;
+    }
+
+    .dash-panel__head p {
+        margin-top: 3px;
+        font-size: 13px;
+        color: var(--cream-faint);
+    }
+
+    .dash-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--copper-light);
+        white-space: nowrap;
+    }
+
+    .dash-link:hover { text-decoration: underline; }
+
+    /* The period, on the chart too - the same choice as the one at the
+       top of the page, so the two can never disagree. */
+    .seg {
+        display: inline-flex;
+        padding: 3px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-950);
+    }
+
+    .seg button {
+        border: 0;
+        padding: 6px 11px;
+        border-radius: 8px;
+        background: none;
+        color: var(--cream-faint);
+        font: inherit;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .seg button[aria-pressed="true"] {
+        background: var(--espresso-800);
+        color: var(--cream);
+    }
+
+    /* ---- The curve ---- */
+    .curve {
+        position: relative;
+        height: 270px;
+    }
+
+    .curve svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+    }
+
+    .curve__grid line {
+        stroke: var(--espresso-800);
+        stroke-dasharray: 3 5;
+    }
+
+    .curve__line {
+        fill: none;
+        stroke: var(--copper-light);
+        stroke-width: 2.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .curve__x text,
+    .curve__y text {
+        fill: var(--cream-faint);
+        font-size: 11.5px;
+        font-family: var(--font-body);
+    }
+
+    .curve__guide {
+        stroke: var(--espresso-600);
+        stroke-width: 1;
+    }
+
+    .curve__dot {
+        fill: var(--espresso-900);
+        stroke: var(--copper-light);
+        stroke-width: 2.5;
+    }
+
+    .curve__tip {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 2;
+        padding: 7px 10px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 10px;
+        background: var(--espresso-850);
+        box-shadow: var(--shadow-soft);
+        font-size: 12px;
+        color: var(--cream-dim);
+        white-space: nowrap;
+        pointer-events: none;
+        transform: translate(-50%, -115%);
+    }
+
+    .curve__tip strong {
+        display: block;
+        font-size: 14px;
+        color: var(--cream);
+    }
+
+    .curve__tip[hidden] { display: none; }
+
+    .curve__empty[hidden] { display: none; }
+
+    .curve__empty {
+        position: absolute;
+        inset: 0 0 28px;
+        display: grid;
+        place-items: center;
+        color: var(--cream-faint);
+        font-size: 13px;
+        pointer-events: none;
+    }
+
+    /* ---- Lists: live orders and stock ---- */
+    .live-list,
+    .stock-rows {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .live-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 12px;
+        padding: 13px 4px;
+        border-bottom: 1px solid var(--espresso-800);
+        color: var(--cream);
+    }
+
+    .live-list li:last-child .live-row { border-bottom: 0; }
+
+    .live-row:hover { background: rgba(var(--copper-rgb), .04); }
+
+    .live-row strong { display: block; font-size: 14.5px; }
+
+    .live-row small {
+        display: block;
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--cream-faint);
+    }
+
+    .live-row__total {
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        min-width: 64px;
+    }
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 800;
+        white-space: nowrap;
+        border: 1px solid rgba(var(--copper-rgb), .4);
+        background: rgba(var(--copper-rgb), .12);
+        color: var(--copper-light);
+    }
+
+    .status-pill--done {
+        border-color: rgba(143, 187, 153, .4);
+        background: rgba(143, 187, 153, .12);
+        color: var(--sage);
+    }
+
+    .status-pill--cancelled {
+        border-color: rgba(225, 97, 79, .4);
+        background: rgba(225, 97, 79, .12);
+        color: var(--berry);
+    }
+
+    .live-waiting {
         display: inline-flex;
         align-items: center;
         gap: 7px;
-        color: var(--sage);
-        font-size: 12px;
-        font-weight: 600;
+        font-size: 12.5px;
+        color: var(--cream-faint);
     }
 
-    .dashboard-live-dot {
+    .live-waiting__dot {
         width: 7px;
         height: 7px;
         border-radius: 50%;
         background: var(--sage);
-        box-shadow: 0 0 0 4px rgba(143,187,153,.10);
+        box-shadow: 0 0 0 4px rgba(143, 187, 153, .12);
     }
 
-    @media (max-width: 900px) {
-        .dashboard-actions {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
+    .dash-empty {
+        padding: 28px 8px;
+        text-align: center;
+        color: var(--cream-faint);
+        font-size: 13.5px;
     }
 
-    @media (max-width: 560px) {
-        .dashboard-actions {
-            grid-template-columns: 1fr;
-        }
+    /* ---- Best sellers ---- */
+    .top-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+    }
+
+    .top-table th {
+        padding: 0 10px 10px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--cream-faint);
+        border-bottom: 1px solid var(--espresso-800);
+    }
+
+    .top-table td {
+        padding: 11px 10px;
+        border-bottom: 1px solid var(--espresso-800);
+        color: var(--cream-dim);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .top-table tr:last-child td { border-bottom: 0; }
+
+    .top-table .num { text-align: right; }
+
+    .top-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        color: var(--cream);
+        font-weight: 700;
+    }
+
+    .top-item__pic {
+        display: grid;
+        place-items: center;
+        flex: 0 0 32px;
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        overflow: hidden;
+        background: rgba(var(--copper-rgb), .14);
+        color: var(--copper-light);
+        font-size: 13px;
+    }
+
+    .top-item__pic img { width: 100%; height: 100%; object-fit: cover; }
+
+    .top-rank {
+        display: inline-block;
+        width: 18px;
+        color: var(--cream-faint);
+        font-weight: 800;
+    }
+
+    .chip-soft {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        background: rgba(var(--copper-rgb), .12);
+        color: var(--copper-light);
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    /* ---- Stock to check ---- */
+    .stock-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 4px;
+        border-bottom: 1px solid var(--espresso-800);
+    }
+
+    .stock-rows li:last-child { border-bottom: 0; }
+
+    .stock-row__text { min-width: 0; }
+
+    .stock-row__name {
+        display: block;
+        font-size: 14.5px;
+        color: var(--cream);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .stock-row small {
+        display: block;
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--cream-faint);
+    }
+
+    .stock-row__left { color: var(--cream-dim); }
+
+    .stock-pill {
+        flex: 0 0 auto;
+        padding: 4px 11px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 800;
+    }
+
+    .stock-pill--low {
+        background: rgba(242, 201, 76, .14);
+        color: var(--gold);
+    }
+
+    .stock-pill--out {
+        background: rgba(225, 97, 79, .16);
+        color: var(--berry);
+    }
+
+    .stock-more {
+        padding: 10px 4px 2px;
+        font-size: 12.5px;
+        color: var(--cream-faint);
+    }
+
+    .stock-clear {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 22px 6px;
+        color: var(--sage);
+        font-weight: 700;
+    }
+
+    .stock-clear i { font-size: 20px; }
+
+    /* ---- Narrower screens ---- */
+    @media (max-width: 1100px) {
+        .dash-row { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    @media (max-width: 760px) {
+        .dash-head { align-items: flex-start; }
+        .dash-head h1 { font-size: 28px; }
+        .dash-head__tools { width: 100%; }
+        .dash-head__tools .dash-select { flex: 1 1 auto; }
+        .dash-head__tools .dash-select select { width: 100%; }
+
+        .kpi-grid { gap: 10px; }
+        .kpi { padding: 14px 14px 12px; }
+        .kpi__label { font-size: 12px; }
+        .kpi__icon { flex-basis: 30px; width: 30px; height: 30px; font-size: 14px; border-radius: 9px; }
+        .kpi__value { font-size: 25px; margin: 8px 0 4px; }
+        .kpi__foot { font-size: 11px; }
+        .kpi__versus { display: none; }
+
+        .curve { height: 220px; }
+        .dash-panel__head { flex-wrap: wrap; }
+        .dash-panel__head h2 { font-size: 18px; }
+
+        .top-table .top-cat { display: none; }
     }
 </style>
 
-<div class="page-header">
+<div class="page-header dash-head">
     <div>
-        <h1><i class="bi bi-speedometer2"></i> Cafe Dashboard</h1>
-        <p class="page-subtitle">How today is going, and what needs doing</p>
+        <div class="eyebrow">Café operations</div>
+        <h1>Dashboard</h1>
+        <p class="page-subtitle">A calm overview of what&rsquo;s happening at {{ cafe_branding.cafe_name }} today.</p>
     </div>
 
-    <div class="dashboard-live">
-        <span class="dashboard-live-dot"></span>
-        Live data
-    </div>
-</div>
-
-
-<!-- ==========================================
-     STOCK ALERT
-
-     First thing on the page, and by name. Counts alone said something was
-     wrong without saying what to reorder.
-     ========================================== -->
-
-<div class="stock-alert" id="stock-alert-panel"
-     {% if low_stock == 0 and unavailable == 0 %}hidden{% endif %}>
-    <div id="stock-alert-content">
-        {% include "_stock_alert.html" %}
+    <div class="dash-head__tools">
+        <label class="dash-select">
+            <span class="sr-only">Period</span>
+            <select id="dashPeriod" aria-label="Period for the figures">
+                <option value="today">Today</option>
+                <option value="week">Last 7 days</option>
+                <option value="month">Last 30 days</option>
+            </select>
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+        </label>
+        <a href="{{ url_for('add_order') }}" class="btn btn--primary">
+            <i class="bi bi-plus-lg"></i> New order
+        </a>
     </div>
 </div>
 
 
 <!-- ==========================================
-     TODAY
-     What the day has done so far, and the two stock figures that need
-     somebody to act. Revenue first and widest: it is the number an owner
-     opens this page for.
+     THE FOUR FIGURES
+     Sales and orders for the period, what a bill came to on average, and
+     how much stock needs somebody - each against the period before.
      ========================================== -->
-<section class="dash-block dash-block--today" aria-labelledby="dashToday">
-    <h2 class="dash-block__title" id="dashToday">Today</h2>
-    <div class="stats-grid">
+<section class="kpi-grid" aria-label="Figures">
+
     {% if session.get('role') == 'admin' %}
-    <div class="stat-card stat-card--hero">
-        <div class="stat-card__icon stat-card__icon--sales">
-            <i class="bi bi-currency-rupee"></i>
+    <article class="kpi" id="kpiSales">
+        <div class="kpi__top">
+            <span class="kpi__label" data-kpi-label="Sales">Sales today</span>
+            <span class="kpi__icon"><i class="bi bi-currency-rupee"></i></span>
         </div>
-        <div>
-            <div class="stat-card__label">Today's Revenue</div>
-            <div class="stat-card__value">
-                ₹<span id="today-revenue">{{ "%.2f"|format(today_revenue|float) }}</span>
+        <div class="kpi__value">₹<span id="today-revenue">{{ "{:,.0f}".format(today_revenue|float) }}</span></div>
+        <div class="kpi__foot" data-kpi-foot>&nbsp;</div>
+    </article>
+    {% endif %}
+
+    <article class="kpi" id="kpiOrders">
+        <div class="kpi__top">
+            <span class="kpi__label" data-kpi-label="Orders">Orders today</span>
+            {# Bootstrap's calendar-day icon has the word "Fri" drawn into
+               the font, so it read Friday on a Tuesday. The real day goes
+               here instead, and the refresh keeps it right if a screen is
+               left open past midnight. #}
+            <span class="kpi__icon">
+                <span class="day-chip" id="today-weekday"
+                      title="{{ weekday.full }}">{{ weekday.short }}</span>
+            </span>
+        </div>
+        <div class="kpi__value" id="today-orders">{{ today_orders }}</div>
+        <div class="kpi__foot" data-kpi-foot>&nbsp;</div>
+    </article>
+
+    {% if session.get('role') == 'admin' %}
+    <article class="kpi" id="kpiAverage">
+        <div class="kpi__top">
+            <span class="kpi__label" data-kpi-label="Average bill">Average bill today</span>
+            <span class="kpi__icon"><i class="bi bi-graph-up-arrow"></i></span>
+        </div>
+        <div class="kpi__value">₹<span id="average-bill">&ndash;</span></div>
+        <div class="kpi__foot" data-kpi-foot>&nbsp;</div>
+    </article>
+    {% endif %}
+
+    <article class="kpi kpi--warn" id="kpiStock">
+        <div class="kpi__top">
+            <span class="kpi__label">Stock to check</span>
+            <span class="kpi__icon"><i class="bi bi-exclamation-lg"></i></span>
+        </div>
+        <div class="kpi__value" id="stock-count">{{ low_stock + unavailable }}</div>
+        <div class="kpi__foot">
+            <span id="stock-note">
+            {% if low_stock + unavailable %}
+                <span class="kpi__alert">Needs attention</span>
+                <span><span id="unavailable">{{ unavailable }}</span> out &middot; <span id="low-stock">{{ low_stock }}</span> low</span>
+            {% else %}
+                <span class="kpi__ok">All stocked</span>
+                <span><span id="unavailable">0</span> out &middot; <span id="low-stock">0</span> low</span>
+            {% endif %}
+            </span>
+        </div>
+    </article>
+
+</section>
+
+
+<!-- ==========================================
+     SALES, AND WHAT IS BEING MADE
+     ========================================== -->
+<div class="dash-row">
+
+    <section class="panel" aria-labelledby="curveTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="curveTitle">Sales overview</h2>
+                <p id="curveStory">&nbsp;</p>
+            </div>
+            <div class="seg" role="group" aria-label="Period">
+                <button type="button" data-period="today" aria-pressed="true">Today</button>
+                <button type="button" data-period="week" aria-pressed="false">7 days</button>
+                <button type="button" data-period="month" aria-pressed="false">30 days</button>
             </div>
         </div>
-    </div>
-    {% endif %}
-    <div class="stat-card">
-        {# Bootstrap's calendar-day icon has the word "Fri" drawn into the
-           font, so it read Friday on a Tuesday. The real day goes here
-           instead, and the refresh below keeps it right if a screen is
-           left open past midnight. #}
-        <div class="stat-card__icon stat-card__icon--today">
-            <span class="day-chip" id="today-weekday"
-                  title="{{ weekday.full }}">{{ weekday.short }}</span>
+        <div class="curve" id="curve">
+            <svg id="curveSvg" role="img" aria-label="Sales over the period"></svg>
+            <div class="curve__tip" id="curveTip" hidden></div>
+            <div class="curve__empty" id="curveEmpty" hidden>No paid bills in this period yet</div>
         </div>
-        <div>
-            <div class="stat-card__label">Today's Orders</div>
-            <div class="stat-card__value" id="today-orders">{{ today_orders }}</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--warning">
-            <i class="bi bi-exclamation-triangle-fill"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Low Stock</div>
-            <div class="stat-card__value" id="low-stock">{{ low_stock }}</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--warning">
-            <i class="bi bi-x-circle-fill"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Unavailable</div>
-            <div class="stat-card__value" id="unavailable">{{ unavailable }}</div>
-        </div>
-    </div>
-    </div>
-</section>
+    </section>
 
-<!-- ==========================================
-     YOUR MENU
-     The running totals. Worth a glance, not a headline.
-     ========================================== -->
-<section class="dash-block" aria-labelledby="dashMenu">
-    <h2 class="dash-block__title" id="dashMenu">Your menu</h2>
-    <div class="stats-grid stats-grid--quiet">
-    <div class="stat-card">
-        <div class="stat-card__icon">
-            <i class="bi bi-egg-fried"></i>
+    <section class="panel" aria-labelledby="liveTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="liveTitle">Live orders</h2>
+                <p class="live-waiting"><span class="live-waiting__dot"></span><span id="liveWaiting">Watching today&rsquo;s orders</span></p>
+            </div>
+            <a href="{{ url_for('kitchen_display') }}" class="dash-link">Open kitchen <i class="bi bi-arrow-right"></i></a>
         </div>
-        <div>
-            <div class="stat-card__label">Total Food Items</div>
-            <div class="stat-card__value" id="total-foods">{{ total_foods }}</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--categories">
-            <i class="bi bi-tags-fill"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Categories</div>
-            <div class="stat-card__value" id="total-categories">{{ total_categories }}</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--orders">
-            <i class="bi bi-receipt-cutoff"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Total Orders</div>
-            <div class="stat-card__value" id="total-orders">{{ total_orders }}</div>
-        </div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-card__icon">
-            <i class="bi bi-boxes"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Inventory Items</div>
-            <div class="stat-card__value" id="total-inventory">{{ total_inventory }}</div>
-        </div>
-    </div>
-    </div>
-</section>
-
-<!-- ==========================================
-     QUICK ACTIONS — ONLY 4
-     ========================================== -->
-
-<div class="panel">
-
-    <div class="panel-header">
-        <div>
-            <h2><i class="bi bi-lightning-charge-fill"></i> Quick Actions</h2>
-            <p class="panel-subtitle">The four places a day at the counter goes</p>
-        </div>
-    </div>
-
-
-    <div class="dashboard-actions">
-
-        <a href="{{ url_for('add_order') }}" class="dashboard-action dashboard-action--order">
-            <span class="dashboard-action__icon">
-                <i class="bi bi-cart-plus"></i>
-            </span>
-            <span>
-                <strong>New Order</strong>
-                <small>Take a new customer order</small>
-            </span>
-            <i class="bi bi-arrow-right dashboard-action__go" aria-hidden="true"></i>
-        </a>
-
-
-        <a href="{{ url_for('inventory') }}" class="dashboard-action dashboard-action--stock">
-            <span class="dashboard-action__icon">
-                <i class="bi bi-boxes"></i>
-            </span>
-            <span>
-                <strong>Inventory</strong>
-                <small>Check and update stock</small>
-            </span>
-            <i class="bi bi-arrow-right dashboard-action__go" aria-hidden="true"></i>
-        </a>
-
-
-        <a href="{{ url_for('kitchen_display') }}" class="dashboard-action dashboard-action--kitchen">
-            <span class="dashboard-action__icon">
-                <i class="bi bi-fire"></i>
-            </span>
-            <span>
-                <strong>Kitchen</strong>
-                <small>Today's orders, done and cancelled</small>
-            </span>
-            <i class="bi bi-arrow-right dashboard-action__go" aria-hidden="true"></i>
-        </a>
-
-
-        <a href="{{ url_for('billing') }}" class="dashboard-action dashboard-action--billing">
-            <span class="dashboard-action__icon">
-                <i class="bi bi-credit-card-2-front"></i>
-            </span>
-            <span>
-                <strong>Billing Management</strong>
-                <small>Manage bills and payments</small>
-            </span>
-            <i class="bi bi-arrow-right dashboard-action__go" aria-hidden="true"></i>
-        </a>
-
-    </div>
+        <ul class="live-list" id="liveList">
+            <li class="dash-empty">Loading&hellip;</li>
+        </ul>
+    </section>
 
 </div>
 
 
-{# The stock alert now lives at the top of this page, above the statistics. #}
+<!-- ==========================================
+     WHAT SOLD, AND WHAT TO REORDER
+     ========================================== -->
+<div class="dash-row">
+
+    <section class="panel" aria-labelledby="popularTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="popularTitle">Popular today</h2>
+                <p>What sold most, by how many</p>
+            </div>
+            <span class="chip-soft"><i class="bi bi-fire"></i> Top sellers</span>
+        </div>
+        <div class="table-wrap">
+            <table class="top-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th class="top-cat">Category</th>
+                        <th class="num">Sold</th>
+                        <th class="num">Sales</th>
+                    </tr>
+                </thead>
+                <tbody id="popularBody">
+                    <tr><td colspan="4" class="dash-empty">Loading&hellip;</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    {# The stock that needs somebody, by name. Counts alone said something
+       was wrong without saying what to reorder. #}
+    <section class="panel stock-panel" id="stock-alert-panel" aria-labelledby="stockTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="stockTitle">Stock to check</h2>
+                <p>Out of stock first, then the fewest left</p>
+            </div>
+            <a href="{{ url_for('inventory') }}" class="btn btn--ghost btn--sm stock-alert__action">
+                <i class="bi bi-boxes"></i> View stock
+            </a>
+        </div>
+        <div id="stock-alert-content">
+            {% include "_stock_list.html" %}
+        </div>
+    </section>
+
+</div>
 
 
 <script>
-    /*
-       Live dashboard:
-       Fetches only the statistics every 5 seconds.
-       It NEVER reloads/navigates the page.
-    */
+(function () {
+    var PERIOD_KEY = "cafora.dashPeriod";
+    var WORDS = {today: "today", week: "last 7 days", month: "last 30 days"};
+    var POPULAR = {today: "Popular today", week: "Popular this week",
+                   month: "Popular this month"};
+    var money = new Intl.NumberFormat("en-IN", {maximumFractionDigits: 0});
 
-    /* Food names are typed by the café, so they are escaped before going
-       anywhere near innerHTML. */
-    function escapeHtml(value) {
-        const box = document.createElement("div");
+    var period = "today";
+    try {
+        var kept = localStorage.getItem(PERIOD_KEY);
+        if (kept && WORDS[kept]) period = kept;
+    } catch (error) { /* no storage: start on today */ }
+
+    var select = document.getElementById("dashPeriod");
+    var segs = document.querySelectorAll(".seg [data-period]");
+    var lastCurve = [];
+
+    function esc(value) {
+        var box = document.createElement("div");
         box.textContent = value == null ? "" : String(value);
         return box.innerHTML;
     }
 
-    /* Builds one row of the stock alert. Mirrors the markup in
-       templates/_stock_alert.html, which renders the same thing on a cold
-       load - change both together. */
-    function stockRow(kind, icon, label, count, items, showQuantity) {
-        const listed = items || [];
-
-        let chips = listed.map(function (item) {
-            const amount = showQuantity
-                ? "<em>" + escapeHtml(item.quantity) + "</em>"
-                : "";
-            return '<span class="stock-chip">' + escapeHtml(item.name) + amount + "</span>";
-        }).join("");
-
-        if (count > listed.length) {
-            chips += '<span class="stock-alert__more">and ' +
-                     (count - listed.length) + " more</span>";
+    function trend(change, versus) {
+        if (change === null || change === undefined) {
+            return '<span class="kpi__none">Nothing earlier to compare with</span>';
         }
-
-        return '<div class="stock-alert__row stock-alert__row--' + kind + '">' +
-                   '<span class="stock-alert__badge">' +
-                       '<i class="bi ' + icon + '"></i> ' + label +
-                       " <strong>" + count + "</strong>" +
-                   "</span>" +
-                   '<span class="stock-alert__names">' + chips + "</span>" +
-               "</div>";
+        var kind = change > 0 ? "up" : (change < 0 ? "down" : "flat");
+        var icon = change > 0 ? "bi-arrow-up-right"
+                 : (change < 0 ? "bi-arrow-down-right" : "bi-dash");
+        return '<span class="kpi__trend kpi__trend--' + kind + '">' +
+               '<i class="bi ' + icon + '"></i>' + Math.abs(change).toFixed(1) +
+               '%</span><span class="kpi__versus">' + esc(versus) + '</span>';
     }
 
-    async function updateDashboard() {
-        // Nothing to refresh while the tab is in the background, and every
-        // skipped tick is a request and a set of database queries saved.
-        // The next poll after the user returns brings it up to date.
-        if (document.hidden) return;
+    function setKpi(id, value, change, versus) {
+        var card = document.getElementById(id);
+        if (!card) return;
+        var label = card.querySelector("[data-kpi-label]");
+        if (label) {
+            label.textContent = label.getAttribute("data-kpi-label") + " " +
+                                WORDS[period];
+        }
+        var foot = card.querySelector("[data-kpi-foot]");
+        if (foot) foot.innerHTML = trend(change, versus);
+        if (value !== null) {
+            var target = card.querySelector(".kpi__value span") ||
+                         card.querySelector(".kpi__value");
+            target.textContent = value;
+        }
+    }
 
-        try {
-            const response = await fetch(
-                "{{ url_for('dashboard_stats') }}",
-                {
-                    method: "GET",
-                    cache: "no-store",
-                    headers: {
-                        "Accept": "application/json"
+    // ---- The curve ----
+    function compact(value) {
+        if (value >= 100000) return "₹" + (value / 100000).toFixed(1) + "L";
+        if (value >= 1000) return "₹" + (value / 1000).toFixed(1) + "k";
+        return "₹" + Math.round(value);
+    }
+
+    function drawCurve(points) {
+        lastCurve = points || [];
+        var svg = document.getElementById("curveSvg");
+        var box = document.getElementById("curve");
+        if (!svg || !box) return;
+        var W = Math.max(box.clientWidth, 280);
+        var H = Math.max(box.clientHeight, 180);
+        var left = 44, right = 8, top = 14, bottom = 30;
+        var n = lastCurve.length;
+        var values = lastCurve.map(function (p) { return p.value; });
+        var peak = Math.max.apply(null, values.concat([0]));
+        var ceiling = peak > 0 ? peak * 1.18 : 100;
+        var span = W - left - right;
+
+        function x(i) { return left + (n > 1 ? i * span / (n - 1) : span / 2); }
+        function y(v) { return top + (1 - v / ceiling) * (H - top - bottom); }
+
+        var parts = [];
+        parts.push('<defs><linearGradient id="curveFill" x1="0" y1="0" x2="0" y2="1">' +
+                   '<stop offset="0" style="stop-color:var(--copper-light);stop-opacity:.30"/>' +
+                   '<stop offset="1" style="stop-color:var(--copper-light);stop-opacity:0"/>' +
+                   '</linearGradient></defs>');
+
+        // Three guide lines, labelled at the left.
+        parts.push('<g class="curve__grid">');
+        var labels = [];
+        for (var g = 0; g <= 3; g++) {
+            var level = ceiling * g / 3;
+            var gy = y(level);
+            parts.push('<line x1="' + left + '" x2="' + (W - right) + '" y1="' + gy + '" y2="' + gy + '"/>');
+            labels.push('<text x="' + (left - 8) + '" y="' + (gy + 4) + '" text-anchor="end">' + compact(level) + '</text>');
+        }
+        parts.push('</g><g class="curve__y">' + labels.join("") + '</g>');
+
+        if (n > 0) {
+            // A smooth line through every point that never dips below
+            // zero or above the ceiling between them.
+            var pts = lastCurve.map(function (p, i) { return [x(i), y(p.value)]; });
+            var d = "M" + pts[0][0] + "," + pts[0][1];
+            for (var i = 0; i < pts.length - 1; i++) {
+                var p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1],
+                    p3 = pts[i + 2] || p2;
+                var c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+                var c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+                var floor = y(0);
+                c1y = Math.min(floor, Math.max(top, c1y));
+                c2y = Math.min(floor, Math.max(top, c2y));
+                d += " C" + c1x + "," + c1y + " " + c2x + "," + c2y + " " + p2[0] + "," + p2[1];
+            }
+            var base = y(0);
+            parts.push('<path d="' + d + " L" + pts[pts.length - 1][0] + "," + base +
+                       " L" + pts[0][0] + "," + base + ' Z" fill="url(#curveFill)"/>');
+            parts.push('<path class="curve__line" d="' + d + '"/>');
+
+            // No more than seven labels along the bottom.
+            var every = Math.max(1, Math.ceil(n / 7));
+            parts.push('<g class="curve__x">');
+            for (var k = 0; k < n; k += every) {
+                var anchor = k === 0 ? "start" : (k === n - 1 ? "end" : "middle");
+                parts.push('<text x="' + x(k) + '" y="' + (H - 8) + '" text-anchor="' + anchor + '">' +
+                           esc(lastCurve[k].label) + '</text>');
+            }
+            parts.push('</g>');
+            parts.push('<line class="curve__guide" id="curveGuide" y1="' + top + '" y2="' + base +
+                       '" x1="-10" x2="-10" visibility="hidden"/>');
+            parts.push('<circle class="curve__dot" id="curveDot" r="5" cx="-10" cy="-10" visibility="hidden"/>');
+        }
+
+        svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+        svg.innerHTML = parts.join("");
+        document.getElementById("curveEmpty").hidden = peak > 0;
+
+        svg.onmousemove = svg.ontouchstart = svg.ontouchmove = function (event) {
+            if (!n) return;
+            var rect = svg.getBoundingClientRect();
+            var point = event.touches ? event.touches[0] : event;
+            var at = (point.clientX - rect.left) * (W / rect.width);
+            var i = Math.round((at - left) / (n > 1 ? span / (n - 1) : 1));
+            i = Math.max(0, Math.min(n - 1, i));
+            var px = x(i), py = y(lastCurve[i].value);
+            var guide = document.getElementById("curveGuide");
+            var dot = document.getElementById("curveDot");
+            guide.setAttribute("x1", px); guide.setAttribute("x2", px);
+            guide.setAttribute("visibility", "visible");
+            dot.setAttribute("cx", px); dot.setAttribute("cy", py);
+            dot.setAttribute("visibility", "visible");
+            var tip = document.getElementById("curveTip");
+            tip.innerHTML = '<strong>₹' + money.format(lastCurve[i].value) + '</strong>' +
+                            esc(lastCurve[i].label);
+            tip.style.left = (px * rect.width / W) + "px";
+            tip.style.top = (py * rect.height / H) + "px";
+            tip.hidden = false;
+        };
+        svg.onmouseleave = function () {
+            var tip = document.getElementById("curveTip");
+            if (tip) tip.hidden = true;
+            ["curveGuide", "curveDot"].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) el.setAttribute("visibility", "hidden");
+            });
+        };
+    }
+
+    // ---- Live orders ----
+    function statusPill(status) {
+        if (status === "Completed") return '<span class="status-pill status-pill--done">Done</span>';
+        if (status === "Cancelled") return '<span class="status-pill status-pill--cancelled">Cancelled</span>';
+        return '<span class="status-pill">In kitchen</span>';
+    }
+
+    function drawLive(rows, waiting) {
+        var list = document.getElementById("liveList");
+        if (!list) return;
+        document.getElementById("liveWaiting").textContent =
+            waiting ? waiting + (waiting === 1 ? " order" : " orders") + " in the kitchen"
+                    : "Nothing waiting in the kitchen";
+        if (!rows.length) {
+            list.innerHTML = '<li class="dash-empty">No orders yet today</li>';
+            return;
+        }
+        list.innerHTML = rows.map(function (row) {
+            return '<li><a class="live-row" href="/orders/' + encodeURIComponent(row.order_id) + '">' +
+                   '<span><strong>#' + esc(row.number) + '</strong><small>' +
+                   row.items + (row.items === 1 ? " item" : " items") + " &middot; " +
+                   esc(row.source) + '</small></span>' + statusPill(row.status) +
+                   '<span class="live-row__total">₹' + money.format(row.total) + '</span></a></li>';
+        }).join("");
+    }
+
+    // ---- Best sellers ----
+    function drawPopular(rows) {
+        var body = document.getElementById("popularBody");
+        if (!body) return;
+        document.getElementById("popularTitle").textContent = POPULAR[period];
+        if (!rows.length) {
+            body.innerHTML = '<tr><td colspan="4" class="dash-empty">Nothing sold in this period yet</td></tr>';
+            return;
+        }
+        body.innerHTML = rows.map(function (row, i) {
+            var pic = row.image
+                ? '<img src="' + esc(row.image) + '" alt="">'
+                : '<i class="bi bi-egg-fried"></i>';
+            return '<tr><td><span class="top-item"><span class="top-rank">' + (i + 1) +
+                   '</span><span class="top-item__pic">' + pic + '</span>' +
+                   '<span>' + esc(row.name) + '</span></span></td>' +
+                   '<td class="top-cat">' + esc(row.category) + '</td>' +
+                   '<td class="num">' + row.sold + '</td>' +
+                   '<td class="num">₹' + money.format(row.takings) + '</td></tr>';
+        }).join("");
+    }
+
+    // ---- Stock: mirrors templates/_stock_list.html - change both ----
+    function stockList(data) {
+        var out = data.unavailable_items || [], low = data.low_stock_items || [];
+        if (!data.unavailable && !data.low_stock) {
+            return '<div class="stock-clear"><i class="bi bi-check2-circle"></i>' +
+                   '<span>Everything is stocked above its minimum.</span></div>';
+        }
+        var html = '<ul class="stock-rows">';
+        out.forEach(function (item) {
+            html += '<li class="stock-row stock-row--out"><span class="stock-row__text">' +
+                    '<strong class="stock-row__name">' + esc(item.name) + '</strong>' +
+                    '<small>None left</small></span>' +
+                    '<span class="stock-pill stock-pill--out">Out</span></li>';
+        });
+        if (data.unavailable > out.length) {
+            html += '<li class="stock-more">and ' + (data.unavailable - out.length) +
+                    ' more out of stock</li>';
+        }
+        low.forEach(function (item) {
+            html += '<li class="stock-row stock-row--low"><span class="stock-row__text">' +
+                    '<strong class="stock-row__name">' + esc(item.name) + '</strong>' +
+                    '<small><b class="stock-row__left">' + esc(item.quantity) +
+                    '</b> left &middot; minimum ' + esc(item.minimum) + '</small></span>' +
+                    '<span class="stock-pill stock-pill--low">Low</span></li>';
+        });
+        if (data.low_stock > low.length) {
+            html += '<li class="stock-more">and ' + (data.low_stock - low.length) +
+                    ' more running low</li>';
+        }
+        return html + '</ul>';
+    }
+
+    function drawStock(data) {
+        var total = (data.unavailable || 0) + (data.low_stock || 0);
+        document.getElementById("stock-count").textContent = total;
+        document.getElementById("stock-note").innerHTML =
+            (total ? '<span class="kpi__alert">Needs attention</span>'
+                   : '<span class="kpi__ok">All stocked</span>') +
+            ' <span><span id="unavailable">' + (data.unavailable || 0) +
+            '</span> out &middot; <span id="low-stock">' + (data.low_stock || 0) +
+            '</span> low</span>';
+        document.getElementById("stock-alert-content").innerHTML = stockList(data);
+    }
+
+    // ---- Loading ----
+    function showPeriod() {
+        if (select) select.value = period;
+        segs.forEach(function (button) {
+            button.setAttribute("aria-pressed",
+                button.getAttribute("data-period") === period ? "true" : "false");
+        });
+    }
+
+    var asked = 0;
+    function loadInsights() {
+        if (document.hidden) return;
+        var mine = ++asked;
+        fetch("{{ url_for('dashboard_insights_feed') }}?period=" + encodeURIComponent(period),
+              {cache: "no-store", headers: {"Accept": "application/json"}})
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                // A slower answer to an older question is thrown away.
+                if (mine !== asked || data.error) return;
+                setKpi("kpiSales", money.format(data.sales.value),
+                       data.sales.change, data.versus);
+                setKpi("kpiOrders", period === "today" ? null : data.orders.value,
+                       data.orders.change, data.versus);
+                setKpi("kpiAverage", data.average.value ? money.format(data.average.value) : "–",
+                       data.average.change, data.versus);
+                if (period === "today") {
+                    document.getElementById("today-orders").textContent = data.orders.value;
+                }
+                document.getElementById("curveStory").textContent = data.story;
+                drawCurve(data.curve || []);
+                drawLive(data.live || [], data.waiting || 0);
+                drawPopular(data.popular || []);
+            })
+            .catch(function (error) { console.error("Dashboard insights failed:", error); });
+    }
+
+    function choose(next) {
+        if (!WORDS[next] || next === period) return;
+        period = next;
+        try { localStorage.setItem(PERIOD_KEY, period); } catch (error) { }
+        showPeriod();
+        loadInsights();
+    }
+
+    if (select) select.addEventListener("change", function () { choose(select.value); });
+    segs.forEach(function (button) {
+        button.addEventListener("click", function () {
+            choose(button.getAttribute("data-period"));
+        });
+    });
+
+    // Today's own figures and the stock move by the second; they come from
+    // the light feed, which is one database round trip.
+    function updateToday() {
+        if (document.hidden) return;
+        fetch("{{ url_for('dashboard_stats') }}", {cache: "no-store",
+              headers: {"Accept": "application/json"}})
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data.error) return;
+                var day = document.getElementById("today-weekday");
+                if (day && data.weekday && data.weekday.short) {
+                    day.textContent = data.weekday.short;
+                    day.title = data.weekday.full || "";
+                }
+                if (period === "today") {
+                    document.getElementById("today-orders").textContent = data.today_orders;
+                    var revenue = document.getElementById("today-revenue");
+                    if (revenue && data.today_revenue !== null && data.today_revenue !== undefined) {
+                        revenue.textContent = money.format(data.today_revenue);
                     }
                 }
-            );
-
-            if (!response.ok) {
-                throw new Error("Dashboard API returned " + response.status);
-            }
-
-            const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            document.getElementById("total-foods").textContent =
-                data.total_foods;
-
-            document.getElementById("total-categories").textContent =
-                data.total_categories;
-
-            document.getElementById("total-orders").textContent =
-                data.total_orders;
-
-            document.getElementById("total-inventory").textContent =
-                data.total_inventory;
-
-            document.getElementById("today-orders").textContent =
-                data.today_orders;
-
-            // Rolls the day over on a screen nobody has reloaded.
-            const dayEl = document.getElementById("today-weekday");
-            if (dayEl && data.weekday && data.weekday.short) {
-                dayEl.textContent = data.weekday.short;
-                dayEl.title = data.weekday.full || "";
-            }
-
-            /* Revenue is admin-only: the element only exists in the DOM
-               for admins, and the API only sends a numeric value to them. */
-            const revenueEl = document.getElementById("today-revenue");
-            if (revenueEl && data.today_revenue !== null && data.today_revenue !== undefined) {
-                revenueEl.textContent = Number(data.today_revenue).toFixed(2);
-            }
-
-            document.getElementById("low-stock").textContent =
-                data.low_stock;
-
-            document.getElementById("unavailable").textContent =
-                data.unavailable;
-
-            /* Keep the alert section in sync without refreshing the page. */
-            const alertPanel =
-                document.getElementById("stock-alert-panel");
-
-            const alertContent =
-                document.getElementById("stock-alert-content");
-
-            if (data.low_stock > 0 || data.unavailable > 0) {
-
-                alertPanel.hidden = false;
-
-                /* Mirrors templates/_stock_alert.html - change both together. */
-                let html = "";
-
-                if (data.unavailable > 0) {
-                    html += stockRow(
-                        "out", "bi-x-circle-fill", "Out of stock",
-                        data.unavailable, data.unavailable_items, false);
-                }
-
-                if (data.low_stock > 0) {
-                    html += stockRow(
-                        "low", "bi-exclamation-triangle-fill", "Running low",
-                        data.low_stock, data.low_stock_items, true);
-                }
-
-                html += `
-                    <a href="{{ url_for('inventory') }}" class="btn btn--ghost btn--sm stock-alert__action">
-                        <i class="bi bi-boxes"></i> Restock in Inventory
-                    </a>
-                `;
-
-                alertContent.innerHTML = html;
-
-            } else {
-                alertPanel.hidden = true;
-            }
-
-        } catch (error) {
-            console.error("Live dashboard update failed:", error);
-        }
+                drawStock(data);
+            })
+            .catch(function (error) { console.error("Live dashboard update failed:", error); });
     }
 
-    /* Every two seconds rather than five: the whole statistics block is one
-       database round trip now, so a change made on the till shows here about
-       as fast as anyone can look up. The poll skips entirely while the tab is
-       in the background, so the cost only applies when someone is watching. */
-    updateDashboard();
-    setInterval(updateDashboard, 2000);
+    showPeriod();
+    loadInsights();
+    setInterval(updateToday, 2000);
+    setInterval(loadInsights, 20000);
 
-    /* Coming back to the tab should not wait out the rest of the interval. */
     document.addEventListener("visibilitychange", function () {
-        if (!document.hidden) updateDashboard();
+        if (!document.hidden) { updateToday(); loadInsights(); }
     });
+
+    var redraw = null;
+    window.addEventListener("resize", function () {
+        clearTimeout(redraw);
+        redraw = setTimeout(function () { drawCurve(lastCurve); }, 120);
+    });
+}());
 </script>
 
 {% endblock %}

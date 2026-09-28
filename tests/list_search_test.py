@@ -1136,6 +1136,10 @@ try:
     # bottom. Measured: twenty-four small nudges there produced
     # twenty-three flips of the top bar, each one a 220ms slide. The
     # document height never moved - what was shaking was the bar.
+    #
+    # The header does not slide at all now: it stays at the top and
+    # frosts over the page. These hold it to that, measured on where it
+    # actually is rather than on a class.
 
     def nudge(times, delta, width, height):
         for step in range(times):
@@ -1147,7 +1151,7 @@ try:
 
     def bar_hidden():
         return b.evaluate(
-            "document.documentElement.classList.contains('bar-away')")
+            "document.querySelector('.topbar').getBoundingClientRect().top < -2")
 
     b.call("Emulation.setDeviceMetricsOverride", width=390, height=780,
            deviceScaleFactor=1, mobile=True)
@@ -1161,10 +1165,10 @@ try:
     b.evaluate("""
         (function () {
             window.__flips = 0;
-            var root = document.documentElement;
-            var was = root.classList.contains('bar-away');
+            var bar = document.querySelector('.topbar');
+            var was = Math.round(bar.getBoundingClientRect().top);
             window.__watch = setInterval(function () {
-                var now = root.classList.contains('bar-away');
+                var now = Math.round(bar.getBoundingClientRect().top);
                 if (now !== was) { window.__flips++; was = now; }
             }, 16);
         }())
@@ -1189,15 +1193,17 @@ try:
                x=195, y=390, deltaX=0, deltaY=120)
         time.sleep(0.05)
     time.sleep(0.6)
-    check("a real scroll down still hides it", bar_hidden(),
-          "the shaking was cured by stopping the bar working at all")
+    check("a real scroll down leaves the header where it is, as glass",
+          not bar_hidden() and b.evaluate(
+              "document.documentElement.classList.contains('is-scrolled')"),
+          "the header moved on the way down, or stayed solid over the page")
 
     for _ in range(8):
         b.call("Input.dispatchMouseEvent", type="mouseWheel",
                x=195, y=390, deltaX=0, deltaY=-120)
         time.sleep(0.05)
     time.sleep(0.6)
-    check("and scrolling back up brings it straight back",
+    check("and scrolling back up it is still there",
           not bar_hidden(), "it stayed away")
 
     # =================================================================

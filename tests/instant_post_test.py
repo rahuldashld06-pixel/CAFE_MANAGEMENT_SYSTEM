@@ -230,7 +230,7 @@ try:
 
     # Every required field, or the browser blocks the submit and no post
     # is ever attempted - which would make the checks below meaningless.
-    submit("form", """
+    submit("#page-view form", """
         form.querySelector('[name=food_name]').value = 'Swapped Latte';
         form.querySelector('[name=price]').value = '175';
         form.querySelector('[name=quantity]').value = '20';
@@ -282,7 +282,7 @@ try:
     wait_for("!!document.querySelector('form [name=quantity]')",
              "the stock form")
     mark_window()
-    submit("form", "form.querySelector('[name=quantity]').value = '77';")
+    submit("#page-view form", "form.querySelector('[name=quantity]').value = '77';")
     wait_for("location.pathname === '/inventory'", "Inventory")
     time.sleep(0.4)
 
@@ -354,7 +354,7 @@ try:
     before = len([1 for method, p in LOADS
                   if method == "GET" and p.startswith("/static/")])
     check("the category form was submittable",
-          submit("form",
+          submit("#page-view form",
                  "form.querySelector('[name=category_name]')"
                  ".value = 'Pastries';"),
           "a required field was left empty, so nothing was posted")

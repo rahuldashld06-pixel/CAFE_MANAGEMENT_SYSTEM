@@ -45,13 +45,38 @@ branding, fully isolated from the others.
   line per dish with its own - and +, Clear all, the totals, and a
   button that says what it will charge. On a phone or tablet it is the
   sheet behind the Order Summary button, as before.
-- **No bar across the top of a large screen.** On a laptop, desktop or
-  TV the profile, the full-screen button and Order Status sit at the
-  foot of the sidebar, with the menu opening upwards, and every page's
-  title takes the top of the screen. Phones and tablets, where the
-  sidebar is a drawer, keep the bar. One of each element is moved
-  between the two places rather than drawn twice, so every id, handler
-  and tour step is the one there has always been.
+- **A header across the top, a guide down the side.** The header runs
+  the full width of every page, the way YouTube's does: the menu button
+  and the café's name at the left, search in the middle, and New order,
+  full screen, Order Status (a bell with the count of orders waiting)
+  and the profile picture at the right. It is the page's own colour with
+  no line under it, and turns to frosted glass once the page scrolls
+  under it. Down the side of a laptop or desktop is a slim rail of icons
+  with their names under them; the menu button opens it out into the
+  full guide, in sections, and folds it back, and the choice is kept for
+  that browser. On a phone or tablet the side is a drawer, and search is
+  an icon that opens across the header.
+- **The team.** User Management lists each person with their picture or
+  initials, username, role (the café's owner marked as Owner), when they
+  last signed in and whether they can, with Edit, Deactivate and Delete in
+  a menu at the end of the row - Delete never offered for yourself or the
+  owner. Search and a role filter narrow the list in place, and a role
+  overview says what each role can reach and how many hold it. Managers,
+  cashiers and staff reach the same pages, and the overview says so.
+- **Search.** The box in the header finds pages ("tax" finds Tax &
+  Discount), dishes by name, description or category, categories, an
+  order by the number the kitchen calls ("#12"), and - for an owner -
+  people. Everything it offers is something that person can open; `/`
+  anywhere goes straight to it.
+- **The dashboard.** Sales, orders, the average bill and the stock to
+  check across the top, each against the period before ("vs. this time
+  yesterday" for today, so a morning never reads as a slump). Then the
+  sales curve for the period beside the orders still in the kitchen, and
+  the best sellers beside the stock that needs reordering, by name.
+  Today, the last 7 days or the last 30, chosen once for the whole page
+  and kept for next time. The curve, live orders and best sellers load
+  after the page has drawn and refresh every 20 seconds; today's own
+  figures and the stock refresh every two.
 - **Categories and menu.** Categories, food items with photos, prices.
 - **Inventory.** Stock levels drive availability automatically — an item
   at zero stock disappears from the order screen.
@@ -202,9 +227,6 @@ branding, fully isolated from the others.
   refresh does not re-post.
 - **No scrollbars.** Everything still scrolls by wheel, trackpad, touch and
   keyboard; the bar is simply not drawn.
-- **The page title stays put.** The heading and its actions stay at the top
-  while the content scrolls underneath, offset by the measured height of
-  the bar above rather than a guess.
 - **The sidebar scrolls only when it has to.** The name is a fixed head and
   the page links below it are what scrolls, starting at Dashboard. A screen
   tall enough for every section has no scrollbar at all; a shorter one
@@ -215,7 +237,7 @@ branding, fully isolated from the others.
 - **Installs as an app.** A web manifest asking for fullscreen display, so
   "Install" in a browser or "Add to Home Screen" on a phone opens the site
   with no address bar and no browser chrome. In an ordinary tab a button in
-  the top bar fills the screen instead, and remembers the choice.
+  the header fills the screen instead, and remembers the choice.
 
 ## Caching
 
@@ -346,6 +368,8 @@ tests/hot_mirror_test.py Real-browser mirrored-card test suite
 tests/settings_test.py Tax rate, profile photo, name and symbol suite
 tests/tablet_layout_test.py Real-browser tablet layout test suite
 tests/stock_alert_test.py Dashboard stock-alert test suite
+tests/dashboard_feed_test.py The dashboard's figures and the header's search
+tests/shell_browser_test.py Real-browser suite for the header, the guide and the dashboard
 tests/print_test.py  Printable bill and kitchen ticket test suite
 tests/staff_access_test.py Non-admin permission test suite
 tests/billing_paid_test.py Bill settlement test suite
@@ -543,15 +567,15 @@ python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 104  FAILED: 0
-python tests/tablet_layout_test.py # expect PASSED: 62   FAILED: 0
-python tests/stock_alert_test.py  # expect PASSED: 30   FAILED: 0
+python tests/tablet_layout_test.py # expect PASSED: 65   FAILED: 0
+python tests/stock_alert_test.py  # expect PASSED: 33   FAILED: 0
 python tests/print_test.py        # expect PASSED: 56   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 33   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 44   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 31   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 86   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 89   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
@@ -573,10 +597,12 @@ python tests/page_head_test.py    # expect PASSED: 89   FAILED: 0
 python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
 python tests/draft_restore_test.py # expect PASSED: 35  FAILED: 0
 python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
+python tests/dashboard_feed_test.py # expect PASSED: 43  FAILED: 0
+python tests/shell_browser_test.py # expect PASSED: 58  FAILED: 0
 ```
 
-All thirty-eight run in memory against a SQLite stand-in — no database or
-network needed. The nineteen that drive a browser use a headless Edge or
+All forty run in memory against a SQLite stand-in — no database or
+network needed. The twenty that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
 Each browser suite binds its own fixed port. A run that is killed part
@@ -664,8 +690,8 @@ also measures the New Order menu at each size: at least two cards to a row,
 cards short enough to stack, and type no smaller than a name can be read
 at — density must not be bought with unreadable text.
 
-`stock_alert_test.py` covers the dashboard's stock alert, which names the
-food that needs reordering rather than only counting it. Checks that zero
+`stock_alert_test.py` covers the dashboard's Stock to check panel, which
+names the food that needs reordering rather than only counting it. Checks that zero
 stock is reported as out rather than low (a zero satisfies the minimum test
 too), that the most urgent is listed first, that a long list is capped and
 says how many more there are, and that one café is never told about

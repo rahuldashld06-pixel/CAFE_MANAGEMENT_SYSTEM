@@ -68,13 +68,15 @@ def build(client, cafe, username, menu):
 
 
 def alert_html(client):
+    """The dashboard's Stock to check panel, as rendered."""
     html = client.get("/dashboard").get_data(as_text=True)
     start = html.find('id="stock-alert-panel"')
-    return html[start:html.find("</div>", html.find("stock-alert__action", start))]
+    return html[start:html.find("</section>", start)]
 
 
 def chips(client):
-    return re.findall(r'class="stock-chip">([^<]+)', alert_html(client))
+    """The food the panel names, in the order it names them."""
+    return re.findall(r'class="stock-row__name">([^<]+)<', alert_html(client))
 
 
 def stats(client):
@@ -90,9 +92,14 @@ a = app.test_client()
 build(a, "Alpha Cafe", "alpha", MENU)
 
 page = a.get("/dashboard").get_data(as_text=True)
-check("the alert is above the statistics",
-      0 < page.find('id="stock-alert-panel"') < page.find('class="stats-grid"'),
-      "the alert is not the first thing on the page")
+# It was a banner above the figures; it is the Stock to check panel now,
+# with a figure card of its own at the top of the page that counts it.
+check("the dashboard has its Stock to check panel",
+      'id="stock-alert-panel"' in page and "Stock to check" in page,
+      "there is nowhere on the dashboard naming what to reorder")
+check("and the figures at the top count it",
+      re.search(r'id="stock-count">\s*4\s*<', page) is not None,
+      "the Stock to check card does not say 4")
 
 names = chips(a)
 check("out-of-stock food is named", "Latte" in names and "Mocha" in names,
@@ -103,14 +110,24 @@ check("healthy stock is not listed", "Cortado" not in names,
       "Cortado has 40 in stock but was flagged")
 
 check("the counts are right",
-      "Out of stock" in page and "Running low" in page
-      and re.search(r'Out of stock\s*<strong>2</strong>', page)
-      and re.search(r'Running low\s*<strong>2</strong>', page),
-      "counts are not 2 and 2")
+      re.search(r'id="unavailable">2<', page)
+      and re.search(r'id="low-stock">2<', page),
+      "counts are not 2 out and 2 low")
 
-check("a low-stock chip shows how many are left",
-      re.search(r'Flat White<em>1</em>', page) is not None,
-      "the remaining quantity is missing from the chip")
+panel = alert_html(a)
+check("out of stock is marked Out, and low is marked Low",
+      panel.count('stock-pill--out">Out<') == 2
+      and panel.count('stock-pill--low">Low<') == 2,
+      "the pills do not say which is which")
+
+check("a low-stock row shows how many are left",
+      re.search(r'Flat White</strong>\s*<small><b class="stock-row__left">1</b> left',
+                page) is not None,
+      "the remaining quantity is missing from the row")
+
+check("out of stock is listed before running low",
+      chips(a)[:2] == ["Latte", "Mocha"],
+      "the order is %s" % chips(a))
 
 
 print("\n=== 2. Zero stock counts as out, not low ===")
@@ -170,9 +187,10 @@ print("\n=== 6. Nothing wrong, nothing shown ===")
 c = app.test_client()
 build(c, "Gamma Cafe", "gamma", [("Cortado", 40, 5), ("Cold Brew", 30, 5)])
 page = c.get("/dashboard").get_data(as_text=True)
-check("the alert is hidden when stock is healthy",
-      re.search(r'id="stock-alert-panel"[^>]*\shidden', page) is not None,
-      "the panel is showing with nothing to report")
+check("with healthy stock the panel says so, and names nothing",
+      "Everything is stocked above its minimum" in alert_html(c)
+      and not chips(c),
+      "the panel lists %s with nothing to report" % chips(c))
 check("and the API agrees",
       stats(c)["low_stock"] == 0 and stats(c)["unavailable"] == 0)
 
