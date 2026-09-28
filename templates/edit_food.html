@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "_diet.html" import diet_choice %}
+{% from "_food_guess.html" import food_guess %}
 
 {% block title %}Edit Food{% endblock %}
 
@@ -25,6 +27,8 @@
                     required>
             </div>
 
+            {{ food_guess(food) }}
+
             <!-- Category -->
             <div class="field">
                 <label>Category</label>
@@ -38,6 +42,8 @@
                     {% endfor %}
                 </select>
             </div>
+
+            {{ diet_choice(food.diet) }}
 
             <!-- Food Photo -->
             <div class="field">

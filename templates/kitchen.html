@@ -126,8 +126,13 @@ function startKitchenScreen() {
         return '<article class="' + classes + '">'
             + '<header class="kitchen-ticket__head">'
             + '<span class="kitchen-ticket__id">#' + number + '</span>'
-            + '<span class="kitchen-ticket__from">'
-            + (order.source === "qr" ? "From a table" : "At the counter")
+            + '<span class="kitchen-ticket__from'
+            + (order.order_type === "takeaway" || order.order_type === "delivery"
+               ? ' kitchen-ticket__from--packed' : '') + '">'
+            + (order.source === "qr" ? "From a table"
+               : order.order_type === "takeaway" ? "Takeaway"
+               : order.order_type === "delivery" ? "Delivery"
+               : "At the counter")
             + '</span>'
             + '</header>'
             + '<ul class="kitchen-ticket__items">'

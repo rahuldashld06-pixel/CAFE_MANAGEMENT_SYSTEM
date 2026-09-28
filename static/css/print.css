@@ -335,6 +335,23 @@
     line-height: 1.05;
 }
 
+/* Dine-in, takeaway or delivery. Boxed when it has to be packed, so it
+   is the one thing on the ticket nobody misses. */
+.kot__type {
+    margin: 4px 0 2px;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+.kot__type--packed {
+    display: inline-block;
+    padding: 2px 10px;
+    border: 2px solid #000;
+    font-size: 17px;
+}
+
 .kot__time { margin: 0; font-size: 11px; color: var(--ink-soft); }
 
 .kot__items {

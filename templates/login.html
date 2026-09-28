@@ -103,7 +103,7 @@
             {% endif %}
         {% endwith %}
 
-        <form method="POST">
+        <form method="POST" id="signInForm">
 
             <div class="field">
                 <label for="username">Username or email</label>
@@ -169,6 +169,66 @@
         </form>
 
         <script>
+            /* Remember me, and the password.
+
+               The password is never kept by this site - not in a cookie,
+               not in storage a script could read. It is kept by the
+               browser's own password manager, which is built for it.
+               Two things here make that work in both directions:
+
+               - ticked, the browser is asked to keep this sign-in, so it
+                 offers to save it even where it would not have noticed;
+               - with a name in the box - remembered from last time, or
+                 typed - the browser is asked for the password it keeps
+                 for that name, and the box is filled.
+
+               Where the browser has no Credential Management API (Safari,
+               Firefox) this does nothing, and the browser's own autofill
+               does the same job from the autocomplete names above. */
+            (function () {
+                var form = document.getElementById("signInForm");
+                if (!form || !window.PasswordCredential ||
+                        !navigator.credentials) return;
+                var user = form.querySelector("[name=username]");
+                var pass = form.querySelector("[name=password]");
+                var remember = form.querySelector("[name=remember]");
+                var asked = false;
+
+                function same(a, b) {
+                    return String(a || "").trim().toLowerCase() ===
+                           String(b || "").trim().toLowerCase();
+                }
+
+                function ask() {
+                    if (asked || pass.value || !user.value.trim()) return;
+                    asked = true;
+                    navigator.credentials.get({password: true, mediation: "optional"})
+                        .then(function (kept) {
+                            if (!kept || kept.type !== "password" || !kept.password) return;
+                            if (!same(kept.id, user.value)) return;
+                            pass.value = kept.password;
+                        })
+                        .catch(function () { /* nothing kept, or declined */ });
+                }
+
+                if (user.value.trim()) ask();
+                user.addEventListener("change", function () {
+                    asked = false;
+                    ask();
+                });
+
+                form.addEventListener("submit", function () {
+                    if (!remember || !remember.checked) return;
+                    try {
+                        navigator.credentials.store(new PasswordCredential({
+                            id: user.value.trim(),
+                            password: pass.value,
+                            name: user.value.trim()
+                        })).catch(function () { });
+                    } catch (error) { /* the browser's own save prompt still runs */ }
+                });
+            }());
+
             (function () {
                 var box = document.getElementById("signInClock");
                 if (!box) return;

@@ -1,4 +1,5 @@
 {% from "_brand_mark.html" import coffee_mark %}
+{% from "_food_art.html" import food_sprite %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ cafe_theme }}"{% if cafe_colour_style %} style="{{ cafe_colour_style }}"{% endif %}>
 
@@ -41,7 +42,18 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    {# Out of the first paint's way, like the icon sheet below: a
+       stylesheet from another host is a DNS lookup and a TLS handshake
+       before anything is drawn, which on a phone's mobile data was most
+       of a second. display=swap already meant text shows in the fallback
+       face first; now the page does too. #}
+    <link rel="preload" as="style"
+          href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap"
+          onload="this.rel='stylesheet'">
+    <noscript>
+        <link rel="stylesheet"
+              href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap">
+    </noscript>
     {# The icon sheet is around 100KB from a third-party host, and a plain
        stylesheet link blocks the first paint until it lands. Loading it as
        print media and flipping to all on load takes it off that path: the
@@ -90,6 +102,7 @@
        the two pages with a password on them. Small enough to go in the
        page, so it does. #}
     <script src="{{ asset_url('js/password-view.js') }}" defer></script>
+    <script src="{{ asset_url('js/account-fields.js') }}" defer></script>
 
     {# Keeps a copy of every form as it is typed, so a closed browser or a
        power cut costs nobody their work. Kept per person: this says
@@ -105,6 +118,10 @@
 
 <body data-clock-unset="{{ 1 if (current_user and not current_user.timezone) else 0 }}">
 
+    {# The dish drawings, in the shell so every page swapped in can use
+       them by name. #}
+    {{ food_sprite() }}
+
     <div class="app-shell">
 
         {# Behind every page, for everyone, and deliberately not the
@@ -119,6 +136,7 @@
         <div class="app-watermark" aria-hidden="true">
             {{ coffee_mark() }}
             <span class="app-watermark__name">{{ platform_name }}</span>
+            <span class="app-watermark__tagline">Food Management System</span>
         </div>
 
 
@@ -163,6 +181,11 @@
                            value="{{ request.args.get('q', '') if request.endpoint == 'search' else '' }}"
                            placeholder="Search dishes, orders, pages"
                            aria-label="Search" autocomplete="off">
+                    <button type="button" class="topbar-search__clear" id="topSearchClear"
+                            aria-label="Clear the search" title="Clear"
+                            {% if not (request.endpoint == 'search' and request.args.get('q')) %}hidden{% endif %}>
+                        <i class="bi bi-x-lg" aria-hidden="true"></i>
+                    </button>
                     <kbd class="topbar-search__key" aria-hidden="true">/</kbd>
                 </label>
                 <button type="submit" class="topbar-search__go" aria-label="Search">
@@ -277,6 +300,12 @@
                             <i class="bi bi-percent"></i><span>Tax &amp; Discount</span>
                         </a>
 
+                        {# Admin only, like the rates: what a takeaway or a
+                           delivery container adds to every such bill. #}
+                        <a href="{{ url_for('packing_settings') }}" class="profile-dropdown__item">
+                            <i class="bi bi-box-seam"></i><span>Packing Charges</span>
+                        </a>
+
                         {# Admin only, and it changes the colour for the whole
                            cafe - so it is not a personal setting to hand out. #}
                         <a href="{{ url_for('timezone_settings') }}" class="profile-dropdown__item">
@@ -367,6 +396,12 @@
                    data-tour="billing"
                     class="nav-link {{ 'active' if request.endpoint in ['billing'] else '' }}">
                     <i class="bi bi-credit-card-2-front"></i><span>Billing</span>
+                </a>
+
+                {# What customers said, for everybody who serves them. #}
+                <a href="{{ url_for('reviews') }}"
+                   class="nav-link {{ 'active' if request.endpoint in ['reviews'] else '' }}">
+                    <i class="bi bi-star"></i><span>Reviews</span>
                 </a>
 
                 <div class="nav-section" role="presentation">Menu</div>
@@ -859,6 +894,21 @@ window.CafeShell = {
 
         if (opener) opener.addEventListener("click", open);
         if (back) back.addEventListener("click", close);
+
+        const clear = document.getElementById("topSearchClear");
+        function showClear() { if (clear) clear.hidden = !input.value; }
+        input.addEventListener("input", showClear);
+        if (clear) {
+            clear.addEventListener("click", function (event) {
+                event.preventDefault();
+                input.value = "";
+                showClear();
+                input.focus();
+            });
+        }
+        document.addEventListener("instant:load", function () {
+            setTimeout(showClear, 0);
+        });
 
         document.addEventListener("keydown", function (event) {
             if (event.key === "Escape" && bar.classList.contains("search-open")) {

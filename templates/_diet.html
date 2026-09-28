@@ -1,0 +1,29 @@
+{# The veg / non-veg mark, as India's menus and packets print it: a green
+   square with a dot for vegetarian, a brown-red square with a triangle
+   for non-vegetarian. On a small white tile so it reads the same on any
+   theme. Nothing at all for a dish nobody has said - no mark rather than
+   a guess. #}
+{% macro diet_mark(diet) -%}
+{%- if diet == 'veg' -%}
+<span class="diet-mark diet-mark--veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span>
+{%- elif diet == 'nonveg' -%}
+<span class="diet-mark diet-mark--nonveg" role="img" aria-label="Non-vegetarian" title="Non-vegetarian"></span>
+{%- endif -%}
+{%- endmacro %}
+
+{# The choice on the Add and Edit Food forms. Required, so a new dish is
+   never left unmarked by accident. #}
+{% macro diet_choice(current=None) -%}
+<fieldset class="diet-choice">
+    <legend>Veg or non-veg</legend>
+    <label class="diet-choice__option">
+        <input type="radio" name="diet" value="veg" required {% if current == 'veg' %}checked{% endif %}>
+        <span class="diet-mark diet-mark--veg" aria-hidden="true"></span> Veg
+    </label>
+    <label class="diet-choice__option">
+        <input type="radio" name="diet" value="nonveg" required {% if current == 'nonveg' %}checked{% endif %}>
+        <span class="diet-mark diet-mark--nonveg" aria-hidden="true"></span> Non-veg
+    </label>
+    <small>Shown beside the dish at the counter and on the customer's menu.</small>
+</fieldset>
+{%- endmacro %}

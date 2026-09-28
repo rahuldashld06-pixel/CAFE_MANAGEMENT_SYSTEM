@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Packing Charges{% endblock %}
+
+{% block content %}
+{% import "_confirm_save.html" as ask %}
+
+<style>
+    .packing-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .packing-card {
+        padding: 18px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-lg);
+        background: var(--espresso-850);
+    }
+
+    .packing-card h2 {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 4px;
+        font-size: 19px;
+    }
+
+    .packing-card h2 i {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: rgba(var(--copper-rgb), .15);
+        color: var(--copper-light);
+        font-size: 16px;
+    }
+
+    .packing-card > p {
+        margin: 0 0 14px;
+        font-size: 13px;
+        color: var(--cream-faint);
+    }
+
+    .packing-mode {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .packing-mode label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-900);
+        color: var(--cream);
+        font-size: 13.5px;
+        cursor: pointer;
+    }
+
+    .packing-mode label:has(input:checked) {
+        border-color: var(--copper);
+        background: rgba(var(--copper-rgb), .10);
+    }
+
+    .packing-mode input { accent-color: var(--copper); margin: 0; }
+    .packing-mode small { display: block; color: var(--cream-faint); font-size: 12px; }
+
+    @media (max-width: 760px) {
+        .packing-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+</style>
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Customize</div>
+        <h1><i class="bi bi-box-seam"></i> Packing Charges</h1>
+        <p>What a takeaway or a delivery container costs the customer.</p>
+    </div>
+</div>
+
+<div class="panel form-panel" style="max-width:780px;">
+
+    <form method="POST" id="packingForm">
+
+        <div class="packing-grid">
+            {% for kind, label, icon, note in [
+                   ('takeaway', 'Takeaway', 'bi-bag', 'Collected from the counter.'),
+                   ('delivery', 'Delivery', 'bi-scooter', 'Sent out to the customer.')] %}
+            {% set rule = packing[kind] %}
+            <section class="packing-card">
+                <h2><i class="bi {{ icon }}"></i> {{ label }}</h2>
+                <p>{{ note }} Enter 0 if you do not charge for it.</p>
+
+                <label for="{{ kind }}_packing">Charge</label>
+                <div class="input-suffix input-suffix--lead">
+                    <span class="input-suffix__unit">&#8377;</span>
+                    <input type="number" id="{{ kind }}_packing" name="{{ kind }}_packing"
+                           value="{{ '%.2f'|format(rule.amount|float) }}"
+                           min="0" max="1000" step="0.01" required autocomplete="off">
+                </div>
+
+                <div class="packing-mode" role="radiogroup" aria-label="How the {{ label|lower }} charge is counted">
+                    <label>
+                        <input type="radio" name="{{ kind }}_packing_mode" value="order"
+                               {% if rule.mode != 'item' %}checked{% endif %}>
+                        <span>Once per order<small>One container, however much is in it.</small></span>
+                    </label>
+                    <label>
+                        <input type="radio" name="{{ kind }}_packing_mode" value="item"
+                               {% if rule.mode == 'item' %}checked{% endif %}>
+                        <span>Once per item<small>A container for every dish on the order.</small></span>
+                    </label>
+                </div>
+            </section>
+            {% endfor %}
+        </div>
+
+        {# What it comes to on a real order, as the numbers are typed. #}
+        <div class="rate-example" aria-live="polite">
+            <div class="rate-example__title">On a 3-item order</div>
+            <dl class="rate-example__lines">
+                <div><dt>Dine-in</dt><dd>&#8377;0.00</dd></div>
+                <div><dt>Takeaway</dt><dd data-example="takeaway">&#8377;0.00</dd></div>
+                <div><dt>Delivery</dt><dd data-example="delivery">&#8377;0.00</dd></div>
+            </dl>
+        </div>
+
+        <div class="note-card">
+            <i class="bi bi-info-circle"></i>
+            <div>
+                The charge is its own line on the bill, added after the
+                discount and the tax. Dine-in orders and orders from the
+                table QR never carry it, and bills already raised keep what
+                they were charged.
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary">
+                <i class="bi bi-check2"></i> Save charges
+            </button>
+            <a href="{{ back_url }}" class="btn btn--ghost" data-back>Cancel</a>
+        </div>
+
+    </form>
+
+</div>
+
+<script>
+    (function () {
+        var form = document.getElementById("packingForm");
+        if (!form) return;
+
+        function charge(kind) {
+            var amount = parseFloat(form[kind + "_packing"].value) || 0;
+            var mode = form.querySelector("[name=" + kind + "_packing_mode]:checked");
+            return mode && mode.value === "item" ? amount * 3 : amount;
+        }
+
+        function show() {
+            ["takeaway", "delivery"].forEach(function (kind) {
+                form.querySelector("[data-example=" + kind + "]").textContent =
+                    "₹" + charge(kind).toFixed(2);
+            });
+        }
+
+        form.addEventListener("input", show);
+        form.addEventListener("change", show);
+        show();
+    }());
+</script>
+
+{{ ask.before_saving(
+      "packingForm",
+      "Change what takeaway and delivery charge?",
+      "Every takeaway and delivery order from now on carries these charges. "
+      "Bills already raised keep what they were charged.",
+      "Yes, save the charges") }}
+
+{% endblock %}

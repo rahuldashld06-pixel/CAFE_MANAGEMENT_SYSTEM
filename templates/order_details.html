@@ -330,7 +330,7 @@
         <div class="order-fact">
             <span class="order-fact__icon"><i class="bi bi-flag-fill"></i></span>
             <span>
-                <span class="order-fact__label">Status</span>
+                <span class="order-fact__label">Status &middot; {{ order.type_label }}</span>
                 <span class="order-fact__value">
                     <span class="order-pill order-pill--{{ (order.order_status or '')|lower }}">
                         {{ order.order_status }}
@@ -493,6 +493,13 @@
                     <div>
                         <dt>Discount</dt>
                         <dd>&minus;₹{{ bill.discount }}</dd>
+                    </div>
+                    {% endif %}
+
+                    {% if bill.packing and bill.packing|float > 0 %}
+                    <div>
+                        <dt>Packing ({{ order.type_label|lower }})</dt>
+                        <dd>₹{{ bill.packing }}</dd>
                     </div>
                     {% endif %}
 

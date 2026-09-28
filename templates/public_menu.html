@@ -1,5 +1,7 @@
 {% from "_brand_mark.html" import coffee_mark %}
 {% from "_table_orders.html" import table_orders_link %}
+{% from "_diet.html" import diet_mark %}
+{% from "_food_art.html" import food_sprite, food_art %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ cafe_theme }}">
 <head>
@@ -15,13 +17,16 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap"></noscript>
 
     <link rel="stylesheet" href="{{ asset_url('css/theme.css') }}">
     <link rel="stylesheet" href="{{ asset_url('css/public.css') }}">
 </head>
 
 <body>
+{{ food_sprite() }}
+
 
 <div class="p-wrap">
 
@@ -89,6 +94,18 @@
                 aria-label="Clear search" hidden>&times;</button>
     </div>
 
+    {# Veg or non-veg, for a customer who eats one and not the other. A
+       dish the cafe has not marked is left out of both: the menu cannot
+       vouch for it. #}
+    <div class="p-diet" id="menuDiet" role="group" aria-label="Veg or non-veg">
+        <button type="button" data-diet="veg" aria-pressed="false">
+            <span class="diet-mark diet-mark--veg" aria-hidden="true"></span> Veg
+        </button>
+        <button type="button" data-diet="nonveg" aria-pressed="false">
+            <span class="diet-mark diet-mark--nonveg" aria-hidden="true"></span> Non-veg
+        </button>
+    </div>
+
     {# All first, then the cafe's own categories. A bar rather than
        headings down the page: on a phone the headings are only ever
        visible one at a time anyway. #}
@@ -112,10 +129,11 @@
             <h2 class="p-group__name">{{ group.name }}</h2>
 
             {% for food in group.foods %}
-            <div class="p-item"
+            <div class="p-item" data-diet="{{ food.diet or '' }}"
                  data-find="{{ (food.food_name ~ ' ' ~ group.name ~ ' ' ~ (food.description or '')) | lower }}">
+                {{ food_art(food_kind(food.food_name, group.name, food.description), "p-item__pic") }}
                 <div class="p-item__body">
-                    <div class="p-item__name">{{ food.food_name }}</div>
+                    <div class="p-item__name">{{ diet_mark(food.diet) }}{{ food.food_name }}</div>
                     {% if food.description %}
                     <p class="p-item__note">{{ food.description }}</p>
                     {% endif %}
@@ -436,6 +454,8 @@
 
     var groups = [].slice.call(document.querySelectorAll(".p-group"));
     var section = "all";
+    var diet = "";
+    var diets = document.getElementById("menuDiet");
 
     function show() {
         var wanted = search.value.trim().toLowerCase();
@@ -448,7 +468,9 @@
 
             [].forEach.call(group.querySelectorAll(".p-item"),
                 function (item) {
-                    var hit = inSection && (!wanted
+                    var hit = inSection
+                        && (!diet || item.getAttribute("data-diet") === diet)
+                        && (!wanted
                         || (item.getAttribute("data-find") || "")
                                .indexOf(wanted) > -1);
                     item.hidden = !hit;
@@ -466,6 +488,21 @@
     }
 
     search.addEventListener("input", show);
+
+    // Veg or non-veg: pressing the one that is on turns it off again.
+    if (diets) {
+        diets.addEventListener("click", function (event) {
+            var button = event.target.closest("[data-diet]");
+            if (!button) return;
+            var wanted = button.getAttribute("data-diet");
+            diet = diet === wanted ? "" : wanted;
+            [].forEach.call(diets.querySelectorAll("[data-diet]"), function (each) {
+                each.setAttribute("aria-pressed",
+                    each.getAttribute("data-diet") === diet ? "true" : "false");
+            });
+            show();
+        });
+    }
 
     if (clear) {
         clear.addEventListener("click", function () {

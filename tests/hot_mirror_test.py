@@ -184,6 +184,20 @@ SHELF_PLUS = '#food_card_hot_%s .quantity-plus' % HOT
 SHELF_MINUS = '#food_card_hot_%s .quantity-minus' % HOT
 CATEGORY_PLUS = '#food_card_%s .quantity-plus' % HOT
 
+
+def show_tab(name):
+    """All is the categories only; the Hot selling shelf has its own tab."""
+    tap('#menuTabs .menu-tab[data-tab="%s"]' % name)
+
+
+def shown(element_id):
+    return b.evaluate("""
+        (function () {
+            var el = document.getElementById(%r);
+            return !!el && el.getClientRects().length > 0;
+        })()
+    """ % element_id)
+
 try:
     b.call("Page.enable")
     b.call("Emulation.setDeviceMetricsOverride", width=1440, height=1000,
@@ -208,6 +222,18 @@ try:
           b.evaluate("document.getElementsByName('quantity_%s').length" % HOT) == 1,
           "two named fields would post the quantity twice")
 
+    print("\n=== All is the categories; Hot selling is its own tab ===")
+    check("All shows the dish under its category",
+          shown("food_card_%s" % HOT), "the category card is hidden on All")
+    check("but not the Hot selling shelf",
+          not shown("food_card_hot_%s" % HOT),
+          "the shelf repeats the dish on All")
+    show_tab("hot")
+    check("the Hot selling tab shows the shelf",
+          shown("food_card_hot_%s" % HOT), "the shelf is hidden on its own tab")
+    check("and only the shelf",
+          not shown("food_card_%s" % HOT), "a category card shows on Hot selling")
+
     print("\n=== Adding from the shelf ===")
     tap(SHELF_PLUS)
     check("the shelf card shows 1", value("quantity_hot_%s" % HOT) == "1")
@@ -217,6 +243,7 @@ try:
           totals()["items"] == "1", "summary says %s" % totals())
 
     print("\n=== Adding from the category card ===")
+    show_tab("all")
     tap(CATEGORY_PLUS)
     check("both cards show 2",
           value("quantity_hot_%s" % HOT) == "2" and value("quantity_%s" % HOT) == "2",
@@ -232,6 +259,7 @@ try:
           "would double it" % totals()["total"])
 
     print("\n=== Taking one back from the shelf ===")
+    show_tab("hot")
     tap(SHELF_MINUS)
     check("both cards show 1",
           value("quantity_hot_%s" % HOT) == "1" and value("quantity_%s" % HOT) == "1",
@@ -244,6 +272,7 @@ try:
         b.evaluate("document.getElementById('food_status_%s').textContent" % HOT)
     ).group(1))
 
+    show_tab("all")
     tap(CATEGORY_PLUS)          # back to 2
     b.evaluate("""
         document.getElementById('orderForm')
@@ -290,7 +319,7 @@ try:
         })()
     """)
     time.sleep(0.4)
-    check("the badge counts the food once though two cards are shown",
+    check("the badge counts the food once, not once per card",
           b.evaluate("document.getElementById('foodCount').textContent.trim()")
           == "1 of 2 Food Items",
           b.evaluate("document.getElementById('foodCount').textContent"))

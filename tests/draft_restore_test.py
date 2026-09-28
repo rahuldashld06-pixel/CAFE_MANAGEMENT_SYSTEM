@@ -236,7 +236,19 @@ def discard():
 
 
 def save():
-    b.evaluate("document.querySelector('#page-view form [type=submit]').click()")
+    # Veg or non-veg is a choice Add Food will not go without; a person
+    # saving it would have made one.
+    b.evaluate("""
+        (function () {
+            var form = document.querySelector('#page-view form');
+            var diets = form.querySelectorAll('[name=diet]');
+            if (diets.length && ![].some.call(diets, function (r) { return r.checked; })) {
+                form.querySelector('[name=diet][value=veg]').click();
+            }
+            form.querySelector('[type=submit]').click();
+            return true;
+        }())
+    """)
 
 
 def crash():

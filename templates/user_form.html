@@ -30,7 +30,8 @@
                     placeholder="e.g. cashier01"
                     required
                     maxlength="80"
-                    autocomplete="username">
+                    autocomplete="username"
+                    data-username-check>
             </div>
             {% else %}
             <div class="field">
@@ -107,6 +108,7 @@
                     placeholder="{{ '••••••••' if user else 'Create a password' }}"
                     minlength="8"
                     autocomplete="new-password"
+                    data-strength
                     {% if not user %}required{% endif %}>
                 <small>Use at least 8 characters.</small>
             </div>

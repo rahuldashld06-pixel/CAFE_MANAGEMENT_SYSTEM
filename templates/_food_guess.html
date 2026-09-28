@@ -1,0 +1,79 @@
+{# Under the name on Add and Edit Food: the picture a dish of this name
+   gets when it has no photo, with its tag, and - until somebody chooses -
+   a Veg or Non-veg ticked from the name. Asked of the server as the name
+   is typed, so the form and the menu can never read a name differently. #}
+{% from "_food_art.html" import food_art %}
+{% macro food_guess(food=None) -%}
+<div class="food-guess" id="foodGuess" aria-live="polite"
+     data-kind="{{ food_kind(food.food_name) if food else 'dish' }}"
+     {% if not food %}hidden{% endif %}>
+    {{ food_art(food_kind(food.food_name) if food else "dish", "food-guess__art") }}
+    <span class="food-guess__text">
+        <span class="food-guess__tag" id="foodGuessTag">{{ food_kind_label(food_kind(food.food_name)) if food else "Dish" }}</span>
+        <small>The picture shown when there is no photo.</small>
+        <small class="food-guess__diet" id="foodGuessDiet" hidden></small>
+    </span>
+</div>
+<script>
+(function () {
+    var box = document.getElementById("foodGuess");
+    if (!box) return;
+    var form = box.closest("form");
+    var name = form.querySelector('[name="food_name"]');
+    var category = form.querySelector('[name="category_id"]');
+    var radios = form.querySelectorAll('input[name="diet"]');
+    var art = box.querySelector(".food-art");
+    var tag = document.getElementById("foodGuessTag");
+    var dietNote = document.getElementById("foodGuessDiet");
+    // A choice already made - saved on the dish, or clicked here - is
+    // never overruled by a guess.
+    var chosen = [].some.call(radios, function (r) { return r.checked; });
+    var ticked = null;
+    var timer = null, asked = 0;
+
+    [].forEach.call(radios, function (radio) {
+        radio.addEventListener("change", function (event) {
+            if (event.isTrusted) { chosen = true; dietNote.hidden = true; }
+        });
+    });
+
+    function show(data) {
+        var kind = data.kind || "dish";
+        box.dataset.kind = kind;
+        art.className = "food-art food-art--" + kind + " food-guess__art";
+        art.setAttribute("aria-label", data.label || "Dish");
+        art.querySelector("use").setAttribute("href", "#food-" + kind);
+        tag.textContent = data.label || "Dish";
+        box.hidden = false;
+        if (chosen) return;
+        [].forEach.call(radios, function (radio) {
+            radio.checked = !!data.diet && radio.value === data.diet;
+        });
+        ticked = data.diet || null;
+        dietNote.hidden = !ticked;
+        dietNote.textContent = ticked
+            ? (ticked === "veg" ? "Veg" : "Non-veg") + " is ticked from the name - change it if that is not right."
+            : "";
+    }
+
+    function ask() {
+        var wanted = name.value.trim();
+        if (!wanted) { box.hidden = true; return; }
+        var picked = category && category.selectedIndex > 0
+            ? category.options[category.selectedIndex].text.trim() : "";
+        var mine = ++asked;
+        fetch("/api/food-guess?name=" + encodeURIComponent(wanted) +
+              "&category=" + encodeURIComponent(picked),
+              {credentials: "same-origin", headers: {"Accept": "application/json"}})
+            .then(function (response) { return response.json(); })
+            .then(function (data) { if (mine === asked) show(data); })
+            .catch(function () {});
+    }
+
+    function soon() { clearTimeout(timer); timer = setTimeout(ask, 250); }
+    name.addEventListener("input", soon);
+    if (category) category.addEventListener("change", soon);
+    if (name.value.trim() && !chosen) ask();
+}());
+</script>
+{%- endmacro %}

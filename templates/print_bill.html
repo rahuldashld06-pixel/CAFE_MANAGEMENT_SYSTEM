@@ -51,7 +51,7 @@
                 <span></span><i>&#10022;</i><span></span>
             </div>
 
-            <p class="receipt__kind">{{ "Tax Invoice" if bill else "Order Summary" }}</p>
+            <p class="receipt__kind">{{ "Tax Invoice" if bill else "Order Summary" }} &middot; {{ order.type_label }}</p>
         </header>
 
         <dl class="receipt__meta">
@@ -96,8 +96,9 @@
                a second time under another name. #}
             {% set off = bill.discount and bill.discount|float > 0 %}
             {% set on = bill.tax and bill.tax|float > 0 %}
+            {% set packed = bill.packing and bill.packing|float > 0 %}
 
-            {% if off or on %}
+            {% if off or on or packed %}
             <div class="receipt__line">
                 <span>Subtotal</span>
                 <span>{{ "%.2f"|format(bill.subtotal|float) }}</span>
@@ -114,6 +115,12 @@
             <div class="receipt__line">
                 <span>Tax ({{ charged.tax | trim_zeros }}%)</span>
                 <span>{{ "%.2f"|format(bill.tax|float) }}</span>
+            </div>
+            {% endif %}
+            {% if packed %}
+            <div class="receipt__line">
+                <span>Packing ({{ order.type_label|lower }})</span>
+                <span>{{ "%.2f"|format(bill.packing|float) }}</span>
             </div>
             {% endif %}
             <div class="receipt__grand">

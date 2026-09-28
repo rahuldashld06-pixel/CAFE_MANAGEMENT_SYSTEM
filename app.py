@@ -1,5 +1,6 @@
 from functools import wraps
 import base64
+import gzip
 import json
 import logging
 import secrets
@@ -199,6 +200,68 @@ app.config.update(
     # the stamp and browsers fetch the new file immediately.
     SEND_FILE_MAX_AGE_DEFAULT=timedelta(days=365),
 )
+
+
+# ---------------------------------------------------------------------
+# Compressed on the way out
+#
+# Every page, the stylesheet and the scripts went out as they are: New
+# Order is 165KB of HTML, Billing 153KB, the stylesheet 149KB - and after
+# sign-in the sidebar's pages are fetched ahead in the background. On a
+# laptop's wifi nobody notices. On a phone over mobile data it is most of
+# why a page is slow to appear. gzip brings each to about a fifth.
+#
+# Registered before every other after_request hook, which Flask runs in
+# reverse order, so this sees the finished response - every header the
+# others add - and nothing touches the body after it. Static files are
+# compressed once per version and kept; a page is compressed each time,
+# which costs a few milliseconds against the tens of kilobytes it saves.
+# ---------------------------------------------------------------------
+COMPRESSIBLE_TYPES = {
+    "text/html", "text/css", "text/javascript", "application/javascript",
+    "application/json", "application/manifest+json", "image/svg+xml",
+    "text/csv", "text/plain",
+}
+_GZIPPED_STATIC = {}
+
+
+@app.after_request
+def compress_response(response):
+    try:
+        if (response.status_code != 200
+                or response.headers.get("Content-Encoding")
+                or response.mimetype not in COMPRESSIBLE_TYPES
+                or "gzip" not in (request.headers.get("Accept-Encoding")
+                                  or "").lower()):
+            return response
+        static = request.endpoint == "static"
+        if response.is_streamed and not response.direct_passthrough:
+            return response
+
+        response.vary.add("Accept-Encoding")
+        key = ((request.path, response.headers.get("ETag"),
+                response.headers.get("Last-Modified")) if static else None)
+        body = _GZIPPED_STATIC.get(key) if static else None
+        if body is None:
+            response.direct_passthrough = False
+            data = response.get_data()
+            if len(data) < 1024:
+                return response
+            body = gzip.compress(data, 6)
+            if static and len(_GZIPPED_STATIC) < 64:
+                _GZIPPED_STATIC[key] = body
+        else:
+            # The file is not read at all; close what send_file opened.
+            original = response.response
+            if hasattr(original, "close"):
+                original.close()
+            response.direct_passthrough = False
+
+        response.set_data(body)
+        response.headers["Content-Encoding"] = "gzip"
+        return response
+    except Exception:                   # noqa: BLE001 - never fail a page over this
+        return response
 
 
 # ---------------------------------------------------------------------
@@ -829,6 +892,9 @@ def form_decimal(field, label, minimum=Decimal("0"), maximum=Decimal("1000000"))
         value = Decimal(raw)
     except (InvalidOperation, TypeError, ValueError):
         raise ValidationError(f"{label} must be a number.")
+    # "nan" parses, but cannot be compared or charged.
+    if not value.is_finite():
+        raise ValidationError(f"{label} must be a number.")
     if value < minimum or value > maximum:
         raise ValidationError(
             f"{label} must be between {minimum} and {maximum}."
@@ -1159,6 +1225,224 @@ def read_image_upload(file):
     return data, sniffed
 
 
+# ---------------------------------------------------------------------
+# A picture for every dish
+#
+# A dish nobody has photographed still gets a picture: a drawing of what
+# it is, on a tile in its own colour. What it is comes from its name -
+# the last food word in it, because that is where English puts the thing
+# itself ("Chicken Burger" is a burger, "Masala Chai" is tea) - unless a
+# phrase or an "iced"/"cold" says otherwise first. A name that gives
+# nothing away is read by its category; anything still unknown is a
+# covered plate. The drawings live in templates/_food_art.html.
+# ---------------------------------------------------------------------
+FOOD_KIND_PHRASES = [
+    ("butter chicken", "curry"), ("chicken curry", "curry"),
+    ("fish curry", "curry"), ("egg curry", "curry"),
+    ("fried rice", "rice"), ("cold brew", "cold"), ("cold coffee", "cold"),
+    ("iced tea", "cold"), ("ice tea", "cold"), ("ice cream", "icecream"),
+    ("vada pav", "burger"), ("pav bhaji", "curry"), ("spring roll", "snack"),
+    ("french toast", "pancake"), ("garlic bread", "bread"),
+    ("grilled cheese", "sandwich"), ("mac and cheese", "pasta"),
+    ("hot chocolate", "coffee"), ("green tea", "tea"),
+    ("pani puri", "snack"), ("fruit bowl", "salad"),
+    # Bottles and cans.
+    ("coca cola", "soda"), ("soft drink", "soda"), ("cold drink", "soda"),
+    ("thums up", "soda"), ("mountain dew", "soda"), ("red bull", "soda"),
+    ("energy drink", "soda"), ("ginger ale", "soda"), ("club soda", "soda"),
+    ("7 up", "soda"), ("coconut water", "juice"), ("soda bread", "bread"),
+]
+FOOD_KIND_MODIFIERS = [
+    ("iced", "cold"), ("cold", "cold"), ("frappe", "shake"),
+    ("frappuccino", "shake"),
+]
+FOOD_KINDS = [
+    ("shake", ["shake", "milkshake", "smoothie", "lassi", "falooda"]),
+    ("soda", ["soda", "cola", "coke", "pepsi", "sprite", "fanta", "limca",
+              "7up", "mirinda", "dew", "redbull", "fizz", "aerated"]),
+    ("water", ["water", "bisleri", "aquafina", "kinley", "evian",
+               "perrier"]),
+    ("cold", ["cooler", "lemonade", "mojito", "mocktail", "nimbu",
+              "shikanji", "jaljeera", "tonic", "slush"]),
+    ("juice", ["juice", "sugarcane", "punch", "frooti", "maaza", "tropicana",
+               "appy"]),
+    ("tea", ["tea", "chai", "matcha", "chamomile", "kahwa"]),
+    ("coffee", ["coffee", "latte", "cappuccino", "espresso", "americano",
+                "mocha", "macchiato", "cortado", "affogato", "kaapi",
+                "doppio", "ristretto", "flat white", "cocoa"]),
+    ("icecream", ["icecream", "gelato", "sundae", "kulfi", "sorbet", "scoop"]),
+    ("donut", ["donut", "doughnut"]),
+    ("cookie", ["cookie", "biscuit", "biscotti", "macaron"]),
+    ("muffin", ["muffin", "cupcake"]),
+    ("cake", ["cake", "brownie", "pastry", "cheesecake", "tiramisu", "tart",
+              "pie", "gateau", "mousse", "dessert", "jamun", "rasgulla",
+              "halwa", "barfi", "ladoo", "kheer", "rasmalai", "jalebi"]),
+    ("croissant", ["croissant", "danish"]),
+    ("pizza", ["pizza", "margherita", "calzone"]),
+    ("burger", ["burger", "slider"]),
+    ("sandwich", ["sandwich", "toastie", "panini", "sub", "club", "melt",
+                  "croque"]),
+    ("wrap", ["wrap", "roll", "burrito", "frankie", "kathi", "shawarma",
+              "taco", "quesadilla"]),
+    ("fries", ["fries", "chips", "wedges", "nachos"]),
+    ("noodles", ["noodle", "maggi", "ramen", "chowmein", "hakka"]),
+    ("pasta", ["pasta", "spaghetti", "penne", "macaroni", "lasagna",
+               "lasagne", "fettuccine", "alfredo", "arrabbiata"]),
+    ("rice", ["rice", "biryani", "pulao", "pilaf", "khichdi", "risotto",
+              "bowl"]),
+    ("dosa", ["dosa", "uttapam", "uthappam", "crepe", "appam"]),
+    ("pancake", ["pancake", "waffle"]),
+    ("snack", ["samosa", "pakora", "pakoda", "kachori", "vada", "bhaji",
+               "puff", "momo", "dumpling", "cutlet", "tikki", "chaat",
+               "bhel", "nugget", "idli"]),
+    ("soup", ["soup", "broth", "shorba", "rasam"]),
+    ("salad", ["salad", "greens", "caesar", "avocado", "sprouts"]),
+    ("egg", ["egg", "omelette", "omelet", "scrambled", "bhurji"]),
+    ("chicken", ["chicken", "wings", "drumstick", "tandoori", "kebab",
+                 "kabab", "mutton", "lamb", "keema", "seekh", "meat"]),
+    ("fish", ["fish", "prawn", "shrimp", "seafood", "crab", "tuna",
+              "salmon"]),
+    ("curry", ["curry", "paneer", "dal", "daal", "masala", "korma",
+               "makhani", "sabzi", "chole", "rajma", "thali", "gravy",
+               "kadai", "kofta"]),
+    ("bread", ["bread", "toast", "bun", "bagel", "pav", "bruschetta",
+               "naan", "roti", "paratha", "kulcha", "loaf", "focaccia"]),
+]
+# A category's name, when the dish's own gives nothing away.
+FOOD_KIND_CATEGORIES = [
+    # The particular before the general: "Soft Drinks" before "drink".
+    ("soft drink", "soda"), ("aerated", "soda"), ("cold drink", "soda"),
+    ("water", "water"),
+    ("bakery", "croissant"), ("bakes", "cake"), ("breakfast", "egg"),
+    ("snack", "snack"), ("starter", "snack"), ("beverage", "cold"),
+    ("drink", "cold"), ("dessert", "cake"), ("sweet", "cake"),
+    ("chinese", "noodles"), ("italian", "pasta"), ("south indian", "dosa"),
+    ("north indian", "curry"), ("main", "curry"), ("fast food", "burger"),
+    ("hot", "coffee"), ("shake", "shake"), ("juice", "juice"),
+]
+FOOD_KIND_NAMES = [kind for kind, _ in FOOD_KINDS] + ["dish"]
+# Already cold as they come: "Cold Coke" is still a can and "Chilled
+# water" still a bottle, so these are looked for before the word "cold"
+# can make them a glass.
+FOOD_KINDS_PACKAGED = ("soda", "water")
+
+# What each picture is called where a name is shown: its tag.
+FOOD_KIND_LABELS = {
+    "shake": "Shake", "soda": "Soft drink", "water": "Water",
+    "cold": "Cold drink", "juice": "Juice", "tea": "Tea",
+    "coffee": "Coffee", "icecream": "Ice cream", "donut": "Donut",
+    "cookie": "Cookie", "muffin": "Muffin", "cake": "Cake & dessert",
+    "croissant": "Bakery", "pizza": "Pizza", "burger": "Burger",
+    "sandwich": "Sandwich", "wrap": "Wrap & roll", "fries": "Fries",
+    "noodles": "Noodles", "pasta": "Pasta", "rice": "Rice & biryani",
+    "dosa": "Dosa", "pancake": "Pancake & waffle", "snack": "Snack",
+    "soup": "Soup", "salad": "Salad", "egg": "Egg", "chicken": "Chicken & meat",
+    "fish": "Fish & seafood", "curry": "Curry", "bread": "Bread",
+    "dish": "Dish",
+}
+
+
+def food_kind_label(kind):
+    return FOOD_KIND_LABELS.get(kind, "Dish")
+
+_FOOD_WORDS = [(kind, re.compile(r"\b%s(?:e?s)?\b" % re.escape(word)))
+               for kind, words in FOOD_KINDS for word in words]
+
+
+def _kind_in(text):
+    plain = " %s " % re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+    if not plain.strip():
+        return None
+    for phrase, kind in FOOD_KIND_PHRASES:
+        if " %s " % phrase in plain or " %ss " % phrase in plain:
+            return kind
+    for kind, pattern in _FOOD_WORDS:
+        if kind in FOOD_KINDS_PACKAGED and pattern.search(plain):
+            return kind
+    for word, kind in FOOD_KIND_MODIFIERS:
+        if " %s " % word in plain:
+            return kind
+    best, where = None, -1
+    for kind, pattern in _FOOD_WORDS:
+        for found in pattern.finditer(plain):
+            if found.start() > where:
+                best, where = kind, found.start()
+    return best
+
+
+_FOOD_KIND_MEMO = {}
+
+
+def food_kind(name, category=None, description=None):
+    """Which drawing a dish gets: one of FOOD_KIND_NAMES."""
+    key = (name or "", category or "", description or "")
+    if key in _FOOD_KIND_MEMO:
+        return _FOOD_KIND_MEMO[key]
+    kind = _kind_in(name)
+    if not kind and category:
+        lowered = category.lower()
+        kind = _kind_in(category) or next(
+            (k for word, k in FOOD_KIND_CATEGORIES if word in lowered), None)
+    if not kind and description:
+        kind = _kind_in(description)
+    kind = kind or "dish"
+    if len(_FOOD_KIND_MEMO) < 5000:
+        _FOOD_KIND_MEMO[key] = kind
+    return kind
+
+
+app.jinja_env.globals["food_kind"] = food_kind
+app.jinja_env.globals["food_kind_label"] = food_kind_label
+
+
+# Words that make a dish non-veg as India reads it (egg included), and
+# words that make it plainly veg. A suggestion only, for the Add and
+# Edit Food forms to tick until someone chooses: a dish that says
+# neither is left for the person who knows.
+_NONVEG_WORDS = re.compile(
+    r"\b(non ?veg|chicken|mutton|lamb|goat|beef|pork|ham|bacon|sausages?|"
+    r"salami|pepperoni|keema|meat|fish|prawns?|shrimps?|crabs?|tuna|salmon|"
+    r"seafood|eggs?|omelett?es?|bhurji|wings|drumsticks?|seekh|kebabs?|"
+    r"kababs?|anchov(y|ies)|turkey)\b")
+_VEG_WORDS = re.compile(
+    r"\b(veg|veggie|vegetarian|vegan|paneer|aloo|gobi|dal|daal|chole|rajma|"
+    r"mushroom|palak|eggless|corn|potato|jeera|sabzi|margherita)\b")
+_VEG_KINDS = ("soda", "water", "cold", "juice", "tea", "coffee", "shake")
+
+
+def diet_guess(name, category=None):
+    """'veg', 'nonveg', or None when the name does not say."""
+    plain = re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).strip()
+    if not plain:
+        return None
+    if _NONVEG_WORDS.search(plain) and not re.search(r"\beggless\b", plain):
+        return "nonveg"
+    if _VEG_WORDS.search(plain):
+        return "veg"
+    if food_kind(name, category) in _VEG_KINDS:
+        return "veg"
+    return None
+
+
+@app.route("/api/food-guess")
+def food_guess():
+    """What a dish of this name would be drawn as, called and marked."""
+    name = (request.args.get("name") or "").strip()[:150]
+    category = (request.args.get("category") or "").strip()[:150] or None
+    kind = food_kind(name, category) if name else "dish"
+    return jsonify({"kind": kind, "label": food_kind_label(kind),
+                    "diet": diet_guess(name, category) if name else None})
+
+
+DIETS = ("veg", "nonveg")
+
+
+def form_diet():
+    """'veg' or 'nonveg' from the form, or None if it said neither."""
+    value = (request.form.get("diet") or "").strip().lower()
+    return value if value in DIETS else None
+
+
 def food_image_url(food_id, version=1):
     """Public URL for a food photo, or None when the food has no image."""
     if not food_id:
@@ -1399,7 +1683,8 @@ def collect_order_items(foods, wanted):
 
 
 def write_order(cursor, owner_id, cafe_id, lines, tax_mult,
-                source="counter", discount_mult=None):
+                source="counter", discount_mult=None, order_type="dine_in",
+                packing=None):
     """
     Write one order, its lines, and take the stock off the shelf.
 
@@ -1411,8 +1696,9 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult,
     half way leaves no order behind.
     """
     subtotal = sum((line["subtotal"] for line in lines), Decimal("0.00"))
-    totals = bill_totals(subtotal, tax_mult, discount_mult)
+    totals = bill_totals(subtotal, tax_mult, discount_mult, packing=packing)
     total = totals["total"]
+    order_type = order_type_of(order_type)
 
     # The number people say out loud. Counted within this cafe's own day,
     # so two cafes both have a number 1 this morning and neither sees the
@@ -1441,10 +1727,10 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult,
 
     cursor.execute(
         "INSERT INTO orders (total_amount, order_status, user_id, cafe_id, "
-        "source, order_day, daily_no, order_date, public_ref) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        "source, order_day, daily_no, order_date, public_ref, order_type) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (total, "Pending", owner_id, cafe_id, source, today, daily_no,
-         utc_now(), public_ref)
+         utc_now(), public_ref, order_type)
     )
     order_id = cursor.lastrowid
 
@@ -1696,6 +1982,32 @@ _CORE_TABLES = [
                 ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """),
+    ("reviews", """
+        CREATE TABLE IF NOT EXISTS reviews (
+            review_id INT AUTO_INCREMENT PRIMARY KEY,
+            order_id INT NOT NULL,
+            -- The line on the order this rates; empty for the row about
+            -- the visit as a whole.
+            order_item_id INT NULL,
+            food_id INT NULL,
+            item_name VARCHAR(150) NULL,
+            -- Out of five. Empty only on the visit's row, for a comment
+            -- left without stars.
+            rating TINYINT NULL,
+            comment TEXT NULL,
+            -- What the customer typed as their name, on every row of the
+            -- review. Empty when they left it blank.
+            reviewer_name VARCHAR(60) NULL,
+            user_id INT NULL,
+            cafe_id INT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_reviews_owner (user_id, created_at),
+            INDEX idx_reviews_order (order_id),
+            CONSTRAINT fk_reviews_order
+                FOREIGN KEY (order_id) REFERENCES orders(order_id)
+                ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """),
     ("login_attempts", """
         CREATE TABLE IF NOT EXISTS login_attempts (
             attempt_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1811,6 +2123,22 @@ _COLUMN_MIGRATIONS = [
     # When somebody last signed in, for the team list. Stamped at sign-in
     # only; a request after that writes nothing.
     ("users", "last_login_at", "DATETIME NULL"),
+    # Veg or non-veg, for the mark beside every dish and the customer's
+    # filter. Empty for dishes nobody has said yet: no mark, not a guess.
+    ("foods", "diet", "VARCHAR(10) NULL"),
+    # Dine-in, takeaway or delivery. Every order before this was eaten or
+    # carried from the counter with no packing, so dine-in is the default.
+    ("orders", "order_type", "VARCHAR(12) NOT NULL DEFAULT 'dine_in'"),
+    # The packing charge a bill carried, on a line of its own.
+    ("bills", "packing", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"),
+    # The name a customer gave with their review.
+    ("reviews", "reviewer_name", "VARCHAR(60) NULL"),
+    # What a takeaway or a delivery container costs, and whether that is
+    # once per order or once per item. Nothing until the owner says.
+    ("cafes", "takeaway_packing", "DECIMAL(8,2) NOT NULL DEFAULT 0.00"),
+    ("cafes", "takeaway_packing_mode", "VARCHAR(8) NOT NULL DEFAULT 'order'"),
+    ("cafes", "delivery_packing", "DECIMAL(8,2) NOT NULL DEFAULT 0.00"),
+    ("cafes", "delivery_packing_mode", "VARCHAR(8) NOT NULL DEFAULT 'order'"),
     # Per-café tax rate. 5.00 is what every bill was hard-coded to before
     # this was configurable, so existing cafés keep their current totals.
     ("cafes", "tax_percent", "DECIMAL(5,2) NOT NULL DEFAULT 5.00"),
@@ -3323,6 +3651,11 @@ STAFF_ALLOWED_ENDPOINTS = {
     # The screen that lives in the kitchen, and its own feed.
     "kitchen_display", "kitchen_board",
     "kitchen_item_made",
+    # What customers said. Everybody who serves them gets to read it.
+    "reviews",
+    # The picture and veg mark the Add Food form suggests as a name is
+    # typed. Staff add food too.
+    "food_guess",
     # The box in the top bar. Its results are held to what each role can
     # open, so being able to search shows nobody anything new.
     "search",
@@ -3849,7 +4182,7 @@ def rates_on_bill(bill):
     }
 
 
-def bill_totals(subtotal, tax_mult, discount_mult=None):
+def bill_totals(subtotal, tax_mult, discount_mult=None, packing=None):
     """
     What a bill comes to: subtotal, discount off, tax on the rest.
 
@@ -3862,12 +4195,90 @@ def bill_totals(subtotal, tax_mult, discount_mult=None):
     discount = (subtotal * discount_mult).quantize(Decimal("0.01"))
     taxable = subtotal - discount
     tax = (taxable * tax_mult).quantize(Decimal("0.01"))
+    # The container for a takeaway or a delivery, on its own line after
+    # the tax: neither discounted nor taxed, so the line reads as exactly
+    # what the owner set it to.
+    packing = Decimal(str(packing or 0)).quantize(Decimal("0.01"))
     return {
         "subtotal": subtotal,
         "discount": discount,
         "tax": tax,
-        "total": taxable + tax,
+        "packing": packing,
+        "total": taxable + tax + packing,
     }
+
+
+ORDER_TYPES = [
+    ("dine_in", "Dine-in"),
+    ("takeaway", "Takeaway"),
+    ("delivery", "Delivery"),
+]
+ORDER_TYPE_LABELS = dict(ORDER_TYPES)
+PACKED_TYPES = ("takeaway", "delivery")
+PACKING_MODES = ("order", "item")
+MAX_PACKING = Decimal("1000.00")
+
+
+def order_type_of(value):
+    """One of the three order types; anything else is dine-in."""
+    value = (value or "").strip().lower().replace("-", "_")
+    return value if value in ORDER_TYPE_LABELS else "dine_in"
+
+
+def get_packing(cafe_id=None):
+    """
+    What a takeaway and a delivery container cost at this cafe.
+
+    {"takeaway": {"amount": Decimal, "mode": "order"|"item"}, "delivery":
+    {...}}. Nothing charged until the owner sets it. Remembered like the
+    rates, and dropped with everything else about the cafe on a save.
+    """
+    empty = {kind: {"amount": Decimal("0.00"), "mode": "order"}
+             for kind in PACKED_TYPES}
+    target = cafe_id if cafe_id is not None else session.get("cafe_id")
+    if not target:
+        return empty
+    remembered = "packing:%s" % target
+    held = cache_get(remembered)
+    if held is not None:
+        return held
+    connection = None
+    cursor = None
+    packing = empty
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT takeaway_packing, takeaway_packing_mode, "
+            "delivery_packing, delivery_packing_mode "
+            "FROM cafes WHERE cafe_id = %s", (target,))
+        row = cursor.fetchone()
+        if row:
+            packing = {kind: {
+                "amount": Decimal(str(row[kind + "_packing"] or 0)).quantize(Decimal("0.01")),
+                "mode": (row[kind + "_packing_mode"]
+                         if row[kind + "_packing_mode"] in PACKING_MODES else "order"),
+            } for kind in PACKED_TYPES}
+    except mysql.connector.Error:
+        packing = empty
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+    cache_put(remembered, packing)
+    return packing
+
+
+def packing_charge(order_type, units, packing):
+    """The container charge for an order of this type and this many items."""
+    if order_type not in PACKED_TYPES:
+        return Decimal("0.00")
+    rule = packing.get(order_type) or {}
+    amount = Decimal(str(rule.get("amount") or 0))
+    if rule.get("mode") == "item":
+        amount = amount * int(units or 0)
+    return amount.quantize(Decimal("0.01"))
 
 
 def get_cafe_owner_id():
@@ -3949,9 +4360,11 @@ def home():
         today_revenue = counts["today_revenue"]
 
         alerts = stock_alerts(cursor, scope_user_id())
+        rated = dish_ratings(cursor, scope_user_id())
 
         return render_template(
             "dashboard.html",
+            rated=rated,
             total_foods=total_foods,
             total_categories=total_categories,
             total_orders=total_orders,
@@ -4231,6 +4644,7 @@ def foods():
                 f.food_name,
                 f.description,
                 f.price,
+                f.diet,
                 CASE
                     WHEN COALESCE(i.quantity, 0) > 0 THEN 1
                     ELSE 0
@@ -4325,6 +4739,7 @@ def add_food():
                 "minimum_stock", "Minimum stock", default=0
             )
             food_image = request.files.get("food_image")
+            diet = form_diet()
 
             assert_category_belongs_to_cafe(cursor, category_id)
 
@@ -4348,11 +4763,12 @@ def add_food():
                     description,
                     price,
                     availability,
+                    diet,
                     user_id,
                     cafe_id
                 )
 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 food_no,
                 category_id,
@@ -4360,6 +4776,7 @@ def add_food():
                 description,
                 price,
                 availability,
+                diet,
                 scope_user_id(),
                 require_cafe_session()
             ))
@@ -4476,7 +4893,8 @@ def edit_food(food_id):
                     food_name = %s,
                     description = %s,
                     price = %s,
-                    availability = %s
+                    availability = %s,
+                    diet = COALESCE(%s, diet)
 
                 WHERE food_id = %s
                   AND user_id = %s
@@ -4486,6 +4904,7 @@ def edit_food(food_id):
                 description,
                 price,
                 availability,
+                form_diet(),
                 food_id,
                 scope_user_id()
             ))
@@ -4531,6 +4950,7 @@ def edit_food(food_id):
                 f.description,
                 f.price,
                 f.availability,
+                f.diet,
                 COALESCE(i.quantity, 0) AS quantity,
                 COALESCE(i.minimum_stock, 5) AS minimum_stock,
                 f.image_version,
@@ -5449,7 +5869,7 @@ def dashboard_insights(cursor, owner_id, period):
     # ---- today's orders, open ones first ----
     cursor.execute("""
         SELECT o.order_id, o.daily_no, o.order_status, o.source,
-               o.total_amount,
+               o.order_type, o.total_amount,
                (SELECT COALESCE(SUM(oi.quantity), 0)
                   FROM order_items oi
                  WHERE oi.order_id = o.order_id) AS items,
@@ -5469,7 +5889,9 @@ def dashboard_insights(cursor, owner_id, period):
             "order_id": row["order_id"],
             "number": row["daily_no"] or row["order_id"],
             "status": row["order_status"] or "Pending",
-            "source": "Table QR" if row["source"] == "qr" else "At the counter",
+            "source": ("Table QR" if row["source"] == "qr" else
+                       ORDER_TYPE_LABELS.get(row.get("order_type") or "dine_in",
+                                             "Dine-in")),
             "items": int(row["items"] or 0),
             "total": float(row["total_amount"] or 0),
         })
@@ -5499,6 +5921,7 @@ def dashboard_insights(cursor, owner_id, period):
           POPULAR_ROWS))
     popular = [{
         "name": row["name"] or "Removed item",
+        "kind": food_kind(row["name"], row["category"]),
         "category": row["category"] or UNCATEGORISED_LABEL,
         "image": (food_image_url(row["food_id"], row["image_version"])
                   if row["has_image"] else None),
@@ -5646,6 +6069,7 @@ def add_order():
                     f.food_name,
                     f.price,
                     f.availability,
+                    f.diet,
                     c.category_name,
                     i.quantity,
                     f.image_version,
@@ -5693,7 +6117,14 @@ def add_order():
                 discount_percent=get_discount_percent(),
                 # Every food, hot ones included, still appears under its
                 # own category heading.
-                food_groups=group_foods_by_category(foods)
+                food_groups=group_foods_by_category(foods),
+                # Dine-in, takeaway or delivery, and what a container
+                # costs for the last two - so the total on screen is the
+                # total that will be charged.
+                order_types=ORDER_TYPES,
+                packing_js=dict(
+                    (kind, {"amount": float(rule["amount"]), "mode": rule["mode"]})
+                    for kind, rule in get_packing().items()),
             )
 
 
@@ -5762,6 +6193,8 @@ def add_order():
         try:
             available = available_foods_for(cursor, scope_user_id())
             selected_items = collect_order_items(available, wanted)
+            order_type = order_type_of(request.form.get("order_type"))
+            units = sum(int(line["quantity"]) for line in selected_items)
             written = write_order(
                 cursor,
                 scope_user_id(),
@@ -5770,6 +6203,8 @@ def add_order():
                 tax_multiplier(),
                 discount_mult=discount_multiplier(),
                 source="counter",
+                order_type=order_type,
+                packing=packing_charge(order_type, units, get_packing()),
             )
         except OrderError as error:
             connection.rollback()
@@ -5780,6 +6215,7 @@ def add_order():
         subtotal = written["subtotal"]
         tax = written["tax"]
         discount = written["discount"]
+        packing = written["packing"]
         total_amount = written["total"]
 
         # ==================================================
@@ -5793,6 +6229,7 @@ def add_order():
                 subtotal,
                 tax,
                 discount,
+                packing,
                 total_amount,
                 payment_method,
                 payment_status,
@@ -5808,6 +6245,7 @@ def add_order():
                 %s,
                 %s,
                 %s,
+                %s,
                 %s
             )
         """, (
@@ -5815,6 +6253,7 @@ def add_order():
             subtotal,
             tax,
             discount,
+            packing,
             total_amount,
             "Cash",
             "Pending",
@@ -5892,13 +6331,15 @@ def load_order_for_print(cursor, order_id):
     the same treatment the order page gives an id that is not yours.
     """
     cursor.execute("""
-        SELECT order_id, order_date, total_amount, order_status, daily_no
+        SELECT order_id, order_date, total_amount, order_status, daily_no,
+               order_type
         FROM orders
         WHERE order_id = %s AND user_id = %s
     """, (order_id, scope_user_id()))
     order = cursor.fetchone()
     if order is None:
         return None
+    order["type_label"] = ORDER_TYPE_LABELS.get(order.get("order_type") or "dine_in", "Dine-in")
 
     cursor.execute("""
         SELECT oi.quantity, oi.price, oi.subtotal,
@@ -5912,7 +6353,7 @@ def load_order_for_print(cursor, order_id):
     items = cursor.fetchall()
 
     cursor.execute("""
-        SELECT bill_id, subtotal, tax, discount, total_amount,
+        SELECT bill_id, subtotal, tax, discount, packing, total_amount,
                payment_method, payment_status, bill_date
         FROM bills
         WHERE order_id = %s
@@ -6010,13 +6451,17 @@ def order_details(order_id):
                 order_id,
                 order_date,
                 total_amount,
-                order_status
+                order_status,
+                order_type
             FROM orders
             WHERE order_id = %s
               AND user_id = %s
         """, (order_id, scope_user_id()))
 
         order = cursor.fetchone()
+        if order:
+            order["type_label"] = ORDER_TYPE_LABELS.get(
+                order.get("order_type") or "dine_in", "Dine-in")
 
 
         # --------------------------------------
@@ -6071,6 +6516,7 @@ def order_details(order_id):
                 subtotal,
                 tax,
                 discount,
+                packing,
                 total_amount,
                 payment_method,
                 payment_status,
@@ -6860,10 +7306,12 @@ def billing():
                 b.subtotal,
                 b.tax,
                 b.discount,
+                b.packing,
                 b.total_amount,
                 b.payment_method,
                 b.payment_status,
                 b.bill_date,
+                COALESCE(o.order_type, 'dine_in') AS order_type,
                 COALESCE(o.order_status, 'Unknown') AS order_status
 
             FROM bills b
@@ -7542,11 +7990,15 @@ SEARCH_PAGES = [
      "branding name logo symbol tagline", True),
     ("tax_settings", "Tax & Discount", "bi-percent",
      "tax discount gst rates", True),
+    ("packing_settings", "Packing Charges", "bi-box-seam",
+     "packing container takeaway delivery parcel charges", True),
     ("timezone_settings", "Time Zone", "bi-clock", "time zone clock", True),
     ("theme_settings", "Colours", "bi-palette",
      "colours colors theme palette", True),
     ("qr_settings", "Table QR Code", "bi-qr-code",
      "qr code table menu customers", True),
+    ("reviews", "Reviews", "bi-star",
+     "reviews ratings stars customers feedback comments", False),
 ]
 SEARCH_ROWS = 12
 
@@ -7679,6 +8131,328 @@ def search():
     total = sum(len(rows) for rows in found.values())
     return render_template("search.html", query=query, found=found,
                            total=total)
+
+
+# ---------------------------------------------------------------------
+# Reviews
+# ---------------------------------------------------------------------
+REVIEW_NOTE_MAX = 300
+REVIEW_COMMENT_MAX = 600
+REVIEW_NAME_MAX = 60
+
+
+def reviewer_name_from(value):
+    """The name as typed, tidied: one space between words, no controls."""
+    value = "".join(ch for ch in (value or "") if ch.isprintable())
+    return " ".join(value.split())[:REVIEW_NAME_MAX]
+
+
+def review_of(cursor, order_id):
+    """What was said about one order: {'visit': {...}, 'dishes': {line id: {...}}}."""
+    cursor.execute("""
+        SELECT order_item_id, rating, comment, reviewer_name
+        FROM reviews WHERE order_id = %s
+    """, (order_id,))
+    found = {"visit": None, "dishes": {}, "name": ""}
+    for row in cursor.fetchall():
+        found["name"] = found["name"] or (row["reviewer_name"] or "")
+        entry = {"rating": row["rating"], "comment": row["comment"] or ""}
+        if row["order_item_id"]:
+            found["dishes"][int(row["order_item_id"])] = entry
+        else:
+            found["visit"] = entry
+    return found if (found["visit"] or found["dishes"]) else None
+
+
+def dish_ratings(cursor, owner_id, limit=None):
+    """Each dish's average rating and how many rated it, highest first."""
+    cursor.execute("""
+        SELECT COALESCE(r.item_name, 'Removed item') AS name,
+               MAX(r.food_id) AS food_id,
+               AVG(r.rating) AS average,
+               COUNT(*) AS votes
+        FROM reviews r
+        WHERE r.user_id = %s AND r.order_item_id IS NOT NULL
+          AND r.rating IS NOT NULL
+        GROUP BY COALESCE(r.item_name, 'Removed item')
+        ORDER BY average DESC, votes DESC
+    """, (owner_id,))
+    rows = [{"name": row["name"],
+             "average": round(float(row["average"] or 0), 1),
+             "votes": int(row["votes"] or 0),
+             "kind": food_kind(row["name"])} for row in cursor.fetchall()]
+    return rows[:limit] if limit else rows
+
+
+def recent_reviews(cursor, owner_id, limit=40):
+    """The latest reviewed orders, each with its visit and its dishes."""
+    cursor.execute("""
+        SELECT r.order_id, r.order_item_id, r.item_name, r.rating, r.comment,
+               r.reviewer_name, r.created_at, o.daily_no, o.order_date,
+               b.bill_id
+        FROM reviews r
+        INNER JOIN orders o ON o.order_id = r.order_id
+        LEFT JOIN bills b ON b.order_id = r.order_id
+        WHERE r.user_id = %s
+        ORDER BY r.created_at DESC, r.review_id ASC
+        LIMIT 600
+    """, (owner_id,))
+    orders, order_ids = {}, []
+    for row in cursor.fetchall():
+        oid = row["order_id"]
+        if oid not in orders:
+            if len(order_ids) >= limit:
+                continue
+            orders[oid] = {"order_id": oid,
+                           "number": row["daily_no"] or oid,
+                           "bill_id": row["bill_id"],
+                           "name": row["reviewer_name"] or "",
+                           "when": row["created_at"] or row["order_date"],
+                           "visit": None, "dishes": []}
+            order_ids.append(oid)
+        entry = orders[oid]
+        if row["order_item_id"]:
+            entry["dishes"].append({"name": row["item_name"] or "Removed item",
+                                    "rating": row["rating"],
+                                    "comment": row["comment"] or ""})
+        else:
+            entry["visit"] = {"rating": row["rating"],
+                              "comment": row["comment"] or ""}
+    listed = [orders[oid] for oid in order_ids]
+    for entry in listed:
+        stars = [d["rating"] for d in entry["dishes"] if d["rating"]]
+        if entry["visit"] and entry["visit"]["rating"]:
+            entry["score"] = entry["visit"]["rating"]
+        else:
+            entry["score"] = round(sum(stars) / len(stars), 1) if stars else None
+    return listed
+
+
+def review_summary(cursor, owner_id):
+    """How many reviewed, the averages, and how the stars fall."""
+    cursor.execute("""
+        SELECT COUNT(DISTINCT order_id) AS orders,
+               AVG(CASE WHEN order_item_id IS NULL THEN rating END) AS visit,
+               AVG(CASE WHEN order_item_id IS NOT NULL THEN rating END) AS dishes,
+               SUM(CASE WHEN rating = 5 THEN 1 ELSE 0 END) AS s5,
+               SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END) AS s4,
+               SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) AS s3,
+               SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END) AS s2,
+               SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) AS s1
+        FROM reviews WHERE user_id = %s
+    """, (owner_id,))
+    row = cursor.fetchone() or {}
+    spread = [(n, int(row.get("s%d" % n) or 0)) for n in (5, 4, 3, 2, 1)]
+    most = max([count for _, count in spread] + [1])
+    return {
+        "orders": int(row.get("orders") or 0),
+        "visit": round(float(row["visit"]), 1) if row.get("visit") is not None else None,
+        "dishes": round(float(row["dishes"]), 1) if row.get("dishes") is not None else None,
+        "spread": [{"stars": n, "count": count,
+                    "share": round(count / most * 100)} for n, count in spread],
+    }
+
+
+@app.route("/m/<token>/review/<ref>", methods=["POST"])
+def public_review(token, ref):
+    """
+    Stars and a comment on a finished order, from the customer's phone.
+
+    Only once the kitchen has finished it - there is nothing to rate
+    before. Sending again replaces what was said, so a customer can
+    change their mind at the table. Found by the order's own random
+    reference and the cafe's token together, like the order's page.
+    """
+    connection = None
+    cursor = None
+    wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+    def answer(ok, message, status=200):
+        if wants_json:
+            return jsonify({"ok": ok, "message": message}), status
+        return redirect(url_for("public_order_placed", token=token, ref=ref)
+                        + ("#reviewed" if ok else "#review"))
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cafe = cafe_for_token(cursor, token)
+        if cafe is None:
+            return answer(False, "This menu is no longer available.", 404)
+
+        cursor.execute(
+            "SELECT order_id, order_status FROM orders "
+            "WHERE public_ref = %s AND user_id = %s AND source = 'qr'",
+            (ref, cafe["owner_user_id"]))
+        order = cursor.fetchone()
+        if order is None:
+            return answer(False, "That order could not be found.", 404)
+        if order["order_status"] != "Completed":
+            return answer(False, "You can rate your order once it is ready.", 409)
+
+        cursor.execute(
+            "SELECT order_item_id, food_id, item_name FROM order_items "
+            "WHERE order_id = %s", (order["order_id"],))
+        lines = cursor.fetchall()
+
+        def stars(field):
+            try:
+                value = int((request.form.get(field) or "").strip())
+            except ValueError:
+                return None
+            return value if 1 <= value <= 5 else None
+
+        rows = []
+        for line in lines:
+            rating = stars("rating_%d" % line["order_item_id"])
+            if rating is None:
+                continue
+            note = (request.form.get("note_%d" % line["order_item_id"])
+                    or "").strip()[:REVIEW_NOTE_MAX]
+            rows.append((line["order_item_id"], line["food_id"],
+                         line["item_name"], rating, note or None))
+
+        visit = stars("overall")
+        comment = (request.form.get("comment") or "").strip()[:REVIEW_COMMENT_MAX]
+        who = reviewer_name_from(request.form.get("reviewer_name")) or None
+        if not rows and visit is None and not comment:
+            return answer(False, "Choose some stars first.", 400)
+
+        cursor.execute("DELETE FROM reviews WHERE order_id = %s",
+                       (order["order_id"],))
+        for item_id, food_id, name, rating, note in rows:
+            cursor.execute("""
+                INSERT INTO reviews (order_id, order_item_id, food_id, item_name,
+                                     rating, comment, reviewer_name, user_id,
+                                     cafe_id, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (order["order_id"], item_id, food_id, name, rating, note, who,
+                  cafe["owner_user_id"], cafe["cafe_id"], utc_now()))
+        if visit is not None or comment:
+            cursor.execute("""
+                INSERT INTO reviews (order_id, order_item_id, food_id, item_name,
+                                     rating, comment, reviewer_name, user_id,
+                                     cafe_id, created_at)
+                VALUES (%s, NULL, NULL, NULL, %s, %s, %s, %s, %s, %s)
+            """, (order["order_id"], visit, comment or None, who,
+                  cafe["owner_user_id"], cafe["cafe_id"], utc_now()))
+        connection.commit()
+        return answer(True, "Thank you - the cafe will see this.")
+    except mysql.connector.Error:
+        if connection:
+            connection.rollback()
+        return answer(False, "That did not go through. Please try again.", 500)
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/reviews")
+def reviews():
+    """What customers have said, for everybody who serves them."""
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        owner = scope_user_id()
+        return render_template(
+            "reviews.html",
+            summary=review_summary(cursor, owner),
+            dishes=dish_ratings(cursor, owner),
+            listed=recent_reviews(cursor, owner, limit=60),
+        )
+    except mysql.connector.Error as error:
+        flash(database_error(error, "loading reviews"))
+        return redirect(inject_home_url()["home_url"])
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+# ---------------------------------------------------------------------
+# Is this username free?
+#
+# Asked while a username is typed on Register and on Add User, so that
+# "That username is already in use" arrives while there is still time to
+# pick another, not after the whole form has been filled in and sent.
+#
+# It does say which usernames exist - the sign-in screen is careful never
+# to - so it is held to a pace a person typing never reaches and a list
+# being run through it does: 40 questions a minute from one address.
+# ---------------------------------------------------------------------
+USERNAME_CHECKS_PER_MINUTE = 40
+_USERNAME_CHECKS = {}
+_USERNAME_CHECKS_LOCK = threading.Lock()
+
+
+def _username_check_allowed():
+    now = time.time()
+    source = request_source() or "?"
+    with _USERNAME_CHECKS_LOCK:
+        recent = [t for t in _USERNAME_CHECKS.get(source, []) if now - t < 60]
+        if len(recent) >= USERNAME_CHECKS_PER_MINUTE:
+            _USERNAME_CHECKS[source] = recent
+            return False
+        recent.append(now)
+        _USERNAME_CHECKS[source] = recent
+        if len(_USERNAME_CHECKS) > 5000:
+            _USERNAME_CHECKS.clear()
+    return True
+
+
+@app.route("/api/username-check")
+def username_check():
+    wanted = (request.args.get("u") or "").strip()
+    if not wanted:
+        return jsonify({"ok": False, "state": "empty",
+                        "message": "Choose a username."})
+    if len(wanted) < 3:
+        return jsonify({"ok": False, "state": "bad",
+                        "message": "Use at least 3 characters."})
+    if len(wanted) > 80:
+        return jsonify({"ok": False, "state": "bad",
+                        "message": "Keep it to 80 characters or fewer."})
+    if not _username_check_allowed():
+        return jsonify({"ok": None, "state": "wait",
+                        "message": "Checked a lot just now - it is checked again when you submit."}), 429
+
+    stem = re.sub(r"[^A-Za-z0-9_.]+", "", wanted)[:70] or "user"
+    ideas = [stem + tail for tail in ("1", "2", "_cafe", "01", "3", "_team")]
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        # The same comparison the form's own check makes when it is sent,
+        # so the two can never disagree about whether a name is taken.
+        marks = ", ".join(["%s"] * (1 + len(ideas)))
+        cursor.execute("SELECT username FROM users WHERE username IN (%s)" % marks,
+                       tuple([wanted] + ideas))
+        taken = {str(row[0]).lower() for row in cursor.fetchall()}
+    except mysql.connector.Error:
+        return jsonify({"ok": None, "state": "wait",
+                        "message": "Could not check just now - it is checked again when you submit."}), 503
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+    if wanted.lower() in taken:
+        free = [idea for idea in ideas if idea.lower() not in taken][:2]
+        return jsonify({
+            "ok": False, "state": "taken", "suggestions": free,
+            "message": "That username is already taken - choose another"
+                       + (", like %s." % " or ".join(free) if free else "."),
+        })
+    return jsonify({"ok": True, "state": "free",
+                    "message": "That username is free."})
 
 
 # START FLASK
@@ -8439,6 +9213,11 @@ def require_login():
         # What this phone has ordered here today, which is how somebody
         # who ordered twice says which order was theirs.
         "public_table_orders",
+        # Stars and a comment on a finished order, from the customer's
+        # own phone.
+        "public_review",
+        # Whether a username is free, asked while somebody registers.
+        "username_check",
         # The browser asks for the icon on the sign-in screen too. Without
         # this it is redirected to /login, and the browser then renders the
         # whole login page again - a wasted database round-trip on every
@@ -8476,7 +9255,7 @@ def require_login():
         if not expected:
             expected = secrets.token_urlsafe(32)
             session["_csrf_token"] = expected
-        if not token or not hmac.compare_digest(token, expected):
+        if not csrf_matches(token, expected):
             return "Invalid CSRF token. Please refresh the page and try again.", 400
 
     if "_csrf_token" not in session:
@@ -8508,11 +9287,54 @@ def require_login():
 # separate hook it ran too late to repair anything.
 
 
+# ---------------------------------------------------------------------
+# The form token, never the same twice on the page
+#
+# Pages are gzipped on the way out, and some of them repeat what was
+# typed - a search, a name refused by a form. A page that holds a secret
+# and repeats a stranger's text, compressed, leaks the secret a character
+# at a time through its size to anyone who can watch the traffic and
+# steer the text (the attack known as BREACH). So each page carries the
+# token XORed with fresh random bytes, the pad written in front: the
+# same secret underneath, different bytes on every page, nothing for the
+# compressor to find twice. The plain token is still accepted.
+# ---------------------------------------------------------------------
+def mask_csrf(token):
+    """The token under a one-time pad, as url-safe text."""
+    raw = (token or "").encode()
+    pad = secrets.token_bytes(len(raw))
+    blob = pad + bytes(a ^ b for a, b in zip(pad, raw))
+    return base64.urlsafe_b64encode(blob).decode().rstrip("=")
+
+
+def csrf_matches(sent, expected):
+    """Whether a posted token is the session's, masked or plain."""
+    if not sent or not expected:
+        return False
+    try:
+        sent_raw = sent.encode("ascii")
+        expected_raw = expected.encode("ascii")
+    except UnicodeError:
+        return False
+    if hmac.compare_digest(sent_raw, expected_raw):
+        return True
+    try:
+        blob = base64.urlsafe_b64decode(sent_raw + b"=" * (-len(sent_raw) % 4))
+    except ValueError:
+        return False
+    if len(blob) != 2 * len(expected_raw):
+        return False
+    half = len(expected_raw)
+    unmasked = bytes(a ^ b for a, b in zip(blob[:half], blob[half:]))
+    return hmac.compare_digest(unmasked, expected_raw)
+
+
 @app.context_processor
 def inject_security_context():
+    token = session.get("_csrf_token", "")
     return {
         "current_user": get_current_user(),
-        "csrf_token_value": session.get("_csrf_token", "")
+        "csrf_token_value": mask_csrf(token) if token else "",
     }
 
 
@@ -9351,7 +10173,7 @@ def kitchen_board():
 
         cursor.execute("""
             SELECT order_id, order_date, total_amount, source,
-                   daily_no, order_status
+                   daily_no, order_status, order_type
             FROM orders
             WHERE user_id = %s AND order_day = %s
             ORDER BY CASE WHEN order_status = 'Pending' THEN 0 ELSE 1 END,
@@ -9387,6 +10209,7 @@ def kitchen_board():
                     "placed": format_order_time(row["order_date"]),
                     "total": "%.2f" % float(row["total_amount"] or 0),
                     "source": row["source"] or "counter",
+                    "order_type": row.get("order_type") or "dine_in",
                     "status": row["order_status"],
                     "items": lines.get(row["order_id"], []),
                 }
@@ -9766,6 +10589,8 @@ def tax_settings():
                     continue
                 try:
                     rate = Decimal(raw)
+                    if not rate.is_finite():
+                        raise InvalidOperation(raw)
                 except (InvalidOperation, ValueError):
                     flash("Enter the %s as a number, for example 5 or 12.5."
                           % label)
@@ -9798,6 +10623,66 @@ def tax_settings():
             tax_percent=rates["tax"],
             discount_percent=rates["discount"],
         )
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/settings/packing", methods=["GET", "POST"])
+def packing_settings():
+    """
+    What a takeaway and a delivery container cost.
+
+    Each has its own amount and its own way of charging it - once per
+    order, or once per item - because a coffee to go and a family's
+    delivery are packed differently. Admin only, like the rates: it
+    decides what every future takeaway and delivery bill charges.
+    """
+    denied = require_role("admin")
+    if denied:
+        return denied
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cafe_id = require_cafe_session()
+
+        if request.method == "POST":
+            values = {}
+            for kind, label in (("takeaway", "takeaway"), ("delivery", "delivery")):
+                raw = (request.form.get(kind + "_packing") or "0").strip() or "0"
+                try:
+                    amount = Decimal(raw)
+                    if not amount.is_finite():
+                        raise InvalidOperation(raw)
+                except (InvalidOperation, ValueError):
+                    flash("Enter the %s charge as an amount, for example 10 or 12.50."
+                          % label)
+                    return redirect(stay_on("packing_settings"))
+                if amount < 0 or amount > MAX_PACKING:
+                    flash("The %s charge must be between ₹0 and ₹%s."
+                          % (label, format_percent(MAX_PACKING)))
+                    return redirect(stay_on("packing_settings"))
+                mode = request.form.get(kind + "_packing_mode") or "order"
+                values[kind] = (amount.quantize(Decimal("0.01")),
+                                mode if mode in PACKING_MODES else "order")
+
+            cursor.execute(
+                "UPDATE cafes SET takeaway_packing = %s, takeaway_packing_mode = %s, "
+                "delivery_packing = %s, delivery_packing_mode = %s WHERE cafe_id = %s",
+                (values["takeaway"][0], values["takeaway"][1],
+                 values["delivery"][0], values["delivery"][1], cafe_id))
+            connection.commit()
+            cache_drop("packing:%s" % cafe_id)
+            flash("Saved. Takeaway and delivery orders will use the new charges.")
+            return redirect(came_from())
+
+        return render_template("packing_settings.html",
+                               packing=get_packing(cafe_id))
     finally:
         if cursor:
             cursor.close()
@@ -10044,7 +10929,7 @@ def public_menu(token):
             return render_template("public_gone.html"), 404
 
         cursor.execute("""
-            SELECT f.food_id, f.food_name, f.price, f.description,
+            SELECT f.food_id, f.food_name, f.price, f.description, f.diet,
                    f.image_version, (f.image_blob IS NOT NULL) AS has_image,
                    COALESCE(c.category_name, 'Other') AS category_name,
                    COALESCE(i.quantity, 0) AS stock
@@ -10222,6 +11107,9 @@ def public_order_placed(token, ref):
             for line in items:
                 line["made"] = 1
 
+        # What they said about it, if they have rated it already.
+        said = review_of(cursor, order["order_id"])
+
         # The rest of today's, so the number they were given an hour ago
         # is on the page in front of them rather than in a tab they have
         # since closed.
@@ -10233,6 +11121,7 @@ def public_order_placed(token, ref):
             branding=get_cafe_branding(cafe["cafe_id"]),
             order=order,
             items=items,
+            review=said,
             mine=[other for other in table_orders(cursor, cafe, held)
                   if other["public_ref"] != ref],
         ))

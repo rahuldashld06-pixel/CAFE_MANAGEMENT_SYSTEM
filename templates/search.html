@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_food_art.html" import food_art %}
 
 {% block title %}{% if query %}{{ query }} - Search{% else %}Search{% endif %}{% endblock %}
 
@@ -6,6 +7,114 @@
 
 <style>
     .search-page { max-width: 980px; }
+
+    .search-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 10px;
+        padding: 6px 12px 6px 9px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 999px;
+        color: var(--cream-dim);
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .search-back:hover { color: var(--cream); background: var(--espresso-850); }
+
+    .search-again__field {
+        position: relative;
+        display: flex;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .search-again__field input { padding-right: 46px; }
+
+    .search-again__clear {
+        position: absolute;
+        top: 50%;
+        right: 8px;
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border: 0;
+        border-radius: 50%;
+        background: none;
+        color: var(--cream-faint);
+        cursor: pointer;
+        transform: translateY(-50%);
+    }
+
+    .search-again__clear:hover { background: var(--espresso-850); color: var(--cream); }
+    .search-again__clear[hidden] { display: none; }
+
+    .search-recent { margin-bottom: 20px; }
+    .search-recent[hidden] { display: none; }
+
+    .search-recent__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .search-recent__all {
+        border: 0;
+        background: none;
+        color: var(--copper-light);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .search-recent__list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .recent-chip {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--espresso-700);
+        border-radius: 999px;
+        background: var(--espresso-900);
+        overflow: hidden;
+    }
+
+    .recent-chip.is-now { border-color: var(--copper); }
+
+    .recent-chip a {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 4px 7px 13px;
+        color: var(--cream);
+        font-size: 13.5px;
+        font-weight: 600;
+    }
+
+    .recent-chip a i { color: var(--cream-faint); }
+
+    .recent-chip button {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border: 0;
+        background: none;
+        color: var(--cream-faint);
+        cursor: pointer;
+    }
+
+    .recent-chip button:hover { color: var(--berry); }
 
     .search-again {
         display: flex;
@@ -130,6 +239,9 @@
 
     <div class="page-header">
         <div>
+            <a href="{{ home_url }}" class="search-back" data-back>
+                <i class="bi bi-arrow-left" aria-hidden="true"></i> Back
+            </a>
             <div class="eyebrow">Search</div>
             <h1>{% if query %}Results for &ldquo;{{ query }}&rdquo;{% else %}Search{% endif %}</h1>
             <p class="page-subtitle">
@@ -142,13 +254,30 @@
 
     <form class="search-again" method="GET" action="{{ url_for('search') }}"
           role="search" data-no-draft>
-        <input type="search" name="q" value="{{ query }}"
-               placeholder="A dish, a page, or an order number like #12"
-               aria-label="Search" autocomplete="off">
+        <span class="search-again__field">
+            <input type="search" name="q" value="{{ query }}" id="searchAgain"
+                   placeholder="A dish, a page, or an order number like #12"
+                   aria-label="Search" autocomplete="off">
+            <button type="button" class="search-again__clear" id="searchAgainClear"
+                    aria-label="Clear the search" title="Clear the search"
+                    {% if not query %}hidden{% endif %}>
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </span>
         <button type="submit" class="btn btn--primary">
             <i class="bi bi-search"></i> Search
         </button>
     </form>
+
+    {# What this person searched for lately, each with a way to delete it.
+       Filled from this browser by the script below. #}
+    <section class="search-recent" id="searchRecent" hidden aria-labelledby="recentTitle">
+        <div class="search-recent__head">
+            <h2 class="search-group__title" id="recentTitle"><i class="bi bi-clock-history"></i> Recent searches</h2>
+            <button type="button" class="search-recent__all" id="recentClearAll">Clear all</button>
+        </div>
+        <ul class="search-recent__list" id="recentList"></ul>
+    </section>
 
     {% if query and not total %}
         <div class="search-empty">
@@ -196,9 +325,11 @@
         <ul class="search-list">
             {% for hit in found.foods %}
             <li><a class="search-hit" href="{{ hit.url }}">
-                <span class="search-hit__icon">
-                    {% if hit.image %}<img src="{{ hit.image }}" alt="">{% else %}<i class="bi bi-egg-fried"></i>{% endif %}
-                </span>
+                {% if hit.image %}
+                <span class="search-hit__icon"><img src="{{ hit.image }}" alt=""></span>
+                {% else %}
+                {{ food_art(food_kind(hit.name, hit.category), "search-hit__icon") }}
+                {% endif %}
                 <span class="search-hit__text">
                     <span class="search-hit__name">{{ hit.name }}</span>
                     <span class="search-hit__meta">{{ hit.category }} &middot; {% if hit.quantity > 0 %}{{ hit.quantity }} in stock{% else %}Out of stock{% endif %}</span>
@@ -244,5 +375,93 @@
     {% endif %}
 
 </div>
+
+<script>
+(function () {
+    // Kept per person: on a shared till this is filed under whoever is
+    // signed in, so nobody is shown what somebody else looked for.
+    var who = (document.querySelector('meta[name="cafora-user"]') || {}).content || "";
+    var KEY = "cafora.searches." + who;
+    var MOST = 8;
+    var current = {{ query|tojson }};
+
+    function read() {
+        try {
+            var list = JSON.parse(localStorage.getItem(KEY) || "[]");
+            return Array.isArray(list) ? list.filter(function (q) {
+                return typeof q === "string" && q.trim();
+            }) : [];
+        } catch (error) { return []; }
+    }
+
+    function write(list) {
+        try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, MOST))); }
+        catch (error) { /* the list is only a convenience */ }
+    }
+
+    function same(a, b) { return a.trim().toLowerCase() === b.trim().toLowerCase(); }
+
+    var list = read();
+    if (current) {
+        list = [current].concat(list.filter(function (q) { return !same(q, current); }));
+        write(list);
+    }
+
+    var box = document.getElementById("searchRecent");
+    var holder = document.getElementById("recentList");
+
+    function draw() {
+        list = read();
+        holder.innerHTML = "";
+        list.forEach(function (q) {
+            var chip = document.createElement("li");
+            chip.className = "recent-chip" + (current && same(q, current) ? " is-now" : "");
+
+            var go = document.createElement("a");
+            go.href = "/search?q=" + encodeURIComponent(q);
+            go.innerHTML = '<i class="bi bi-clock-history" aria-hidden="true"></i>';
+            go.appendChild(document.createTextNode(q));
+
+            var remove = document.createElement("button");
+            remove.type = "button";
+            remove.setAttribute("aria-label", "Delete the search " + q);
+            remove.title = "Delete this search";
+            remove.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
+            remove.addEventListener("click", function () {
+                write(read().filter(function (each) { return !same(each, q); }));
+                draw();
+            });
+
+            chip.appendChild(go);
+            chip.appendChild(remove);
+            holder.appendChild(chip);
+        });
+        box.hidden = list.length === 0;
+    }
+
+    document.getElementById("recentClearAll").addEventListener("click", function () {
+        write([]);
+        draw();
+    });
+
+    // The x in the box empties it, and the results with it.
+    var field = document.getElementById("searchAgain");
+    var clear = document.getElementById("searchAgainClear");
+    field.addEventListener("input", function () { clear.hidden = !field.value; });
+    clear.addEventListener("click", function () {
+        field.value = "";
+        clear.hidden = true;
+        var header = document.getElementById("topSearchInput");
+        if (header) header.value = "";
+        if (current) {
+            location.href = "/search";
+        } else {
+            field.focus();
+        }
+    });
+
+    draw();
+}());
+</script>
 
 {% endblock %}

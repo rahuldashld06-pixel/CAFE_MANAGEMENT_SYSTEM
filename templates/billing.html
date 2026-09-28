@@ -934,7 +934,8 @@
         }
         .billing-table td[data-label="Subtotal"],
         .billing-table td[data-label="Discount"],
-        .billing-table td[data-label="Tax"] {
+        .billing-table td[data-label="Tax"],
+        .billing-table td[data-label="Packing"] {
             order: 4;
             grid-column: span 2;
         }
@@ -1101,7 +1102,10 @@
                 {% set any_tax = bills | map(attribute='tax')
                                        | map('float')
                                        | select('gt', 0) | list | length %}
-                {% set adjusted = any_discount or any_tax %}
+                {% set any_packing = bills | map(attribute='packing')
+                                           | map('float')
+                                           | select('gt', 0) | list | length %}
+                {% set adjusted = any_discount or any_tax or any_packing %}
 
                 <thead>
                     <tr>
@@ -1112,6 +1116,7 @@
                         {% if adjusted %}<th class="col-sub">Subtotal</th>{% endif %}
                         {% if any_discount %}<th class="col-off">Discount</th>{% endif %}
                         {% if any_tax %}<th class="col-tax">Tax</th>{% endif %}
+                        {% if any_packing %}<th class="col-tax">Packing</th>{% endif %}
                         <th class="col-total">Total</th>
                         <th class="col-mode">Payment Mode</th>
                         <th class="col-return">Return</th>
@@ -1173,6 +1178,7 @@
                         {% if adjusted %}<td class="amount" data-label="Subtotal">₹{{ bill.subtotal }}</td>{% endif %}
                         {% if any_discount %}<td data-label="Discount">&minus;₹{{ bill.discount }}</td>{% endif %}
                         {% if any_tax %}<td data-label="Tax">₹{{ bill.tax }}</td>{% endif %}
+                        {% if any_packing %}<td data-label="Packing">₹{{ bill.packing }}</td>{% endif %}
                         <td class="total-amount" data-label="Total">₹{{ bill.total_amount }}</td>
 
                         <!-- The selects are associated with the form in the Action cell below. -->
@@ -1262,7 +1268,7 @@
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="{{ 9 + (1 if adjusted else 0) + (1 if any_discount else 0) + (1 if any_tax else 0) }}" class="empty-row">
+                        <td colspan="{{ 9 + (1 if adjusted else 0) + (1 if any_discount else 0) + (1 if any_tax else 0) + (1 if any_packing else 0) }}" class="empty-row">
                             <i class="bi bi-receipt"></i>
                             <p>No bills found for the selected period.</p>
                             <a href="{{ url_for('add_order') }}" class="btn btn--sm btn--primary">

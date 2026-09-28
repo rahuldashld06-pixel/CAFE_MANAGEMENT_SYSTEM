@@ -27,7 +27,8 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap"></noscript>
 
     <link rel="stylesheet" href="{{ asset_url('css/theme.css') }}">
     <link rel="stylesheet" href="{{ asset_url('css/public.css') }}">
@@ -91,6 +92,81 @@
             <span>&#8377;{{ "%.2f"|format(order.total_amount|float) }}</span>
         </div>
     </div>
+
+
+    {# ---- Stars, once it is ready ----
+       Shown the moment the kitchen finishes the order - the status check
+       below takes the hidden off - and kept afterwards, with what was
+       said last time, so it can be changed. Works without a script: the
+       form posts, and the page comes back with the answer. #}
+    <section class="p-review" id="reviewPanel" aria-labelledby="reviewTitle"
+             {% if order.order_status != 'Completed' %}hidden{% endif %}>
+        <h2 class="p-review__title" id="reviewTitle">
+            {% if review %}Your review{% else %}How was it?{% endif %}
+        </h2>
+        <p class="p-review__lead">
+            {% if review %}Thank you. Change anything and send it again.
+            {% else %}Rate each dish - it goes straight to the caf&eacute;.{% endif %}
+        </p>
+
+        <form method="POST" id="reviewForm"
+              action="{{ url_for('public_review', token=token, ref=order.public_ref) }}">
+            {% for item in items %}
+            {% set said = (review.dishes.get(item.order_item_id) if review else None) %}
+            <div class="p-rate">
+                <div class="p-rate__head">
+                    <span class="p-rate__name">{{ item.item_name }}</span>
+                    <div class="p-stars" role="radiogroup"
+                         aria-label="Stars for {{ item.item_name }}"
+                         data-field="rating_{{ item.order_item_id }}">
+                        {% for n in range(1, 6) %}
+                        <button type="button" data-value="{{ n }}"
+                                class="{{ 'is-on' if said and said.rating and n <= said.rating else '' }}"
+                                aria-label="{{ n }} star{{ 's' if n > 1 }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg></button>
+                        {% endfor %}
+                    </div>
+                </div>
+                <input type="hidden" name="rating_{{ item.order_item_id }}"
+                       value="{{ said.rating if said and said.rating else '' }}">
+                <input type="text" class="p-rate__note" name="note_{{ item.order_item_id }}"
+                       maxlength="300" placeholder="Anything about this dish? (optional)"
+                       value="{{ said.comment if said else '' }}">
+            </div>
+            {% endfor %}
+
+            {% set visit = review.visit if review else None %}
+            <div class="p-rate p-rate--visit">
+                <div class="p-rate__head">
+                    <span class="p-rate__name">Your visit overall</span>
+                    <div class="p-stars" role="radiogroup" aria-label="Stars for the visit"
+                         data-field="overall">
+                        {% for n in range(1, 6) %}
+                        <button type="button" data-value="{{ n }}"
+                                class="{{ 'is-on' if visit and visit.rating and n <= visit.rating else '' }}"
+                                aria-label="{{ n }} star{{ 's' if n > 1 }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg></button>
+                        {% endfor %}
+                    </div>
+                </div>
+                <input type="hidden" name="overall"
+                       value="{{ visit.rating if visit and visit.rating else '' }}">
+                <textarea class="p-rate__note" name="comment" maxlength="600" rows="3"
+                          placeholder="About the food, the staff, the caf&eacute; - anything (optional)">{{ visit.comment if visit else '' }}</textarea>
+            </div>
+
+            <div class="p-rate p-rate--name">
+                <label class="p-rate__name" for="reviewerName">Your name</label>
+                <input class="p-rate__note" type="text" id="reviewerName"
+                       name="reviewer_name" maxlength="60" autocomplete="name"
+                       placeholder="So the caf&eacute; knows who said it (optional)"
+                       value="{{ review.name if review else '' }}">
+            </div>
+
+            <p class="p-review__said" id="reviewSaid" role="status" aria-live="polite"></p>
+            <button type="submit" class="p-send p-review__send" id="reviewSend">
+                {% if review %}Update my review{% else %}Send review{% endif %}
+            </button>
+        </form>
+    </section>
 
     {# The numbers from earlier today, under the one just given. Two
        orders from one table is one person eating in two goes, and at the
@@ -164,6 +240,9 @@
         if (!words) return false;
 
         panel.dataset.state = STATES[status] || "pending";
+        // Ready: now there is something to rate.
+        var rate = document.getElementById("reviewPanel");
+        if (rate && status === "Completed") rate.hidden = false;
         line.textContent = words[0];
         if (hint) hint.textContent = words[1];
         if (sub) sub.textContent = words[0];
@@ -198,6 +277,80 @@
         });
         ask();
     }
+}());
+</script>
+
+<script>
+// Stars: a tap sets them, a tap on the same star again clears them. Sent
+// without leaving the page; with no script, the form posts as it is.
+(function () {
+    "use strict";
+    var form = document.getElementById("reviewForm");
+    if (!form) return;
+
+    form.addEventListener("click", function (event) {
+        var star = event.target.closest(".p-stars button");
+        if (!star) return;
+        var group = star.parentNode;
+        var field = form.querySelector('[name="' + group.getAttribute("data-field") + '"]');
+        var value = parseInt(star.getAttribute("data-value"), 10);
+        var now = parseInt(field.value, 10) || 0;
+        var next = now === value ? 0 : value;
+        field.value = next || "";
+        [].forEach.call(group.querySelectorAll("button"), function (each) {
+            var on = parseInt(each.getAttribute("data-value"), 10) <= next;
+            each.classList.toggle("is-on", on);
+            each.setAttribute("aria-checked", on && parseInt(each.getAttribute("data-value"), 10) === next ? "true" : "false");
+        });
+    });
+
+    // The name is kept on this phone, so it is there again after a
+    // refresh and on the next visit without typing it twice.
+    var NAME_KEY = "cafora.reviewer";
+    var nameField = document.getElementById("reviewerName");
+    if (nameField && !nameField.value) {
+        try { nameField.value = localStorage.getItem(NAME_KEY) || ""; }
+        catch (error) { /* no storage: typed each time */ }
+    }
+    function keepName() {
+        if (!nameField) return;
+        try {
+            var typed = nameField.value.trim();
+            if (typed) localStorage.setItem(NAME_KEY, typed);
+            else localStorage.removeItem(NAME_KEY);
+        } catch (error) { /* only a convenience */ }
+    }
+    if (nameField) nameField.addEventListener("change", keepName);
+
+    var said = document.getElementById("reviewSaid");
+    var send = document.getElementById("reviewSend");
+    form.addEventListener("submit", function (event) {
+        keepName();
+        if (!window.fetch || !window.FormData) return;
+        event.preventDefault();
+        send.disabled = true;
+        fetch(form.action, {
+            method: "POST",
+            body: new FormData(form),
+            credentials: "same-origin",
+            headers: {"X-Requested-With": "XMLHttpRequest"}
+        }).then(function (response) {
+            return response.json().catch(function () { return {}; }).then(function (data) {
+                return {ok: response.ok && data.ok, message: data.message};
+            });
+        }).then(function (result) {
+            said.textContent = result.message || (result.ok ? "Thank you." : "That did not go through.");
+            said.dataset.ok = result.ok ? "1" : "0";
+            if (result.ok) {
+                send.textContent = "Update my review";
+                var title = document.getElementById("reviewTitle");
+                if (title) title.textContent = "Your review";
+            }
+        }).catch(function () {
+            said.textContent = "That did not go through. Please try again.";
+            said.dataset.ok = "0";
+        }).then(function () { send.disabled = false; });
+    });
 }());
 </script>
 

@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "_stars.html" import stars %}
+{% from "_food_art.html" import food_art %}
 
 {% block title %}Dashboard{% endblock %}
 
@@ -186,6 +188,76 @@
 </div>
 
 
+<!-- ==========================================
+     DISH RATINGS
+     One chart: every dish customers have rated at the table, best at the
+     top and worst at the bottom, on the same 0-5 scale - so the one to
+     be proud of and the one to fix are the first things read. What they
+     wrote is on the Reviews page.
+     ========================================== -->
+<section class="panel dish-chart" aria-labelledby="ratingsTitle">
+    <div class="dash-panel__head">
+        <div>
+            <h2 id="ratingsTitle">Dish ratings</h2>
+            <p>Average stars from customers ordering at the table &middot; best at the top</p>
+        </div>
+        <div class="dish-chart__tools">
+            <ul class="dish-chart__key" aria-label="Colours">
+                <li><span class="dish-chart__swatch"></span>Good 4&ndash;5</li>
+                <li><span class="dish-chart__swatch dish-chart__swatch--mid"></span>Okay 3&ndash;4</li>
+                <li><span class="dish-chart__swatch dish-chart__swatch--low"></span>Poor under 3</li>
+            </ul>
+            <a href="{{ url_for('reviews') }}" class="dash-link">All reviews <i class="bi bi-arrow-right"></i></a>
+        </div>
+    </div>
+    {% if rated %}
+    {% set best = rated[0] %}
+    {% set worst = rated[-1] %}
+    {% set many = rated|length > 10 %}
+    {% set shown = rated[:5] + rated[-5:] if many else rated %}
+    <div class="dish-chart__body">
+        <figure class="dish-chart__plot">
+            <figcaption class="sr-only">Dish ratings out of five, best first.</figcaption>
+            <ol class="dish-chart__rows">
+                {% for dish in shown %}
+                {% if many and loop.index == 6 %}<li class="dish-chart__gap" aria-hidden="true">&hellip; {{ rated|length - 10 }} more in between &hellip;</li>{% endif %}
+                <li class="dish-chart__row {{ 'is-low' if dish.average < 3 else ('is-mid' if dish.average < 4 else '') }}">
+                    <span class="dish-chart__dish">
+                        {{ food_art(dish.kind) }}
+                        <span class="dish-chart__name">{{ dish.name }}<small>{{ dish.votes }} rating{{ 's' if dish.votes != 1 }}</small></span>
+                    </span>
+                    <span class="dish-chart__track" aria-hidden="true"><span style="width: {{ (dish.average / 5 * 100)|round|int }}%"></span></span>
+                    <span class="dish-chart__score"><span class="sr-only">{{ dish.name }}: </span>{{ dish.average }}<span class="sr-only"> out of 5</span></span>
+                </li>
+                {% endfor %}
+                <li class="dish-chart__axis" aria-hidden="true">
+                    <span></span>
+                    <span class="dish-chart__ticks">{% for n in range(6) %}<span>{{ n }}&#9733;</span>{% endfor %}</span>
+                    <span></span>
+                </li>
+            </ol>
+        </figure>
+        <aside class="dish-chart__calls" aria-label="Best and lowest">
+            <div class="dish-call dish-call--best">
+                <span class="dish-call__label"><i class="bi bi-trophy"></i> Best rated</span>
+                <span class="dish-call__dish">{{ food_art(best.kind) }}<b>{{ best.name }}</b></span>
+                <span class="dish-call__score">{{ stars(best.average) }} {{ best.average }} <small>from {{ best.votes }} rating{{ 's' if best.votes != 1 }}</small></span>
+            </div>
+            {% if rated|length > 1 %}
+            <div class="dish-call dish-call--worst {{ 'is-fine' if worst.average >= 4 }}">
+                <span class="dish-call__label"><i class="bi bi-exclamation-circle"></i> {{ "Lowest rated" if worst.average >= 3 else "Needs attention" }}</span>
+                <span class="dish-call__dish">{{ food_art(worst.kind) }}<b>{{ worst.name }}</b></span>
+                <span class="dish-call__score">{{ stars(worst.average) }} {{ worst.average }} <small>from {{ worst.votes }} rating{{ 's' if worst.votes != 1 }}</small></span>
+            </div>
+            {% endif %}
+            <p class="dish-call__note">{{ rated|length }} dish{{ 'es' if rated|length != 1 }} rated, {{ rated | sum(attribute='votes') }} rating{{ 's' if (rated | sum(attribute='votes')) != 1 }} in all.</p>
+        </aside>
+    </div>
+    {% else %}
+    <div class="dash-empty">No ratings yet. Customers rate each dish from their phone once a table-QR order is ready.</div>
+    {% endif %}
+</section>
+
 <script src="{{ asset_url('js/charts.js') }}"></script>
 <script>
 (function () {
@@ -289,9 +361,10 @@
         body.innerHTML = rows.map(function (row, i) {
             var pic = row.image
                 ? '<img src="' + esc(row.image) + '" alt="">'
-                : '<i class="bi bi-egg-fried"></i>';
+                : '<svg aria-hidden="true"><use href="#food-' + esc(row.kind || "dish") + '"></use></svg>';
             return '<tr><td><span class="top-item"><span class="top-rank">' + (i + 1) +
-                   '</span><span class="top-item__pic">' + pic + '</span>' +
+                   '</span><span class="top-item__pic' + (row.image ? '' : ' food-art food-art--' + esc(row.kind || "dish")) +
+                   '">' + pic + '</span>' +
                    '<span>' + esc(row.name) + '</span></span></td>' +
                    '<td class="top-cat">' + esc(row.category) + '</td>' +
                    '<td class="num">' + row.sold + '</td>' +
@@ -331,7 +404,15 @@
         return html + '</ul>';
     }
 
+    var lastStock = null;
+
     function drawStock(data) {
+        // Only when something moved: the same list written back every
+        // two seconds is a relayout of the panel for nothing.
+        var seen = JSON.stringify([data.unavailable, data.low_stock,
+                                   data.unavailable_items, data.low_stock_items]);
+        if (seen === lastStock) return;
+        lastStock = seen;
         var total = (data.unavailable || 0) + (data.low_stock || 0);
         document.getElementById("stock-count").textContent = total;
         document.getElementById("stock-note").innerHTML =

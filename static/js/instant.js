@@ -573,6 +573,10 @@
         if (link.target && link.target !== "_self") return false;
         if (link.hasAttribute("download")) return false;
         if (link.hasAttribute("data-no-instant")) return false;
+        // A Back or Cancel link steps back through history (the shell's
+        // own handler does that); following its href here as well pushed
+        // a new page, which that step back then undid - so Back stayed put.
+        if (link.hasAttribute("data-back") && window.history.length > 1) return false;
         if (link.origin !== location.origin) return false;
 
         var href = link.getAttribute("href") || "";

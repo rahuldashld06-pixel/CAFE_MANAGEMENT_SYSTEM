@@ -308,8 +308,25 @@ try:
 
     print("\n=== Backdrop and Escape ===")
     tap("#navToggle")
-    tap("#sidebarBackdrop")
-    check("tapping outside closes the drawer", not drawer_open())
+    # Where a finger taps "outside": the strip of backdrop the drawer does
+    # not cover. The backdrop's own centre is under the drawer on a phone,
+    # so tapping there used to land on a nav link - which closed the drawer
+    # by navigating away, and passed for the wrong reason.
+    outside = b.evaluate("""
+        (function () {
+            var drawer = document.getElementById('appSidebar').getBoundingClientRect();
+            return [Math.round((drawer.right + innerWidth) / 2),
+                    Math.round(innerHeight / 2)];
+        })()
+    """)
+    path_before = b.evaluate("location.pathname")
+    for kind in ("mousePressed", "mouseReleased"):
+        b.call("Input.dispatchMouseEvent", type=kind, x=outside[0], y=outside[1],
+               button="left", clickCount=1)
+    time.sleep(0.7)
+    check("tapping outside closes the drawer",
+          not drawer_open() and b.evaluate("location.pathname") == path_before,
+          "open=%s, now at %s" % (drawer_open(), b.evaluate("location.pathname")))
 
     tap("#navToggle")
     b.evaluate("""document.dispatchEvent(
@@ -477,36 +494,91 @@ try:
     b.evaluate("window.scrollTo(0, 0)")
     time.sleep(0.5)
 
-    print("\n=== The floating order summary stays in the corner ===")
+    print("\n=== The order is a bar along the bottom, the menu in the corner ===")
+    # Laid out the way a food-delivery app does it on a phone: the order
+    # as a bar across the bottom middle, and a small Menu button above it
+    # at the right that opens a card of the menu's sections.
     tap("#navToggle")
     tap_nav("New Order")
     wait("!!document.getElementById('orderSummaryTrigger')", "the summary button")
     time.sleep(0.6)
 
-    box = json.loads(b.evaluate("""
-        (function () {
-            var r = document.getElementById('orderSummaryTrigger')
-                            .getBoundingClientRect();
-            return JSON.stringify({
-                width: Math.round(r.width),
-                rightGap: Math.round(innerWidth - r.right),
-                bottomGap: Math.round(innerHeight - r.bottom),
-                viewport: innerWidth
-            });
-        })()
-    """))
+    def box_of(element_id):
+        return json.loads(b.evaluate("""
+            (function () {
+                var r = document.getElementById('%s').getBoundingClientRect();
+                return JSON.stringify({
+                    width: Math.round(r.width),
+                    top: Math.round(r.top),
+                    leftGap: Math.round(r.left),
+                    rightGap: Math.round(innerWidth - r.right),
+                    bottomGap: Math.round(innerHeight - r.bottom),
+                    viewport: innerWidth
+                });
+            })()
+        """ % element_id))
 
+    box = box_of("orderSummaryTrigger")
     # position:fixed anchors to the nearest transformed ancestor rather than
     # the viewport, so an animation that leaves a transform on .main pushes
-    # this button hundreds of pixels below the fold on a tall phone page.
-    check("it sits in the bottom-right corner, on screen",
-          0 <= box["rightGap"] <= 30 and 0 <= box["bottomGap"] <= 30,
-          "gaps right=%(rightGap)s bottom=%(bottomGap)s" % box)
-    check("it is a compact pill, not a bar across the bottom",
-          box["width"] < box["viewport"] * 0.8,
-          "%(width)spx wide on a %(viewport)spx screen" % box)
+    # this bar hundreds of pixels below the fold on a tall phone page.
+    check("the order bar sits along the bottom, on screen",
+          0 <= box["bottomGap"] <= 30,
+          "bottom gap %(bottomGap)s" % box)
+    check("in the middle, most of the width across",
+          abs(box["leftGap"] - box["rightGap"]) <= 4
+          and box["width"] >= box["viewport"] * 0.8,
+          "left=%(leftGap)s right=%(rightGap)s, %(width)spx of %(viewport)spx" % box)
     check("nothing is covering it", hit_test("#orderSummaryTrigger"),
           "a tap at its centre lands on something else")
+
+    jump = box_of("menuJump")
+    check("the Menu button sits above it at the right",
+          0 <= jump["rightGap"] <= 30 and jump["top"] + 0 < box["top"]
+          and jump["width"] < jump["viewport"] * 0.5,
+          "menu %s, bar top %s" % (jump, box["top"]))
+    check("and can be tapped", hit_test("#menuJump"),
+          "a tap at its centre lands on something else")
+
+    tap("#menuJump")
+    time.sleep(0.4)
+    sections = json.loads(b.evaluate("""
+        JSON.stringify([].map.call(
+            document.querySelectorAll('#menuJumpCard [data-tab]'),
+            function (item) { return item.getAttribute('data-tab'); }))
+    """))
+    tabs = json.loads(b.evaluate("""
+        JSON.stringify([].map.call(
+            document.querySelectorAll('#menuTabs .menu-tab'),
+            function (tab) { return tab.getAttribute('data-tab'); }))
+    """))
+    check("it opens a card of the menu's sections",
+          b.evaluate("!document.getElementById('menuJumpCard').hidden")
+          and sections == tabs and len(sections) >= 2,
+          "card %s, tabs %s" % (sections, tabs))
+    last = sections[-1] if sections else ""
+    b.evaluate("""
+        document.querySelector('#menuJumpCard [data-tab="%s"]').click()
+    """ % last)
+    time.sleep(0.6)
+    check("picking one closes the card and shows that section",
+          b.evaluate("document.getElementById('menuJumpCard').hidden")
+          and b.evaluate("""
+              document.querySelector('#menuTabs .menu-tab.is-on')
+                  .getAttribute('data-tab') === '%s'
+          """ % last),
+          "card still open, or another section shown")
+    tap("#menuJump")
+    time.sleep(0.3)
+    b.evaluate("document.getElementById('menuJumpShade').click()")
+    time.sleep(0.3)
+    check("a tap outside the card closes it",
+          b.evaluate("document.getElementById('menuJumpCard').hidden"),
+          "the card stayed open")
+    b.evaluate("""
+        var all = document.querySelector('#menuTabs .menu-tab[data-tab="all"]');
+        if (all) all.click();
+    """)
 
     print("\n=== The sidebar only scrolls when the links do not fit ===")
     # The whole sidebar used to scroll as one block, so the name scrolled

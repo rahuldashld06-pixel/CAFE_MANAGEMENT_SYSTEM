@@ -204,7 +204,7 @@ textarea:focus-visible {
 .main {
     --main-pad-x: 40px;
     padding: 34px var(--main-pad-x) 60px;
-    animation: rise-in 0.5s ease both;
+    animation: rise-in 0.2s ease-out both;
 }
 
 /* ---------- The mark behind every page ---------- */
@@ -5787,3 +5787,522 @@ body.tour-open { overflow: hidden; }
 
         .top-table .top-cat { display: none; }
     }
+
+/* ---- Veg or non-veg ----
+   The mark India's menus print: a green square with a dot, or a
+   brown-red square with a triangle. On a small white tile, so it reads
+   the same on every theme and every background. */
+.diet-mark {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    border: 1.6px solid currentColor;
+    border-radius: 3px;
+    background: #fff;
+    vertical-align: -2px;
+}
+
+.diet-mark::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    background: currentColor;
+}
+
+.diet-mark--veg { color: #138a3e; }
+
+.diet-mark--veg::after {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+}
+
+.diet-mark--nonveg { color: #a3321f; }
+
+.diet-mark--nonveg::after {
+    width: 8px;
+    height: 7px;
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+/* The choice on the food forms: two tiles, each with its mark. */
+.diet-choice {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 18px;
+    padding: 0;
+    border: 0;
+}
+
+.diet-choice legend {
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--cream-dim);
+}
+
+.diet-choice small {
+    flex-basis: 100%;
+    color: var(--cream-faint);
+}
+
+.diet-choice__option {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 16px;
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-md);
+    background: var(--espresso-900);
+    color: var(--cream);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.diet-choice__option:has(input:checked) {
+    border-color: var(--copper);
+    background: rgba(var(--copper-rgb), .12);
+}
+
+.diet-choice__option input { accent-color: var(--copper); margin: 0; }
+
+.food-card-name .diet-mark,
+.cell-strong .diet-mark { margin-right: 7px; }
+
+/* On a phone a food's name heads its card; the mark sits beside it on the
+   same line rather than on a line of its own above. */
+@media (max-width: 760px) {
+    .data-table:not(.billing-table) tbody td[data-label="Food Name"] {
+        flex-direction: row;
+        align-items: center;
+        gap: 0;
+    }
+}
+
+/* ---- The mark behind every page: the cup, the name, and what it is ----
+   The name sat a long way under the cup - a gap between them, and the
+   empty margin inside the drawing's own box on top of it. They are one
+   lockup now, with the product's line under the name. */
+.app-watermark { gap: 0; }
+
+.app-watermark__name {
+    margin-top: -5vh;
+    line-height: 1;
+}
+
+.app-watermark__tagline {
+    margin-top: 1.4vh;
+    font-family: var(--font-body);
+    font-size: min(2.1vh, 1.5vw);
+    font-weight: 800;
+    letter-spacing: .34em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: .05;
+    color: var(--watermark-ink);
+}
+
+/* The x in the header's search box, once there is something to clear. */
+.topbar-search__clear {
+    display: grid;
+    place-items: center;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--cream-faint);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.topbar-search__clear:hover { background: var(--espresso-850); color: var(--cream); }
+.topbar-search__clear[hidden] { display: none; }
+.topbar-search__field:has(.topbar-search__clear:not([hidden])) .topbar-search__key { display: none; }
+
+/* ============================================================
+   Lighter on a phone
+
+   A touch screen has no hover, but a tap sets it and leaves it set - so
+   every card, tile and button that lifts on hover lifted on a tap and
+   stayed lifted, a repaint for nothing. And the header's glass blurs
+   whatever passes under it on every frame of a scroll; a phone's graphics
+   chip does that at a fraction of a laptop's speed, so the blur is
+   lighter there. Still glass; cheaper glass.
+   ============================================================ */
+@media (hover: none) {
+    .nav-link:hover,
+    .stat-card:hover,
+    .btn--primary:hover,
+    .food-card:hover,
+    .dashboard-action:hover,
+    .kpi:hover { transform: none; }
+}
+
+@media (pointer: coarse) {
+    @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+        :root.is-scrolled .topbar {
+            background: color-mix(in srgb, var(--espresso-950) 84%, transparent);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+        }
+    }
+}
+
+/* A unit that reads before the number - a rupee sign - rather than after. */
+.input-suffix--lead .input-suffix__unit { left: 13px; right: auto; }
+.input-suffix--lead input {
+    padding-left: 30px !important;
+    padding-right: 13px !important;
+}
+
+/* A takeaway or delivery on the kitchen screen: packed, so said louder. */
+.kitchen-ticket__from--packed {
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: rgba(242, 201, 76, .16);
+    color: var(--gold);
+    font-weight: 800;
+}
+
+/* ---- A picture for every dish ----
+   A drawing of what the dish is, on a tile in a colour that suits it: warm
+   browns for coffee, a leafy green for a salad, tomato for a pizza. The
+   drawing is the same cream on every tile, so a menu of them reads as one
+   set rather than thirty. */
+/* The tile's colour, at the weight of the rules below that change it. */
+.food-art { --art: 150 120 100; }
+
+span.food-art,
+div.food-art {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background:
+        radial-gradient(120% 95% at 28% 18%, rgb(var(--art) / .95) 0%,
+                        rgb(var(--art) / .62) 55%, rgb(var(--art) / .42) 100%),
+        #2A1C14;
+    color: #FFF7EC;
+}
+
+.food-art svg {
+    width: 58%;
+    height: 58%;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .28));
+}
+
+.food-art--coffee { --art: 181 120 72; }
+.food-art--tea { --art: 196 132 60; }
+.food-art--cold { --art: 86 146 158; }
+.food-art--juice { --art: 226 138 58; }
+.food-art--soda { --art: 196 66 60; }
+.food-art--water { --art: 74 142 200; }
+
+/* Under the name on Add and Edit Food: the picture it will get. */
+.food-guess {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: -4px 0 18px;
+    padding: 10px 12px;
+    border: 1px dashed var(--espresso-700);
+    border-radius: var(--radius-md, 12px);
+    background: var(--espresso-900);
+}
+.food-guess[hidden] { display: none; }
+.food-guess__art { width: 52px; height: 52px; flex: 0 0 auto; border-radius: 12px; }
+.food-guess__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.food-guess__tag { color: var(--cream); font-weight: 800; }
+.food-guess__text small { color: var(--cream-faint); font-size: 12.5px; }
+.food-guess__diet { color: var(--copper-light) !important; font-weight: 600; }
+.food-guess__diet[hidden] { display: none; }
+.food-art--shake { --art: 204 118 140; }
+.food-art--croissant { --art: 212 158 78; }
+.food-art--bread { --art: 194 144 88; }
+.food-art--cake { --art: 190 98 112; }
+.food-art--muffin { --art: 142 108 168; }
+.food-art--cookie { --art: 178 128 78; }
+.food-art--donut { --art: 212 108 138; }
+.food-art--icecream { --art: 224 146 168; }
+.food-art--burger { --art: 204 108 58; }
+.food-art--sandwich { --art: 198 158 80; }
+.food-art--pizza { --art: 212 88 60; }
+.food-art--fries { --art: 222 166 56; }
+.food-art--wrap { --art: 168 138 80; }
+.food-art--noodles { --art: 212 148 58; }
+.food-art--pasta { --art: 218 166 78; }
+.food-art--rice { --art: 204 148 68; }
+.food-art--curry { --art: 212 118 48; }
+.food-art--salad { --art: 108 158 88; }
+.food-art--soup { --art: 208 118 68; }
+.food-art--egg { --art: 222 176 58; }
+.food-art--chicken { --art: 194 108 60; }
+.food-art--fish { --art: 88 138 168; }
+.food-art--snack { --art: 210 148 58; }
+.food-art--dosa { --art: 198 148 78; }
+.food-art--pancake { --art: 194 138 78; }
+.food-art--dish { --art: 150 120 100; }
+
+/* ---- Ratings: stars, and a bar per dish (Reviews and the dashboard) ---- */
+.rate-bars { margin: 0; padding: 0; list-style: none; }
+
+.rate-bar {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1.2fr) minmax(0, 1.4fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 2px;
+    border-bottom: 1px solid var(--espresso-800);
+}
+
+.rate-bars li:last-child { border-bottom: 0; }
+
+.rate-bar .food-art { width: 36px; height: 36px; border-radius: 10px; }
+.rate-bar__name { color: var(--cream); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rate-bar__name small { display: block; color: var(--cream-faint); font-weight: 500; font-size: 12px; }
+
+.rate-bar__track {
+    height: 10px;
+    border-radius: 999px;
+    background: var(--espresso-800);
+    overflow: hidden;
+}
+
+.rate-bar__track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--sage);
+}
+
+.rate-bar--mid .rate-bar__track span { background: var(--gold); }
+.rate-bar--low .rate-bar__track span { background: var(--berry); }
+
+.rate-bar__score {
+    min-width: 38px;
+    text-align: right;
+    font-weight: 800;
+    color: var(--cream);
+    font-variant-numeric: tabular-nums;
+}
+
+.stars { display: inline-flex; gap: 2px; color: var(--gold); font-size: 13px; }
+.stars--none { color: var(--cream-faint); font-size: 12px; }
+
+@media (max-width: 560px) {
+    .rate-bar { grid-template-columns: 32px minmax(0, 1fr) auto; }
+    .rate-bar__track { grid-column: 2 / -1; grid-row: 2; }
+}
+
+.rate-bars__gap { padding: 2px 0; text-align: center; color: var(--cream-faint); letter-spacing: .3em; }
+
+/* ---- The dashboard's dish-ratings chart ---- */
+.dish-chart { margin-bottom: 20px; }
+
+.dish-chart__tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+}
+
+.dish-chart__key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12.5px;
+    color: var(--cream-faint);
+}
+
+.dish-chart__key li { display: inline-flex; align-items: center; gap: 6px; }
+
+.dish-chart__swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    background: var(--sage);
+}
+
+.dish-chart__swatch--mid { background: var(--gold); }
+.dish-chart__swatch--low { background: var(--berry); }
+
+.dish-chart__body {
+    display: grid;
+    grid-template-columns: minmax(0, 2.2fr) minmax(240px, 1fr);
+    gap: 22px;
+    align-items: start;
+}
+
+.dish-chart__plot { margin: 0; min-width: 0; }
+
+.dish-chart__rows { margin: 0; padding: 0; list-style: none; }
+
+.dish-chart__row,
+.dish-chart__axis {
+    display: grid;
+    grid-template-columns: minmax(120px, 34%) minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: 14px;
+}
+
+.dish-chart__row { padding: 7px 0; }
+
+.dish-chart__dish {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.dish-chart__dish .food-art { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 10px; }
+
+.dish-chart__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--cream);
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.dish-chart__name small { display: block; color: var(--cream-faint); font-weight: 500; font-size: 12px; }
+
+/* The plot area: a gridline at every star, so a bar reads against the
+   scale and not just against its neighbours. */
+.dish-chart__track {
+    position: relative;
+    height: 22px;
+    border-left: 1px solid var(--espresso-700);
+    border-right: 1px dashed var(--espresso-800);
+    background-image: linear-gradient(to right, var(--espresso-800) 1px, transparent 1px);
+    background-size: 20% 100%;
+}
+
+.dish-chart__track span {
+    position: absolute;
+    inset: 3px auto 3px 0;
+    border-radius: 0 7px 7px 0;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--sage) 55%, transparent), var(--sage));
+    min-width: 4px;
+}
+
+.dish-chart__row.is-mid .dish-chart__track span { background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 50%, transparent), var(--gold)); }
+.dish-chart__row.is-low .dish-chart__track span { background: linear-gradient(90deg, color-mix(in srgb, var(--berry) 50%, transparent), var(--berry)); }
+
+.dish-chart__score {
+    text-align: right;
+    color: var(--cream);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.dish-chart__row.is-low .dish-chart__score { color: var(--berry); }
+
+.dish-chart__axis { padding-top: 4px; }
+
+.dish-chart__ticks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--cream-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.dish-chart__ticks span { width: 0; display: flex; justify-content: center; white-space: nowrap; }
+
+.dish-chart__gap {
+    padding: 4px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--cream-faint);
+}
+
+.dish-chart__calls { display: grid; gap: 12px; }
+
+.dish-call {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--espresso-800);
+    border-left: 4px solid var(--sage);
+    border-radius: 14px;
+    background: var(--espresso-900);
+}
+
+.dish-call--worst { border-left-color: var(--berry); }
+.dish-call--worst.is-fine { border-left-color: var(--gold); }
+
+.dish-call__label {
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--cream-faint);
+}
+
+.dish-call__dish { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dish-call__dish .food-art { width: 40px; height: 40px; flex: 0 0 auto; border-radius: 12px; }
+.dish-call__dish b { color: var(--cream); font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dish-call__score { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--cream); font-weight: 800; }
+.dish-call__score small { color: var(--cream-faint); font-weight: 500; }
+
+.dish-call__note { margin: 0; font-size: 12.5px; color: var(--cream-faint); }
+
+@media (max-width: 900px) {
+    .dish-chart__body { grid-template-columns: minmax(0, 1fr); }
+    .dish-chart__calls { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+}
+
+@media (max-width: 560px) {
+    .dish-chart__row,
+    .dish-chart__axis { grid-template-columns: minmax(0, 1fr) 40px; gap: 6px 10px; }
+    .dish-chart__dish { grid-column: 1 / -1; }
+    .dish-chart__axis > span:first-child { display: none; }
+}
+
+.mini-reviews { margin: 0; padding: 0; list-style: none; }
+
+.mini-reviews li {
+    padding: 12px 2px;
+    border-bottom: 1px solid var(--espresso-800);
+}
+
+.mini-reviews li:last-child { border-bottom: 0; }
+
+.mini-reviews__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--cream);
+}
+
+.mini-reviews__head b { min-width: 0; }
+
+.mini-reviews__head b small {
+    color: var(--cream-faint);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.mini-reviews p {
+    margin: 6px 0 0;
+    font-size: 13.5px;
+    color: var(--cream-dim);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.mini-reviews__dishes { color: var(--cream-faint) !important; }

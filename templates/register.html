@@ -32,6 +32,7 @@
        held up the first paint by a whole round trip. */
 {{ password_view_css }}</style>
     <script src="{{ asset_url('js/password-view.js') }}" defer></script>
+    <script src="{{ asset_url('js/account-fields.js') }}" defer></script>
     {# The app's own stylesheet and scripts, fetched while someone is
        typing their password or a one-time code. None of them are loaded
        by this screen, so without this they are all fetched fresh the
@@ -118,7 +119,8 @@
                     <input type="text" id="username" name="username"
                            placeholder="Choose a username"
                            autocomplete="username" maxlength="80"
-                           autocapitalize="none" spellcheck="false" required>
+                           autocapitalize="none" spellcheck="false" required
+                           data-username-check>
                 </div>
             </div>
 
@@ -145,7 +147,8 @@
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password"
                            placeholder="At least 8 characters"
-                           autocomplete="new-password" minlength="8" required>
+                           autocomplete="new-password" minlength="8" required
+                           data-strength>
                 </div>
 
                 <div class="field">

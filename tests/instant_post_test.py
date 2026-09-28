@@ -237,6 +237,7 @@ try:
         form.querySelector('[name=minimum_stock]').value = '5';
         var pick = form.querySelector('select[name=category_id]');
         if (pick && pick.options.length > 1) pick.selectedIndex = 1;
+        form.querySelector('[name=diet][value=veg]').checked = true;
     """)
     wait_for("location.pathname === '/foods'", "Food Management")
     time.sleep(0.4)

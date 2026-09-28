@@ -33,6 +33,9 @@
         <p class="kot__label">Kitchen Order Ticket</p>
         {# The number called across the pass, not the database key. #}
         <p class="kot__order">#{{ order.daily_no or order.order_id }}</p>
+        {# Takeaway and delivery are packed, so the kitchen needs to know
+           before it plates anything. #}
+        <p class="kot__type{% if order.order_type in ('takeaway', 'delivery') %} kot__type--packed{% endif %}">{{ order.type_label }}</p>
         <p class="kot__time">{{ order.order_date|local_time }}</p>
     </header>
 

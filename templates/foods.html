@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% import "_table_search.html" as search %}
+{% from "_diet.html" import diet_mark %}
+{% from "_food_art.html" import food_art %}
 
 {% block title %}Food Management{% endblock %}
 
@@ -74,13 +76,12 @@
                         <td>{{ food.food_no }}</td>
                         <td>
                             {% if food.image_path %}
-                                <img src="{{ food.image_path }}" alt="{{ food.food_name }}" class="food-thumb">
+                                <img src="{{ food.image_path }}" alt="{{ food.food_name }}" class="food-thumb" loading="lazy" decoding="async">
                             {% else %}
-                                <span class="food-thumb food-thumb--none" title="No photo yet"
-                                      aria-label="No photo yet"><i class="bi bi-image" aria-hidden="true"></i></span>
+                                {{ food_art(food_kind(food.food_name, food.category_name, food.description), "food-thumb") }}
                             {% endif %}
                         </td>
-                        <td class="cell-strong">{{ food.food_name }}</td>
+                        <td class="cell-strong">{{ diet_mark(food.diet) }}{{ food.food_name }}</td>
                         <td>{{ food.category_name }}</td>
                         <td class="cell-muted">{{ food.description }}</td>
                         <td>₹{{ food.price }}</td>

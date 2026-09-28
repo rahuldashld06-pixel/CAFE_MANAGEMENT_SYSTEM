@@ -885,3 +885,218 @@ body {
 @media (prefers-reduced-motion: reduce) {
     .p-hold__bar span { transition: none; }
 }
+
+/* ---- Veg or non-veg ----
+   The mark India's menus print: a green square with a dot, or a
+   brown-red square with a triangle. On a small white tile, so it reads
+   the same on every theme and every background. */
+.diet-mark {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    border: 1.6px solid currentColor;
+    border-radius: 3px;
+    background: #fff;
+    vertical-align: -2px;
+}
+
+.diet-mark::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    background: currentColor;
+}
+
+.diet-mark--veg { color: #138a3e; }
+
+.diet-mark--veg::after {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+}
+
+.diet-mark--nonveg { color: #a3321f; }
+
+.diet-mark--nonveg::after {
+    width: 8px;
+    height: 7px;
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.p-item__name .diet-mark { margin-right: 7px; }
+
+/* Veg or non-veg, beside the search. */
+.p-diet {
+    display: flex;
+    gap: 8px;
+    margin: -4px 0 14px;
+}
+
+.p-diet button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 13px;
+    border: 1px solid var(--p-line);
+    border-radius: 999px;
+    background: var(--p-card);
+    color: var(--p-dim);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.p-diet button[aria-pressed="true"] {
+    border-color: var(--copper-light, #EED6B6);
+    color: var(--p-text);
+}
+
+/* ---- A picture for every dish ----
+   A drawing of what the dish is, on a tile in a colour that suits it: warm
+   browns for coffee, a leafy green for a salad, tomato for a pizza. The
+   drawing is the same cream on every tile, so a menu of them reads as one
+   set rather than thirty. */
+/* The tile's colour, at the weight of the rules below that change it. */
+.food-art { --art: 150 120 100; }
+
+span.food-art,
+div.food-art {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background:
+        radial-gradient(120% 95% at 28% 18%, rgb(var(--art) / .95) 0%,
+                        rgb(var(--art) / .62) 55%, rgb(var(--art) / .42) 100%),
+        #2A1C14;
+    color: #FFF7EC;
+}
+
+.food-art svg {
+    width: 58%;
+    height: 58%;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .28));
+}
+
+.food-art--coffee { --art: 181 120 72; }
+.food-art--tea { --art: 196 132 60; }
+.food-art--cold { --art: 86 146 158; }
+.food-art--juice { --art: 226 138 58; }
+.food-art--soda { --art: 196 66 60; }
+.food-art--water { --art: 74 142 200; }
+.food-art--shake { --art: 204 118 140; }
+.food-art--croissant { --art: 212 158 78; }
+.food-art--bread { --art: 194 144 88; }
+.food-art--cake { --art: 190 98 112; }
+.food-art--muffin { --art: 142 108 168; }
+.food-art--cookie { --art: 178 128 78; }
+.food-art--donut { --art: 212 108 138; }
+.food-art--icecream { --art: 224 146 168; }
+.food-art--burger { --art: 204 108 58; }
+.food-art--sandwich { --art: 198 158 80; }
+.food-art--pizza { --art: 212 88 60; }
+.food-art--fries { --art: 222 166 56; }
+.food-art--wrap { --art: 168 138 80; }
+.food-art--noodles { --art: 212 148 58; }
+.food-art--pasta { --art: 218 166 78; }
+.food-art--rice { --art: 204 148 68; }
+.food-art--curry { --art: 212 118 48; }
+.food-art--salad { --art: 108 158 88; }
+.food-art--soup { --art: 208 118 68; }
+.food-art--egg { --art: 222 176 58; }
+.food-art--chicken { --art: 194 108 60; }
+.food-art--fish { --art: 88 138 168; }
+.food-art--snack { --art: 210 148 58; }
+.food-art--dosa { --art: 198 148 78; }
+.food-art--pancake { --art: 194 138 78; }
+.food-art--dish { --art: 150 120 100; }
+
+/* The dish's picture beside it on the customer's menu. */
+.p-item__pic {
+    flex: 0 0 64px;
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+}
+
+@media (max-width: 380px) {
+    .p-item__pic { flex-basis: 54px; width: 54px; height: 54px; }
+}
+
+/* ---- Rating a finished order ---- */
+.p-review {
+    margin: 22px 0 8px;
+    padding: 18px 16px;
+    border: 1px solid var(--p-line);
+    border-radius: 18px;
+    background: var(--p-card);
+}
+
+.p-review[hidden] { display: none; }
+
+.p-review__title {
+    margin: 0 0 4px;
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 21px;
+    color: var(--p-text);
+}
+
+.p-review__lead { margin: 0 0 14px; font-size: 13.5px; color: var(--p-dim); }
+
+.p-rate {
+    padding: 12px 0;
+    border-top: 1px solid var(--p-line);
+}
+
+.p-rate__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.p-rate__name { font-weight: 700; color: var(--p-text); }
+
+.p-stars { display: inline-flex; gap: 2px; }
+
+.p-stars button {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--p-line);
+    cursor: pointer;
+}
+
+.p-stars svg { width: 26px; height: 26px; fill: currentColor; }
+.p-stars button.is-on { color: #F2C94C; }
+
+.p-rate__note {
+    width: 100%;
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--p-line);
+    border-radius: 12px;
+    background: var(--p-bg);
+    color: var(--p-text);
+    font: inherit;
+    font-size: 14px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.p-rate--visit .p-rate__name { font-family: "Fraunces", Georgia, serif; font-size: 16px; }
+
+.p-review__said { min-height: 18px; margin: 10px 0 8px; font-size: 13.5px; color: var(--p-dim); }
+.p-review__said[data-ok="1"] { color: #8FBB99; }
+.p-review__said[data-ok="0"] { color: #E1614F; }
+
+.p-review__send { width: 100%; }

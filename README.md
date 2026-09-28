@@ -45,6 +45,45 @@ branding, fully isolated from the others.
   line per dish with its own - and +, Clear all, the totals, and a
   button that says what it will charge. On a phone or tablet it is the
   sheet behind the Order Summary button, as before.
+- **Dine-in, takeaway or delivery.** New Order says which it is, at the
+  top of the receipt. Takeaway and delivery carry a container charge the
+  owner sets under Profile -> Packing Charges - one for each, each either
+  once per order or once per item. It is its own line on the bill, added
+  after the discount and the tax, and the kind of order is on the bill,
+  the kitchen ticket (marked to be packed) and the kitchen screen.
+  Dine-in never carries it, nor does an order from the table QR.
+- **Veg or non-veg.** Chosen on Add and Edit Food and marked beside the
+  dish the way India's menus print it - a green square with a dot, a
+  brown-red one with a triangle - at the counter, in Food Management and
+  on the customer's menu, which can be narrowed to either. A dish nobody
+  has marked shows no mark rather than a guess.
+- **A picture for every dish.** A dish without a photo gets a drawing of
+  what it is, on a tile in its own colour: a latte a cup, a dosa a dosa,
+  a Coca-Cola a can, a Bisleri a bottle - thirty-two of them, read from
+  the name (then the category, then the description), with a tag that
+  says what each is. "Cold Coke" is still a can; an iced latte is a cold
+  glass. Add and Edit Food show the picture as the name is typed, and
+  tick Veg or Non-veg from the name - chicken, egg, fish; paneer, a soft
+  drink - until somebody chooses.
+- **New Order on a phone reads like a delivery app.** The order is a bar
+  across the bottom; a Menu button above it at the right opens a card of
+  the menu's sections. All is the categories only - Hot selling has its
+  own tab rather than repeating its dishes at the top.
+- **Reviews from the table.** Once a table-QR order is ready, the
+  customer's phone asks for stars on each dish and on the visit, a
+  comment, and their name (kept on the phone for next time). Sending
+  again changes the review rather than adding one. The dashboard charts
+  every rated dish on the same five-star scale, best at the top, with
+  the best and the lowest named; the Reviews page - open to everyone who
+  serves customers - has the averages, how the stars fall, and each
+  review with who wrote it and the bill it was on.
+- **Help while an account is set up.** Register and Add User say "That
+  username is already taken" as it is typed, and offer free ones near
+  it. Every field where a password is chosen reads it as Weak, Medium or
+  Strong, and says what would make it harder to guess.
+- **Search remembers.** The search page lists what this person looked
+  for lately, each with a delete and a Clear all, has an x to empty the
+  box, and a Back link.
 - **A header across the top, a guide down the side.** The header runs
   the full width of every page, the way YouTube's does: the menu button
   and the café's name at the left, search in the middle, and New order,
@@ -207,7 +246,9 @@ branding, fully isolated from the others.
   also keeps the name or email that was typed, so the sign-in page has
   it filled in from then on; the password is left to the browser's own
   password manager, because a site that wrote it down would hand it to
-  anybody holding the device.
+  anybody holding the device. The sign-in page asks that manager for the
+  saved password as the name is typed, and offers it the new one to
+  save when the box is ticked.
 - **Nothing typed is lost.** Every form keeps a copy of what has been
   typed into it on the device, written as it changes. If the page goes
   before it is saved - the browser closed, the power went, the site fell
@@ -317,6 +358,13 @@ this can be checked rather than guessed at.
 
 The largest single improvement available is to host the database in the
 same region as the app.
+
+On a phone the other half was bytes. Pages, the stylesheet and the
+scripts now go out gzipped to any browser that takes it (about a fifth
+of the size; files are compressed once per version and kept), the web
+fonts load without holding up the first paint, dish photos load as they
+come into view, and a touch screen skips the hover effects. Measured on
+a throttled phone, the first paint came about 2.3 times sooner.
 
 The free hosting tier also stops the service when idle, so the first
 visitor pays start-up plus a fresh connection. Two things guard against
@@ -434,7 +482,11 @@ cookie of its own, set only by signing in and removed only by Log out; a
 session whose id the browser no longer holds is dropped.
 
 **Doing things.** Every POST, PUT, PATCH and DELETE carries a CSRF
-token, compared in constant time. Every query is scoped to the café's
+token, compared in constant time. Pages are gzipped, and some repeat
+what was typed, so the token on each page is masked with fresh random
+bytes (the BREACH defence): the same secret underneath, different bytes
+every time the page is drawn. An amount typed as `nan` is refused as
+not a number rather than crashing the save. Every query is scoped to the café's
 owner, so one tenant cannot read or write another's rows by guessing an
 id. Staff are held to an endpoint allowlist. `?next=` is checked before
 any redirect follows it.
@@ -575,7 +627,7 @@ python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
 python tests/instant_post_test.py # expect PASSED: 16   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
-python tests/hot_mirror_test.py   # expect PASSED: 16   FAILED: 0
+python tests/hot_mirror_test.py   # expect PASSED: 20   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 104  FAILED: 0
 python tests/tablet_layout_test.py # expect PASSED: 65   FAILED: 0
 python tests/stock_alert_test.py  # expect PASSED: 33   FAILED: 0
@@ -585,7 +637,7 @@ python tests/billing_paid_test.py # expect PASSED: 44   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 31   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
-python tests/mobile_nav_test.py   # expect PASSED: 89   FAILED: 0
+python tests/mobile_nav_test.py   # expect PASSED: 94   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
@@ -610,10 +662,16 @@ python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
 python tests/dashboard_feed_test.py # expect PASSED: 43  FAILED: 0
 python tests/reports_test.py      # expect PASSED: 39   FAILED: 0
 python tests/shell_browser_test.py # expect PASSED: 58  FAILED: 0
+python tests/order_type_test.py   # expect PASSED: 43   FAILED: 0
+python tests/review_test.py       # expect PASSED: 46   FAILED: 0
+python tests/menu_marks_test.py   # expect PASSED: 96   FAILED: 0
+python tests/compression_test.py  # expect PASSED: 32   FAILED: 0
+python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
+python tests/account_fields_browser_test.py # expect PASSED: 26  FAILED: 0
 ```
 
-All forty-one run in memory against a SQLite stand-in — no database or
-network needed. The twenty that drive a browser use a headless Edge or
+All forty-seven run in memory against a SQLite stand-in — no database or
+network needed. The twenty-one that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
 Each browser suite binds its own fixed port. A run that is killed part

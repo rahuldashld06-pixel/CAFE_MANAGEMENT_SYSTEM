@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "_diet.html" import diet_mark %}
+{% from "_food_art.html" import food_art %}
 
 {% block title %}New Order{% endblock %}
 
@@ -908,9 +910,9 @@
                          data-search="{{ (food.food_name ~ " " ~ category_label)|lower }}">
 
                     {% if food.image_path %}
-                        <img src="{{ food.image_path }}" alt="{{ food.food_name }}" class="food-card-image">
+                        <img src="{{ food.image_path }}" alt="{{ food.food_name }}" class="food-card-image" loading="lazy" decoding="async">
                     {% else %}
-                        <div class="food-card-placeholder"><i class="bi bi-egg-fried"></i></div>
+                        {{ food_art(food_kind(food.food_name, category_label), "food-card-placeholder", "div") }}
                     {% endif %}
 
                     <div class="food-status" id="food_status_{{ uid }}">Stock: {{ food.quantity }}</div>
@@ -925,7 +927,7 @@
                        by, the way the customer's own menu has it; what the
                        dish is and how many are left read above them. #}
                     <div class="food-card-body">
-                        <div class="food-card-name">{{ food.food_name }}</div>
+                        <div class="food-card-name">{{ diet_mark(food.diet) }}{{ food.food_name }}</div>
                         <div class="food-card-meta">
                             <span class="food-card-category">{{ food.category_name or "Other" }}</span>
                             <span class="food-card-stock" id="food_stock_note_{{ uid }}">Max {{ food.quantity }}</span>
@@ -957,13 +959,17 @@
         {% if food_groups or hot_foods %}
         <form method="POST" id="orderForm">
 
+            {# Dine-in, takeaway or delivery - chosen at the top of the
+               order, carried here so it goes with the basket. #}
+            <input type="hidden" name="order_type" id="orderTypeField" value="dine_in">
+
             {# What the till reaches for most, lifted out of its category so
                it is the first thing on screen. Each item appears once: the
                card carries the quantity input, and two copies of the same
                food would mean two elements sharing one input id and name. #}
             {% if hot_foods %}
             <section class="food-group food-group--hot" data-category="hot selling popular best"
-                     data-tab="hot">
+                     data-tab="hot" hidden>
 
                 <h3 class="food-group__title">
                     <i class="bi bi-fire food-group__flame"></i>
@@ -1051,6 +1057,18 @@
 
         </div>
 
+        <div class="order-type" id="orderType" role="radiogroup" aria-label="Order type">
+            {% for key, label in order_types %}
+            <button type="button" role="radio"
+                    class="order-type__choice{% if key == 'dine_in' %} is-on{% endif %}"
+                    data-order-type="{{ key }}"
+                    aria-checked="{{ 'true' if key == 'dine_in' else 'false' }}">
+                <i class="bi {{ {'dine_in': 'bi-cup-hot', 'takeaway': 'bi-bag', 'delivery': 'bi-scooter'}[key] }}" aria-hidden="true"></i>
+                {{ label }}
+            </button>
+            {% endfor %}
+        </div>
+
         <div
             class="order-summary-status"
             id="orderSummaryStatus"
@@ -1103,6 +1121,13 @@
                 <div class="order-summary-row">
                     <span>Tax ({{ tax_percent | trim_zeros }}%)</span>
                     <strong>₹<span id="popupTax">0.00</span></strong>
+                </div>
+
+                {# A takeaway or delivery container, when the cafe charges
+                    for one: its own line, after the tax. #}
+                <div class="order-summary-row" id="packingRow" hidden>
+                    <span id="packingLabel">Packing</span>
+                    <strong>₹<span id="popupPacking">0.00</span></strong>
                 </div>
 
                 <div class="order-summary-row order-summary-row--total">
@@ -1189,7 +1214,12 @@
 
         groups.forEach(function (group) {
             // The chosen tab first: anything outside it is simply hidden.
-            var inTab = tab === "all" || group.getAttribute("data-tab") === tab;
+            // All is every category and nothing else - the Hot selling
+            // shelf repeats dishes that are already in their categories,
+            // so it has its own tab rather than a place in All.
+            var inTab = tab === "all"
+                ? group.getAttribute("data-tab") !== "hot"
+                : group.getAttribute("data-tab") === tab;
 
             // Typing a category name keeps that whole section, so "coffee"
             // shows the section even for items that are not named "coffee".
@@ -1292,13 +1322,332 @@
 
     <span class="order-summary-badge" id="selectedItemCount">0</span>
 
-    <span>🛒 Order Summary</span>
+    <span class="order-summary-trigger__text">
+        <span class="order-summary-trigger__label">Your order</span>
+        <span class="summary-total">₹<span id="floatingTotal">0.00</span></span>
+    </span>
 
-    <span class="summary-total">
-        ₹<span id="floatingTotal">0.00</span>
+    <span class="order-summary-trigger__go">
+        View order <i class="bi bi-chevron-right" aria-hidden="true"></i>
     </span>
 
 </button>
+
+{# The menu's sections, a thumb away: a small button in the corner that
+   opens a card of them, the way Zomato's Menu button does. Filled from
+   the section tabs, so its names and counts are always theirs. #}
+{% if food_groups or hot_foods %}
+<button type="button" class="menu-jump" id="menuJump"
+        aria-haspopup="true" aria-expanded="false" aria-controls="menuJumpCard">
+    <i class="bi bi-journal-text" aria-hidden="true"></i> Menu
+</button>
+<div class="menu-jump__shade" id="menuJumpShade" hidden></div>
+<div class="menu-jump__card" id="menuJumpCard" role="menu"
+     aria-label="Jump to a section" hidden></div>
+{% endif %}
+
+<script>
+// Dine-in, takeaway or delivery. The choice is a hidden field in the
+// order form; the three buttons set it, and the totals follow.
+function setOrderType(kind) {
+    var field = document.getElementById("orderTypeField");
+    if (!field) return;
+    field.value = kind;
+    [].forEach.call(document.querySelectorAll("[data-order-type]"), function (button) {
+        var on = button.getAttribute("data-order-type") === kind;
+        button.classList.toggle("is-on", on);
+        button.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    // The totals recalculate on any quantity field's input event; one is
+    // enough to bring the packing line and the total up to date.
+    var any = document.querySelector("#orderForm .quantity-input");
+    if (any) any.dispatchEvent(new Event("input", {bubbles: true}));
+}
+
+(function () {
+    var group = document.getElementById("orderType");
+    if (!group) return;
+    group.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-order-type]");
+        if (button) setOrderType(button.getAttribute("data-order-type"));
+    });
+    // A basket brought back after a closed browser brings its type too.
+    var field = document.getElementById("orderTypeField");
+    if (field && field.value !== "dine_in") setOrderType(field.value);
+}());
+</script>
+
+<style>
+.order-type {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 12px 16px 4px;
+    padding: 4px;
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-md);
+    background: var(--espresso-950);
+}
+
+.order-type__choice {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 38px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 9px;
+    background: none;
+    color: var(--cream-faint);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.order-type__choice:hover { color: var(--cream); }
+
+.order-type__choice.is-on {
+    background: linear-gradient(135deg, var(--copper-light), var(--copper-dark));
+    color: var(--espresso-950);
+}
+
+/* ============================================================
+   A phone or tablet: the order along the bottom, the menu in the
+   corner
+
+   The order bar spans the bottom middle, cream on the page's brown so
+   it is the one thing that reads as "go". It stays when the order is
+   empty: after an order goes, it is the way back to that order's
+   kitchen ticket. The Menu button sits above it at the right.
+   ============================================================ */
+.menu-jump,
+.menu-jump__shade,
+.menu-jump__card { display: none; }
+
+@media (max-width: 1024px),
+       (max-width: 1400px) and (pointer: coarse) {
+
+    /* Room under the last row of dishes for the bar. */
+    .order-layout { padding-bottom: 96px; }
+
+    #menuTabs { scroll-margin-top: calc(var(--topbar-h, 64px) + 10px); }
+
+    .order-summary-trigger {
+        left: 50%;
+        right: auto;
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        width: min(560px, calc(100% - 24px));
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 16px 11px 12px;
+        border: 0;
+        border-radius: 16px;
+        background: linear-gradient(135deg, var(--copper-light) 0%, var(--copper-dark) 100%);
+        color: var(--espresso-950);
+        box-shadow: 0 14px 34px -12px rgba(0, 0, 0, .75);
+    }
+
+    .order-summary-trigger .order-summary-badge {
+        background: var(--espresso-950);
+        color: var(--cream);
+    }
+
+    .order-summary-trigger__text {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        margin-right: auto;
+        line-height: 1.15;
+    }
+
+    .order-summary-trigger__label {
+        font-size: 12px;
+        font-weight: 700;
+        opacity: .75;
+    }
+
+    .order-summary-trigger .summary-total {
+        font-size: 17px;
+        font-weight: 800;
+    }
+
+    .order-summary-trigger__go {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 14px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .menu-jump {
+        position: fixed;
+        right: 16px;
+        bottom: calc(86px + env(safe-area-inset-bottom));
+        z-index: 1052;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 17px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 999px;
+        background: var(--espresso-950);
+        color: var(--cream);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 800;
+        box-shadow: 0 12px 28px -10px rgba(0, 0, 0, .85);
+        cursor: pointer;
+    }
+
+    .menu-jump[aria-expanded="true"] {
+        border-color: var(--copper);
+        color: var(--copper-light);
+    }
+
+    .menu-jump__shade {
+        position: fixed;
+        inset: 0;
+        z-index: 1051;
+        display: block;
+        background: rgba(0, 0, 0, .5);
+    }
+
+    .menu-jump__card {
+        position: fixed;
+        right: 16px;
+        bottom: calc(140px + env(safe-area-inset-bottom));
+        z-index: 1053;
+        display: block;
+        width: min(300px, calc(100% - 32px));
+        max-height: 56vh;
+        overflow-y: auto;
+        padding: 8px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 16px;
+        background: var(--espresso-900);
+        box-shadow: 0 24px 50px -16px rgba(0, 0, 0, .9);
+        transform-origin: bottom right;
+        animation: menu-jump-in .16s ease-out;
+    }
+
+    .menu-jump__shade[hidden],
+    .menu-jump__card[hidden] { display: none; }
+
+    .menu-jump__card button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        padding: 12px 14px;
+        border: 0;
+        border-radius: 10px;
+        background: none;
+        color: var(--cream);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .menu-jump__card button:hover,
+    .menu-jump__card button:focus-visible { background: var(--espresso-850); }
+
+    .menu-jump__card button.is-on { color: var(--copper-light); font-weight: 800; }
+
+    .menu-jump__card button span {
+        color: var(--cream-faint);
+        font-size: 13px;
+        font-weight: 700;
+    }
+}
+
+@keyframes menu-jump-in {
+    from { opacity: 0; transform: scale(.94) translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+</style>
+
+<script>
+(function () {
+    var button = document.getElementById("menuJump");
+    var card = document.getElementById("menuJumpCard");
+    var shade = document.getElementById("menuJumpShade");
+    var tabs = document.getElementById("menuTabs");
+    if (!button || !card || !tabs) return;
+
+    function setOpen(open) {
+        card.hidden = !open;
+        shade.hidden = !open;
+        button.setAttribute("aria-expanded", open ? "true" : "false");
+        button.innerHTML = open
+            ? '<i class="bi bi-x-lg" aria-hidden="true"></i> Close'
+            : '<i class="bi bi-journal-text" aria-hidden="true"></i> Menu';
+    }
+
+    // The card lists the section tabs as they are right now, so the one
+    // on screen is marked and every count is the tab's own.
+    function fill() {
+        card.innerHTML = "";
+        [].forEach.call(tabs.querySelectorAll(".menu-tab"), function (tab) {
+            var count = tab.querySelector("span");
+            var name = "";
+            [].forEach.call(tab.childNodes, function (node) {
+                if (node !== count) name += node.textContent;
+            });
+            name = name.replace(/\s+/g, " ").trim();
+            var item = document.createElement("button");
+            item.type = "button";
+            item.setAttribute("role", "menuitem");
+            item.setAttribute("data-tab", tab.getAttribute("data-tab"));
+            if (tab.classList.contains("is-on")) item.className = "is-on";
+            item.textContent = name;
+            if (count) {
+                var tally = document.createElement("span");
+                tally.textContent = count.textContent.trim();
+                item.appendChild(tally);
+            }
+            card.appendChild(item);
+        });
+    }
+
+    button.addEventListener("click", function () {
+        var opening = card.hidden;
+        if (opening) fill();
+        setOpen(opening);
+        if (opening) {
+            var first = card.querySelector("button.is-on") || card.querySelector("button");
+            if (first) first.focus();
+        }
+    });
+
+    shade.addEventListener("click", function () { setOpen(false); });
+
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && !card.hidden) {
+            setOpen(false);
+            button.focus();
+        }
+    });
+
+    card.addEventListener("click", function (event) {
+        var item = event.target.closest("[data-tab]");
+        if (!item) return;
+        var tab = tabs.querySelector('.menu-tab[data-tab="' + item.getAttribute("data-tab") + '"]');
+        setOpen(false);
+        if (tab) {
+            tab.click();
+            tabs.scrollIntoView({block: "start", behavior: "smooth"});
+        }
+    });
+}());
+</script>
 
 
 <script>
@@ -1307,6 +1656,20 @@
 // in, and a repeated const would throw on the second visit.
 var TAX_RATE = {{ tax_rate }};
 var DISCOUNT_RATE = {{ discount_rate }};
+// What a takeaway and a delivery container cost here, and whether per
+// order or per item. Dine-in has none.
+var PACKING = {{ packing_js|tojson }};
+
+function currentOrderType() {
+    var field = document.getElementById("orderTypeField");
+    return field ? field.value : "dine_in";
+}
+
+function packingFor(itemCount) {
+    var rule = PACKING[currentOrderType()];
+    if (!rule || !rule.amount || !itemCount) return 0;
+    return rule.mode === "item" ? rule.amount * itemCount : rule.amount;
+}
 
 // A best seller appears twice: on the Hot Selling shelf and under its own
 // category. Only the card under the category carries the form field, so
@@ -1445,7 +1808,24 @@ document.addEventListener('draft:restored', syncHotMirrors);
         // is the number that gets charged.
         const discount = subtotal * DISCOUNT_RATE;
         const tax = (subtotal - discount) * TAX_RATE;
-        const total = subtotal - discount + tax;
+        // The container goes on after the tax, as the server adds it.
+        const packing = packingFor(itemCount);
+        const total = subtotal - discount + tax + packing;
+
+        const packingRow = document.getElementById("packingRow");
+        if (packingRow) {
+            packingRow.hidden = packing <= 0;
+            const rule = PACKING[currentOrderType()] || {};
+            const label = document.getElementById("packingLabel");
+            if (label) {
+                label.textContent = "Packing (" +
+                    (currentOrderType() === "delivery" ? "delivery" : "takeaway") +
+                    (rule.mode === "item" ? ", ₹" + Number(rule.amount).toFixed(2) + " × " + itemCount : "") +
+                    ")";
+            }
+            const packingEl = document.getElementById("popupPacking");
+            if (packingEl) packingEl.textContent = packing.toFixed(2);
+        }
 
         const countEl = document.getElementById("selectedItemCount");
         const floatingTotalEl = document.getElementById("floatingTotal");
@@ -1918,6 +2298,7 @@ document.addEventListener('draft:restored', syncHotMirrors);
                    already been said or takes it back loudly. */
                 applyStockUpdates(optimisticStock(held));
                 resetAllQuantities();
+                setOrderType("dine_in");
                 updateFloatingOrderSummary();
                 hideStatus();
                 closeSummary();

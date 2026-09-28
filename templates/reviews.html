@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% from "_stars.html" import stars %}
+{% from "_food_art.html" import food_art %}
+
+{% block title %}Reviews{% endblock %}
+
+{% block content %}
+
+<style>
+    .review-kpis {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .spread { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+
+    .spread li {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr) 40px;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        color: var(--cream-dim);
+    }
+
+    .spread__bar {
+        height: 8px;
+        border-radius: 999px;
+        background: var(--espresso-800);
+        overflow: hidden;
+    }
+
+    .spread__bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--gold);
+    }
+
+    .spread li b { text-align: right; color: var(--cream); font-variant-numeric: tabular-nums; }
+
+    .review-filter { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .review-filter button {
+        padding: 7px 13px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 999px;
+        background: var(--espresso-900);
+        color: var(--cream-dim);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .review-filter button[aria-pressed="true"] {
+        border-color: var(--copper);
+        color: var(--cream);
+        background: rgba(var(--copper-rgb), .12);
+    }
+
+    .review-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+    .review-list li[hidden] { display: none; }
+
+    .review-card {
+        padding: 16px;
+        border: 1px solid var(--espresso-800);
+        border-radius: var(--radius-lg);
+        background: var(--espresso-850);
+    }
+
+    .review-card__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .review-card__head a { color: var(--cream); font-weight: 800; }
+
+    .review-card__who {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--copper-light);
+        font-weight: 800;
+        font-size: 15px;
+    }
+    .review-card__head small { color: var(--cream-faint); font-size: 12.5px; }
+
+    .review-card__say {
+        margin: 10px 0 0;
+        padding: 10px 12px;
+        border-left: 3px solid var(--copper);
+        border-radius: 0 10px 10px 0;
+        background: var(--espresso-900);
+        color: var(--cream);
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .review-dishes { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+
+    .review-dishes li {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 10px;
+        font-size: 13.5px;
+        color: var(--cream-dim);
+    }
+
+    .review-dishes li b { color: var(--cream); }
+    .review-dishes li em { flex-basis: 100%; color: var(--cream-faint); font-style: normal; font-size: 13px; }
+
+    @media (max-width: 900px) {
+        .review-kpis { grid-template-columns: minmax(0, 1fr); }
+    }
+
+</style>
+
+<div class="page-header dash-head">
+    <div>
+        <div class="eyebrow">Customers</div>
+        <h1>Reviews</h1>
+        <p class="page-subtitle">What customers ordering from the table QR say about the food, the staff and the caf&eacute;.</p>
+    </div>
+</div>
+
+<section class="review-kpis" aria-label="Summary">
+    <article class="kpi">
+        <div class="kpi__top">
+            <span class="kpi__label">Visits rated</span>
+            <span class="kpi__icon"><i class="bi bi-chat-heart"></i></span>
+        </div>
+        <div class="kpi__value">{{ summary.orders }}</div>
+        <div class="kpi__foot"><span class="kpi__none">Orders a customer reviewed</span></div>
+    </article>
+    <article class="kpi">
+        <div class="kpi__top">
+            <span class="kpi__label">The visit, on average</span>
+            <span class="kpi__icon"><i class="bi bi-star-fill"></i></span>
+        </div>
+        <div class="kpi__value">{{ summary.visit if summary.visit is not none else '–' }}<small style="font-size:15px;color:var(--cream-faint);font-family:var(--font-body);"> / 5</small></div>
+        <div class="kpi__foot">{{ stars(summary.visit) }}</div>
+    </article>
+    <article class="kpi">
+        <div class="kpi__top">
+            <span class="kpi__label">Dishes, on average</span>
+            <span class="kpi__icon"><i class="bi bi-egg-fried"></i></span>
+        </div>
+        <div class="kpi__value">{{ summary.dishes if summary.dishes is not none else '–' }}<small style="font-size:15px;color:var(--cream-faint);font-family:var(--font-body);"> / 5</small></div>
+        <div class="kpi__foot">{{ stars(summary.dishes) }}</div>
+    </article>
+</section>
+
+<div class="dash-row">
+
+    <section class="panel" aria-labelledby="dishRatingsTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="dishRatingsTitle">Dish ratings</h2>
+                <p>Highest first; the ones at the bottom are the ones to look at</p>
+            </div>
+        </div>
+        {% if dishes %}
+        <ul class="rate-bars">
+            {% for dish in dishes %}
+            <li class="rate-bar {{ 'rate-bar--low' if dish.average < 3 else ('rate-bar--mid' if dish.average < 4 else '') }}">
+                {{ food_art(dish.kind) }}
+                <span class="rate-bar__name">{{ dish.name }}<small>{{ dish.votes }} rating{{ 's' if dish.votes != 1 }}</small></span>
+                <span class="rate-bar__track"><span style="width: {{ (dish.average / 5 * 100)|round|int }}%"></span></span>
+                <span class="rate-bar__score">{{ dish.average }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="dash-empty">No dish has been rated yet. Customers rate their order from their phone once it is ready.</div>
+        {% endif %}
+    </section>
+
+    <section class="panel" aria-labelledby="spreadTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="spreadTitle">How the stars fall</h2>
+                <p>Every rating, dishes and visits together</p>
+            </div>
+        </div>
+        <ul class="spread">
+            {% for row in summary.spread %}
+            <li>
+                <span>{{ row.stars }} <i class="bi bi-star-fill" style="color:var(--gold)"></i></span>
+                <span class="spread__bar"><span style="width: {{ row.share }}%"></span></span>
+                <b>{{ row.count }}</b>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+
+</div>
+
+<section class="panel" aria-labelledby="saidTitle">
+    <div class="dash-panel__head">
+        <div>
+            <h2 id="saidTitle">What they said</h2>
+            <p>Newest first</p>
+        </div>
+        <div class="review-filter" role="group" aria-label="Show">
+            <button type="button" data-show="all" aria-pressed="true">All</button>
+            <button type="button" data-show="high" aria-pressed="false">4&ndash;5 stars</button>
+            <button type="button" data-show="low" aria-pressed="false">1&ndash;2 stars</button>
+            <button type="button" data-show="words" aria-pressed="false">With comments</button>
+        </div>
+    </div>
+
+    {% if listed %}
+    <ul class="review-list" id="reviewList">
+        {% for entry in listed %}
+        {% set worded = (entry.visit and entry.visit.comment) or (entry.dishes | selectattr('comment') | list) %}
+        <li data-score="{{ entry.score if entry.score is not none else '' }}" data-words="{{ 1 if worded else 0 }}">
+            <article class="review-card">
+                <div class="review-card__head">
+                    <span>
+                        <span class="review-card__who">{{ entry.name or "A customer" }}</span>
+                        <a href="{{ url_for('order_details', order_id=entry.order_id) }}">Order #{{ entry.number }}</a>
+                        {% if entry.bill_id %}<small>&middot; Bill #{{ entry.bill_id }}</small>{% endif %}
+                        <small>&middot; {{ entry.when|local_time }}</small>
+                    </span>
+                    {{ stars(entry.visit.rating if entry.visit and entry.visit.rating else entry.score) }}
+                </div>
+                {% if entry.visit and entry.visit.comment %}
+                <p class="review-card__say">{{ entry.visit.comment }}</p>
+                {% endif %}
+                {% if entry.dishes %}
+                <ul class="review-dishes">
+                    {% for dish in entry.dishes %}
+                    <li>
+                        <b>{{ dish.name }}</b> {{ stars(dish.rating) }}
+                        {% if dish.comment %}<em>&ldquo;{{ dish.comment }}&rdquo;</em>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </article>
+        </li>
+        {% endfor %}
+    </ul>
+    <div class="dash-empty" id="reviewNone" hidden>No reviews match.</div>
+    {% else %}
+    <div class="dash-empty">
+        No reviews yet. When a customer's table-QR order is ready, their phone
+        asks them to rate each dish and their visit - and it shows here.
+    </div>
+    {% endif %}
+</section>
+
+<script>
+(function () {
+    var list = document.getElementById("reviewList");
+    var none = document.getElementById("reviewNone");
+    var buttons = document.querySelectorAll(".review-filter [data-show]");
+    if (!list) return;
+    buttons.forEach(function (button) {
+        button.addEventListener("click", function () {
+            var show = button.getAttribute("data-show");
+            buttons.forEach(function (each) {
+                each.setAttribute("aria-pressed", each === button ? "true" : "false");
+            });
+            var shown = 0;
+            [].forEach.call(list.children, function (item) {
+                var score = parseFloat(item.getAttribute("data-score"));
+                var fits = show === "all"
+                    || (show === "high" && score >= 4)
+                    || (show === "low" && score <= 2)
+                    || (show === "words" && item.getAttribute("data-words") === "1");
+                item.hidden = !fits;
+                if (fits) shown++;
+            });
+            none.hidden = shown > 0;
+        });
+    });
+}());
+</script>
+
+{% endblock %}

@@ -198,8 +198,11 @@ check("it falls back to the order total", "120.00" in html,
 # The heading, not the footnote - which mentions a tax invoice precisely
 # to explain that this is not one.
 kind = re.search(r'class="receipt__kind">([^<]+)<', html)
+# "Order Summary &middot; Dine-in": the kind of order follows the dot.
 check("and does not claim to be a tax invoice",
-      kind is not None and kind.group(1).strip() == "Order Summary",
+      kind is not None
+      and kind.group(1).split("&middot;")[0].strip() == "Order Summary"
+      and "Tax Invoice" not in kind.group(1),
       "the receipt is headed %r"
       % (kind.group(1).strip() if kind else None))
 
