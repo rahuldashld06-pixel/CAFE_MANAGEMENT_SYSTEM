@@ -548,7 +548,9 @@ check("an ordinary sign-in keeps no name",
       "a sign-in without the box kept %r" % name_cookie(plain_header)[0])
 
 returning = app.test_client()
-returning.post("/login", data={"username": "guardboss",
+# As the form sends it: the cafe's name first, which is kept with the
+# username, so both are filled in and only the password is left.
+returning.post("/login", data={"cafe_name": "Guard Cafe", "username": "guardboss",
                                "password": "password123", "remember": "1"},
                environ_overrides={"REMOTE_ADDR": "192.0.2.186"})
 returning.get("/logout")

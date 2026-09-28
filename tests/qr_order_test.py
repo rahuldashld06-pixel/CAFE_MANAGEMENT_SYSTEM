@@ -464,9 +464,10 @@ check("and there is an index for that lock to be narrow on",
       "without it one cafe's rush would hold up every other cafe")
 
 # Stock is the other thing two tills can race for.
+# Every dish on the order in one statement now, each with its own amount.
 check("stock is taken with the check inside the update",
-      re.search(r"UPDATE inventory.{0,400}quantity >= %s", source, re.S)
-      is not None,
+      re.search(r"UPDATE inventory.{0,400}quantity >= (?:%s|\(CASE food_id)",
+                source, re.S) is not None,
       "two orders could each be told there was one left")
 
 print("\n=== 16. The kitchen screen is where orders are managed now ===")

@@ -1,4 +1,5 @@
 {% from "_brand_mark.html" import coffee_mark %}
+{% from "_diet.html" import diet_mark %}
 {% from "_table_orders.html" import table_orders_link %}
 {% set SAYS = {
     "Pending": [
@@ -57,6 +58,7 @@
 
         <div class="p-done__label">Your order number</div>
         <div class="p-done__number">#{{ order.daily_no or order.order_id }}</div>
+        <span class="p-kind-tag">{{ order.type_label }}{% if order.order_type == 'takeaway' %} &middot; packed to take away{% endif %}</span>
 
         {# Spoken as well as shown: the page changes under someone who may
            not be looking at it when it does. #}
@@ -66,6 +68,17 @@
         </p>
 
         <p class="p-done__hint" id="orderHint">{{ WORDS[1] }}</p>
+
+        {% if busy %}
+        {# Said while the kitchen still has it, when it has a lot on. #}
+        <div class="p-rush" id="rushNote" role="note">
+            <span class="p-rush__face" aria-hidden="true">&#128522;</span>
+            <span><b>It is a busy time in our kitchen.</b> Your food may take a
+            little longer than usual - thank you so much for your patience.
+            We are making it with care and will have it ready as soon as we
+            can!</span>
+        </div>
+        {% endif %}
     </div>
 
     <div class="p-lines">
@@ -78,7 +91,7 @@
             <span class="p-line__name">
                 <span class="p-line__mark" aria-hidden="true"></span>
                 <span>
-                    {{ item.item_name }}
+                    {{ diet_mark(item.diet) }}{{ item.item_name }}
                     <span class="p-line__qty">&times; {{ item.quantity }}</span>
                     <span class="p-line__said">Ready</span>
                 </span>
@@ -86,6 +99,13 @@
             <span>&#8377;{{ "%.2f"|format(item.subtotal|float) }}</span>
         </div>
         {% endfor %}
+
+        {% if order.packing and order.packing|float > 0 %}
+        <div class="p-line">
+            <span class="p-line__name"><span>Packing (takeaway)</span></span>
+            <span>&#8377;{{ "%.2f"|format(order.packing|float) }}</span>
+        </div>
+        {% endif %}
 
         <div class="p-total">
             <span>Total</span>

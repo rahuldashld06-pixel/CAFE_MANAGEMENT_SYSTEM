@@ -147,8 +147,11 @@ def click_toggle(index=0):
     """A real mouse click, not el.click() - hit testing matters here."""
     box = browser.evaluate("""
         (function () {
-            var b = document.querySelectorAll('.pw-toggle')[%d]
-                .getBoundingClientRect();
+            // On screen first, as a finger would find it: the sign-in
+            // form is taller now that it asks for the cafe.
+            var t = document.querySelectorAll('.pw-toggle')[%d];
+            t.scrollIntoView({block: 'center'});
+            var b = t.getBoundingClientRect();
             return Math.round(b.left + b.width / 2) + ',' +
                    Math.round(b.top + b.height / 2);
         }())

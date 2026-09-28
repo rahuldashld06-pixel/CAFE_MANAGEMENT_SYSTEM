@@ -212,6 +212,7 @@ try:
     browser.evaluate("""
         (function () {
             var f = document.querySelector('form');
+            f.querySelector('[name=cafe_name]').value = 'Swap Cafe';
             f.querySelector('[name=username]').value = 'sam';
             f.querySelector('[name=password]').value = 'password123';
             f.querySelector('[type=submit], button:not([type])').click();

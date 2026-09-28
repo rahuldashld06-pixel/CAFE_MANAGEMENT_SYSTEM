@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_table_search.html" as search %}
+{% from "_diet.html" import diet_mark %}
 
 {% block title %}Inventory Management{% endblock %}
 
@@ -69,7 +70,7 @@
                            inventory row's own id - they are different
                            sequences and showing both confused people. #}
                         <td>{{ item.food_no }}</td>
-                        <td class="cell-strong">{{ item.food_name }}</td>
+                        <td class="cell-strong">{{ diet_mark(item.diet) }}{{ item.food_name }}</td>
                         <td>{{ item.category_name }}</td>
                         <td>₹{{ item.price }}</td>
                         <td>{{ item.quantity }}</td>

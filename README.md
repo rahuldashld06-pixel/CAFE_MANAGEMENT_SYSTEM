@@ -54,8 +54,9 @@ branding, fully isolated from the others.
   Dine-in never carries it, nor does an order from the table QR.
 - **Veg or non-veg.** Chosen on Add and Edit Food and marked beside the
   dish the way India's menus print it - a green square with a dot, a
-  brown-red one with a triangle - at the counter, in Food Management and
-  on the customer's menu, which can be narrowed to either. A dish nobody
+  brown-red one with a triangle - at the counter, in Food Management, in
+  Inventory, on the customer's menu (which can be narrowed to either) and
+  on the customer's own order. A dish nobody
   has marked shows no mark rather than a guess.
 - **A picture for every dish.** A dish without a photo gets a drawing of
   what it is, on a tile in its own colour: a latte a cup, a dosa a dosa,
@@ -77,6 +78,30 @@ branding, fully isolated from the others.
   the best and the lowest named; the Reviews page - open to everyone who
   serves customers - has the averages, how the stars fall, and each
   review with who wrote it and the bill it was on.
+- **Tasks: the pages each teammate can open.** Every page in the
+  sidebar is a task - Dashboard, New Order, Kitchen, Billing, Reviews,
+  Categories, Food Management, Inventory, Reports. Add and Edit User
+  tick the ones a teammate does (a new one starts with the pages staff
+  always had). Their sidebar shows only those, signing in opens the
+  first of them - a cashier given Billing and Reviews lands on Billing -
+  and any other page quietly takes them there, with no "you do not have
+  permission" on the way in. Their first-time tour covers only their
+  pages, and search finds only what they can open. User Management and
+  the settings are never a teammate's task: whoever can add users could
+  make themselves an admin. Admins have every task.
+- **Ordering from the table, eaten here or taken away.** The customer's
+  menu asks Dine-in or Takeaway beside the total; a takeaway carries the
+  café's packing charge, says so on the order's page, and the bill the
+  counter raises later charges what the customer was shown.
+- **Table ordering can be paused.** Anyone on shift switches it off or on
+  from the profile menu. Customers still see the menu, with a kind note
+  asking them to order at the counter, and nothing is sent until it is
+  back on.
+- **A busy kitchen, said kindly.** After a table order, when the kitchen
+  has more than three orders waiting or more than one big order (three
+  or more items) came in within fifteen minutes - from the table or the
+  counter - the order's page says the food may take a little longer and
+  thanks them for their patience. Not once it is ready.
 - **Signing in names the café.** The sign-in form asks for the café or
   restaurant first, then the username or email and the password. The
   name decides whose place it is - the one it registered with, or the
@@ -376,12 +401,28 @@ this can be checked rather than guessed at.
 The largest single improvement available is to host the database in the
 same region as the app.
 
+The table's pages are where that shows most - every phone at every table,
+and each waiting one asking every five seconds whether the food is
+ready. So what they all ask the same is kept for a few seconds: the café
+behind the code, its menu, its name and logo. It is kept under the café's
+own key and forgotten the moment its staff save anything or an order
+moves stock (placing an order still reads the café fresh, and checks the
+shelf itself), so nothing is shown out of date. With Redis the forgetting
+reaches every worker at once; without it, the other workers' copies age
+out within `CACHE_SECONDS`. A menu opened again now costs no database
+trip, an order's page two or three instead of eight, and the status check
+one instead of three. An order writes all its dishes in the same few
+trips however many there are, where it was four trips a dish.
+
 On a phone the other half was bytes. Pages, the stylesheet and the
 scripts now go out gzipped to any browser that takes it (about a fifth
 of the size; files are compressed once per version and kept), the web
 fonts load without holding up the first paint, dish photos load as they
 come into view, and a touch screen skips the hover effects. Measured on
-a throttled phone, the first paint came about 2.3 times sooner.
+a throttled phone, the first paint came about 2.3 times sooner. And a
+phone, or a slow connection, fetches only the next couple of its pages
+ahead (none on Data Saver or 2G); the rest load the moment a link is
+touched.
 
 The free hosting tier also stops the service when idle, so the first
 visitor pays start-up plus a fresh connection. Two things guard against
@@ -505,7 +546,8 @@ bytes (the BREACH defence): the same secret underneath, different bytes
 every time the page is drawn. An amount typed as `nan` is refused as
 not a number rather than crashing the save. Every query is scoped to the café's
 owner, so one tenant cannot read or write another's rows by guessing an
-id. Staff are held to an endpoint allowlist. `?next=` is checked before
+id. A teammate reaches only the pages of their own tasks; the check is
+on the server, for every request, not just in the sidebar. `?next=` is checked before
 any redirect follows it.
 
 **What the browser is allowed to do.** A Content-Security-Policy on
@@ -679,16 +721,19 @@ python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
 python tests/dashboard_feed_test.py # expect PASSED: 43  FAILED: 0
 python tests/reports_test.py      # expect PASSED: 39   FAILED: 0
 python tests/shell_browser_test.py # expect PASSED: 58  FAILED: 0
-python tests/order_type_test.py   # expect PASSED: 43   FAILED: 0
+python tests/order_type_test.py   # expect PASSED: 45   FAILED: 0
 python tests/review_test.py       # expect PASSED: 46   FAILED: 0
-python tests/menu_marks_test.py   # expect PASSED: 96   FAILED: 0
+python tests/menu_marks_test.py   # expect PASSED: 99   FAILED: 0
 python tests/compression_test.py  # expect PASSED: 32   FAILED: 0
 python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
 python tests/account_fields_browser_test.py # expect PASSED: 26  FAILED: 0
-python tests/sign_in_cafe_test.py # expect PASSED: 40   FAILED: 0
+python tests/sign_in_cafe_test.py # expect PASSED: 41   FAILED: 0
+python tests/table_order_test.py  # expect PASSED: 30   FAILED: 0
+python tests/tasks_test.py        # expect PASSED: 42   FAILED: 0
+python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0
 ```
 
-All forty-eight run in memory against a SQLite stand-in — no database or
+All fifty-one run in memory against a SQLite stand-in — no database or
 network needed. The twenty-one that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
@@ -832,8 +877,8 @@ already being taken, and opens the bill where it can be read.
 
 - **Usernames are unique platform-wide**, not per cafe. Two cafes cannot
   both have a user called `admin`. The café's name on the sign-in form
-  is checked against the account's own café; a form that does not send
-  it at all (an older page, a script) signs in on the username alone.
+  is checked against the account's own café when given; one that leaves
+  it out (an older page, a script) signs in on the username alone.
   Café names are not unique, and the name is not a secret, so it is a
   check of the right place, not a second password.
 - **CSRF tokens are injected into forms by JavaScript** in `base.html`.

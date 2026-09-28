@@ -207,6 +207,7 @@ try:
            deviceScaleFactor=1, mobile=False)
     open_page("/login")
     b.evaluate("""(function(){var f=document.querySelector('form');
+        f.querySelector('[name=cafe_name]').value='Ticket Room';
         f.querySelector('[name=username]').value='kot';
         f.querySelector('[name=password]').value='password123';
         f.querySelector('[type=submit]').click(); return 1;}())""")

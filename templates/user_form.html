@@ -63,8 +63,29 @@
                     </option>
                     {% endfor %}
                 </select>
-                <small>Cashiers, staff and managers only see New Order, Food Management, Inventory &amp; Billing. Admins see everything.</small>
+                <small>Admins see every page and setting. For everyone else, tick their tasks below.</small>
             </div>
+
+            <!-- Tasks: the pages they can open -->
+            <fieldset class="field task-pick" id="taskPick"
+                      data-defaults="{{ default_tasks|join(',') }}">
+                <legend>Tasks <small>the pages they can open</small></legend>
+                <input type="hidden" name="tasks_sent" value="1">
+                <p class="task-pick__admin" id="taskAdminNote" hidden>
+                    Admins have every task, and User Management and the settings too.
+                </p>
+                <div class="task-pick__grid">
+                    {% for key, label, icon, landing, pages in tasks %}
+                    <label class="task-tag">
+                        <input type="checkbox" name="tasks" value="{{ key }}"
+                               {% if key in chosen %}checked{% endif %}>
+                        <span><i class="bi {{ icon }}" aria-hidden="true"></i> {{ label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <small>Their sidebar shows only these, and signing in opens the first one.
+                    User Management and the settings stay with admins.</small>
+            </fieldset>
 
             <!-- Mobile Number -->
             <div class="field">
@@ -135,5 +156,24 @@
         </form>
 
     </div>
+
+<script>
+// Admins have every task, so the boxes are set aside for them. Changing
+// to another role keeps whatever was ticked.
+(function () {
+    var role = document.getElementById("userRoleSelect");
+    var pick = document.getElementById("taskPick");
+    if (!role || !pick) return;
+    var note = document.getElementById("taskAdminNote");
+    var boxes = pick.querySelectorAll('input[name="tasks"]');
+    function sync() {
+        var admin = role.value === "admin";
+        note.hidden = !admin;
+        [].forEach.call(boxes, function (box) { box.disabled = admin; });
+    }
+    role.addEventListener("change", sync);
+    sync();
+}());
+</script>
 
 {% endblock %}

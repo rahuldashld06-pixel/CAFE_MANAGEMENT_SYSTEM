@@ -430,7 +430,9 @@
                         <span class="pass-own" title="They chose this password themselves, so it is not kept. Set a new one from Edit to see it here.">Their own</span>
                         {% endif %}
                     </td>
-                    <td class="team-cell-role" data-label="Role"><span class="team-role role-badge role-badge--{{ u.role }}">{{ u.role_label }}</span></td>
+                    <td class="team-cell-role" data-label="Role"><span class="team-role role-badge role-badge--{{ u.role }}">{{ u.role_label }}</span>
+                        {% if u.task_labels %}<span class="task-chips" aria-label="Tasks">{% for label in u.task_labels %}<span>{{ label }}</span>{% endfor %}</span>{% endif %}
+                    </td>
                     <td class="team-cell-seen" data-label="Last active">{{ u.last_active }}</td>
                     <td class="team-cell-status">
                         {% if u.is_active %}

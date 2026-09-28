@@ -244,6 +244,14 @@ check("Food Management marks them too",
       "diet-mark--veg" in foods_page and "diet-mark--nonveg" in foods_page)
 check("with the drawings", "food-art--curry" in foods_page)
 
+stock_page = owner.get("/inventory").get_data(as_text=True)
+check("Inventory marks each dish beside its name",
+      re.search(r'diet-mark--veg"[^>]*></span>Masala Dosa', stock_page) is not None
+      and re.search(r'diet-mark--nonveg"[^>]*></span>Chicken Curry', stock_page) is not None)
+check("and marks nothing it was not told",
+      re.search(r'</span>Cafe Latte', stock_page) is None
+      and "Cafe Latte" in stock_page)
+
 
 # =====================================================================
 print("\n=== 4. All is the categories; Hot selling is its own tab ===")
@@ -277,6 +285,16 @@ check("and carries the mark", "diet-mark--veg" in menu and "diet-mark--nonveg" i
 check("and a picture", "food-art--dosa" in menu and "p-item__pic" in menu)
 check("with the drawings on the page",
       '<symbol id="food-dosa"' in menu)
+
+guest = app.test_client()
+guest.post("/m/%s/order" % token, data={"quantity_%d" % dosa[0]: "1",
+                                         "quantity_%d" % curry[0]: "1"})
+ref = mysql_shim._DB.execute(
+    "SELECT public_ref FROM orders WHERE source = 'qr' ORDER BY order_id DESC").fetchone()[0]
+placed = guest.get("/m/%s/placed/%s" % (token, ref)).get_data(as_text=True)
+check("the customer's own order marks each dish too",
+      re.search(r'diet-mark--veg"[^>]*></span>Masala Dosa', placed) is not None
+      and re.search(r'diet-mark--nonveg"[^>]*></span>Chicken Curry', placed) is not None)
 
 
 print("\n" + "=" * 60)

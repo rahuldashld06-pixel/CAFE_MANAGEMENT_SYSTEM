@@ -79,6 +79,17 @@
        cafe's menu is a few dozen dishes; asking the server again to
        show a different part of it would be a round trip to spare
        somebody a scroll. #}
+    {% if not ordering_open %}
+    {# Paused by the cafe. The menu still shows - somebody deciding what to
+       have at the counter can read it here - but nothing is sent. #}
+    <div class="p-paused" role="status">
+        <span class="p-paused__face" aria-hidden="true">&#128522;</span>
+        <p><b>Table ordering is taking a short break.</b>
+           Please pop over to the counter and order there - we would love to
+           serve you. Thank you for understanding!</p>
+    </div>
+    {% endif %}
+
     <div class="p-find">
         <svg class="p-find__icon" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="7"></circle>
@@ -122,7 +133,10 @@
        that the length of the minute is a fact about this page, and can
        be read - and shortened - from outside it. #}
     <form method="POST" action="{{ url_for('public_place_order', token=token) }}"
-          id="orderForm" data-hold="60">
+          id="orderForm" data-hold="60"
+          class="{{ '' if ordering_open else 'is-paused' }}"
+          data-packing="{{ takeaway.amount }}" data-packing-mode="{{ takeaway.mode }}">
+        <input type="hidden" name="order_type" id="orderTypeField" value="dine_in">
 
         {% for group in groups %}
         <section class="p-group" data-section="{{ loop.index0 }}">
@@ -165,6 +179,14 @@
         </p>
 
         <div class="p-bar">
+            {# Eating here or taking it away. A takeaway is packed, and
+               carries the cafe's packing charge when there is one. #}
+            <div class="p-kind" role="radiogroup" aria-label="Eating here or taking away">
+                <button type="button" class="p-kind__choice is-on" data-kind="dine_in"
+                        role="radio" aria-checked="true">Dine-in</button>
+                <button type="button" class="p-kind__choice" data-kind="takeaway"
+                        role="radio" aria-checked="false">Takeaway{% if takeaway.amount > 0 %} <small>+&#8377;{{ "%.2f"|format(takeaway.amount) }}{{ " each" if takeaway.mode == "item" }} packing</small>{% endif %}</button>
+            </div>
             <div class="p-bar__inner">
                 <div class="p-bar__sum">
                     <div class="p-bar__count" id="barCount">Nothing chosen yet</div>
@@ -245,6 +267,19 @@
     var count = document.getElementById("barCount");
     var totalEl = document.getElementById("barTotal");
     var send = document.getElementById("sendBtn");
+    var kindField = document.getElementById("orderTypeField");
+
+    form.addEventListener("click", function (event) {
+        var choice = event.target.closest("[data-kind]");
+        if (!choice) return;
+        kindField.value = choice.getAttribute("data-kind");
+        [].forEach.call(form.querySelectorAll("[data-kind]"), function (each) {
+            var on = each === choice;
+            each.classList.toggle("is-on", on);
+            each.setAttribute("aria-checked", on ? "true" : "false");
+        });
+        retally();
+    });
 
     function money(value) {
         return "₹" + value.toFixed(2);
@@ -265,6 +300,11 @@
         // counter. The server works the same total out again from its own
         // prices - nothing here is trusted.
         var total = (subtotal - subtotal * DISCOUNT_RATE) * (1 + TAX_RATE);
+        // A takeaway's packing, after the tax, as the bill will have it.
+        if (kindField.value === "takeaway" && items > 0) {
+            var packing = parseFloat(form.dataset.packing || "0") || 0;
+            total += form.dataset.packingMode === "item" ? packing * items : packing;
+        }
 
         count.textContent = items === 0
             ? "Nothing chosen yet"

@@ -822,6 +822,21 @@
         return index === -1 ? WARM_ORDER.length : index;
     }
 
+    // How many pages to fetch ahead. A laptop on the cafe's wifi: all of
+    // them. A phone, or a slow connection: the next couple - the rest are
+    // fetched the moment a link is touched, and a phone on mobile data
+    // does not spend its bandwidth and battery on screens nobody opens.
+    // Data Saver, or 2G: none at all.
+    function warmBudget() {
+        var link = navigator.connection || {};
+        var kind = link.effectiveType || "";
+        if (link.saveData || /2g$/.test(kind)) return 0;
+        var small = window.matchMedia
+            && window.matchMedia("(max-width: 700px)").matches;
+        if (small || kind === "3g") return 2;
+        return 99;
+    }
+
     // Walk the sidebar the server rendered for this user, so a cashier never
     // warms (or is even offered) the admin-only screens.
     // includeCurrent: normally there is no point fetching the page already
@@ -845,6 +860,7 @@
 
         urls.sort(function (a, b) { return warmRank(a) - warmRank(b); });
         urls = urls.filter(function (url) { return warmRank(url) < WARM_LIMIT; });
+        urls = urls.slice(0, warmBudget());
 
         // One at a time: the managed MySQL plan hands out only a handful of
         // connections, and warming must never compete with the page the user

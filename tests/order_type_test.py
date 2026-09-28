@@ -5,7 +5,8 @@ The owner sets a takeaway charge and a delivery charge under Profile ->
 Packing Charges, each either once per order or once per item. A counter
 order says which of the three it is; takeaway and delivery then carry the
 charge as its own line on the bill, after the discount and the tax.
-Dine-in never does, and neither does an order from the table QR.
+Dine-in never does. An order from the table QR is dine-in or takeaway -
+there is no delivery to a table.
 
 Checked on the numbers a cafe would see: what the settings page saves and
 refuses, what each kind of order is charged, and that the charge and the
@@ -282,7 +283,7 @@ check("the kitchen screen is told which orders are to go",
 
 
 # =====================================================================
-print("\n=== 6. A table QR order is always eaten in ===")
+print("\n=== 6. A table QR order is eaten in or taken away ===")
 # =====================================================================
 with owner.session_transaction() as sess:
     cafe_id = sess["cafe_id"]
@@ -292,13 +293,26 @@ guest.post("/m/%s/order" % token, data={"quantity_%d" % LATTE: "2",
                                          "order_type": "delivery"})
 qr = db("SELECT order_id, order_type, source FROM orders "
         "ORDER BY order_id DESC")[0]
-check("it is written down as dine-in, whatever the form says",
+check("there is no delivery to a table: asked for, it is dine-in",
       qr[2] == "qr" and qr[1] == "dine_in", repr(tuple(qr)))
 # Its bill is raised when the counter next opens Billing.
 owner.get("/billing")
 qr_bill = db("SELECT packing FROM bills WHERE order_id = %d" % qr[0])
 check("and its bill carries no packing",
       len(qr_bill) == 1 and Decimal(str(qr_bill[0][0])) == 0, repr(qr_bill))
+guest.post("/m/%s/order" % token, data={"quantity_%d" % LATTE: "2",
+                                         "order_type": "takeaway"})
+away_qr = db("SELECT order_id, order_type, packing, total_amount FROM orders "
+             "ORDER BY order_id DESC")[0]
+check("a takeaway from the table carries the takeaway charge, as at the counter",
+      away_qr[1] == "takeaway" and Decimal(str(away_qr[2])) == Decimal("10.00")
+      and Decimal(str(away_qr[3])) == Decimal("210.00"), repr(tuple(away_qr)))
+owner.get("/billing")
+away_bill = db("SELECT packing, total_amount FROM bills WHERE order_id = %d"
+               % away_qr[0])
+check("and the bill raised for it later charges the same",
+      away_bill and Decimal(str(away_bill[0][0])) == Decimal("10.00")
+      and Decimal(str(away_bill[0][1])) == Decimal("210.00"), repr(away_bill))
 
 
 # =====================================================================

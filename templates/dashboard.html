@@ -38,7 +38,7 @@
      ========================================== -->
 <section class="kpi-grid" aria-label="Figures">
 
-    {% if session.get('role') == 'admin' %}
+    {% if user_can('dashboard') %}
     <article class="kpi" id="kpiSales">
         <div class="kpi__top">
             <span class="kpi__label" data-kpi-label="Sales">Sales today</span>
@@ -65,7 +65,7 @@
         <div class="kpi__foot" data-kpi-foot>&nbsp;</div>
     </article>
 
-    {% if session.get('role') == 'admin' %}
+    {% if user_can('dashboard') %}
     <article class="kpi" id="kpiAverage">
         <div class="kpi__top">
             <span class="kpi__label" data-kpi-label="Average bill">Average bill today</span>

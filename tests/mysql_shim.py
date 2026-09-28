@@ -164,7 +164,8 @@ _JOIN_UPDATE = re.compile(
     r"INNER\s+JOIN\s+inventory\s+i\s+"
     r"ON\s+f\.food_id\s*=\s*i\.food_id\s+"
     r"SET\s+f\.availability\s*=\s*(?P<expr>CASE.*?END)\s+"
-    r"WHERE\s+(?P<where>f\.\w+\s*=\s*(?:%s|\?)"
+    r"WHERE\s+(?P<where>f\.\w+\s*"
+    r"(?:=\s*(?:%s|\?)|IN\s*\((?:\s*(?:%s|\?)\s*,?)+\))"
     r"(?:\s+AND\s+f\.\w+\s*=\s*(?:%s|\?))*)",
     re.I | re.S,
 )
@@ -270,6 +271,14 @@ class _Cursor:
     def execute(self, sql, params=()):
         with _LOCK:
             return self._execute(sql, params)
+
+    def executemany(self, sql, seq_of_params):
+        """One statement per row, as the connector's batching amounts to."""
+        total = 0
+        for params in seq_of_params:
+            self.execute(sql, params)
+            total += max(self.rowcount, 0)
+        self.rowcount = total
 
     def _execute(self, sql, params=()):
         kind, s = _translate(sql)

@@ -549,6 +549,8 @@ def inject_home_url():
     """
     if session.get("role") == "admin":
         return {"home_url": url_for("home")}
+    if session.get("user_id"):
+        return {"home_url": landing_url(get_current_user())}
     return {"home_url": url_for("add_order")}
 
 
@@ -1557,23 +1559,95 @@ def get_public_token(cafe_id, create=True):
             connection.close()
 
 
-def cafe_for_token(cursor, token):
+# The two a customer at a table can choose between.
+TABLE_ORDER_TYPES = ("dine_in", "takeaway")
+
+TABLE_ORDERING_PAUSED = (
+    "Ordering from the table is taking a little break right now. "
+    "Please pop over to the counter - we would love to take your order "
+    "there. Thank you for understanding!"
+)
+
+
+def table_ordering_open(cafe):
+    value = (cafe or {}).get("qr_ordering")
+    return True if value is None else bool(value)
+
+
+# ---------------------------------------------------------------------
+# A busy kitchen
+#
+# After a table order, a kind word if the kitchen has a lot on: more than
+# three orders waiting on it, or more than one big order - three or more
+# items - in the last fifteen minutes. Every order counts, whether it came
+# from a table or the counter. Nobody waits any less for being told, but
+# they wait more happily.
+# ---------------------------------------------------------------------
+RUSH_PENDING_ORDERS = 3
+RUSH_BIG_ORDER_ITEMS = 2
+RUSH_BIG_ORDERS = 1
+RUSH_WINDOW_MINUTES = 15
+
+
+def kitchen_is_busy(cursor, owner_id):
+    # Both counts in one trip.
+    since = utc_now() - timedelta(minutes=RUSH_WINDOW_MINUTES)
+    cursor.execute("""
+        SELECT
+            (SELECT COUNT(*) FROM orders
+             WHERE user_id = %s AND order_status = 'Pending') AS waiting,
+            (SELECT COUNT(*) FROM (
+                SELECT o.order_id
+                FROM orders o
+                INNER JOIN order_items oi ON oi.order_id = o.order_id
+                WHERE o.user_id = %s AND o.order_date >= %s
+                  AND o.order_status <> 'Cancelled'
+                GROUP BY o.order_id
+                HAVING SUM(oi.quantity) > %s
+            ) AS big) AS big_orders
+    """, (owner_id, owner_id, since, RUSH_BIG_ORDER_ITEMS))
+    row = cursor.fetchone() or {}
+    return (int(row.get("waiting") or 0) > RUSH_PENDING_ORDERS
+            or int(row.get("big_orders") or 0) > RUSH_BIG_ORDERS)
+
+
+def cafe_for_token(cursor, token, fresh=False):
     """
     The cafe a QR address belongs to, or None.
 
     Also hands back the owner id every other query needs to scope by, so
     the public pages never have to guess at it.
+
+    Remembered for a few seconds: every phone at every table asks this on
+    every page and every status check, and the answer changes about never.
+    The row is kept under the cafe's own key, so anything the cafe's staff
+    save forgets it at once. Placing an order asks fresh (fresh=True):
+    whether table ordering is on right now is not a few-seconds-old fact.
     """
     token = (token or "").strip()
     if not token or len(token) > 40:
         return None
 
-    cursor.execute("""
-        SELECT cafe_id, cafe_name, owner_user_id, is_active, timezone
-        FROM cafes
-        WHERE public_token = %s
-    """, (token,))
-    row = cursor.fetchone()
+    row = None
+    if not fresh:
+        known = cache_get("qrtoken:%s" % token)
+        if known is not None:
+            row = cache_get("qrcafe:%s" % known)
+            # A code that has been replaced still points at its cafe
+            # here; the cafe itself knows which code is current.
+            if row is not None and row.get("public_token") != token:
+                row = None
+    if row is None:
+        cursor.execute("""
+            SELECT cafe_id, cafe_name, owner_user_id, is_active, timezone,
+                   qr_ordering, public_token
+            FROM cafes
+            WHERE public_token = %s
+        """, (token,))
+        row = cursor.fetchone()
+        if row:
+            cache_put("qrtoken:%s" % token, row["cafe_id"])
+            cache_put("qrcafe:%s" % row["cafe_id"], dict(row))
 
     if not row or not row["is_active"] or not row["owner_user_id"]:
         return None
@@ -1582,8 +1656,10 @@ def cafe_for_token(cursor, token):
     # without this a customer would be shown the deployment's default
     # zone instead of the one the cafe keeps - and the row is already in
     # hand, so it costs no query to get right.
-    if row.get("timezone") and has_request_context():
-        g.cafe_timezone = row["timezone"]
+    # Set even when the cafe keeps no zone of its own, so the clock is
+    # not looked up again further down the page.
+    if has_request_context():
+        g.cafe_timezone = row.get("timezone") or DEFAULT_TIMEZONE
 
     return row
 
@@ -1727,64 +1803,85 @@ def write_order(cursor, owner_id, cafe_id, lines, tax_mult,
 
     cursor.execute(
         "INSERT INTO orders (total_amount, order_status, user_id, cafe_id, "
-        "source, order_day, daily_no, order_date, public_ref, order_type) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        "source, order_day, daily_no, order_date, public_ref, order_type, "
+        "packing) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (total, "Pending", owner_id, cafe_id, source, today, daily_no,
-         utc_now(), public_ref, order_type)
+         utc_now(), public_ref, order_type, totals["packing"])
     )
     order_id = cursor.lastrowid
 
+    # Every dish on the order in the same four trips, however many there
+    # are: its stock, locked; its lines, written; its shelf, brought
+    # down; and the menu told what ran out. It was four trips a dish -
+    # about two seconds each on the live database for a table ordering
+    # three things, while every other order for the cafe queued behind
+    # the lock.
+    wanted = {}
     for line in lines:
-        cursor.execute("""
-            SELECT i.quantity
-            FROM inventory i
-            INNER JOIN foods f ON i.food_id = f.food_id
-            WHERE i.food_id = %s AND f.user_id = %s
-            FOR UPDATE
-        """, (line["food_id"], owner_id))
-        held = cursor.fetchone()
+        food = int(line["food_id"])
+        wanted[food] = wanted.get(food, 0) + int(line["quantity"])
+    foods_on_order = list(wanted)
+    holes = ", ".join(["%s"] * len(foods_on_order))
 
-        if held is None:
+    cursor.execute("""
+        SELECT i.food_id, i.quantity
+        FROM inventory i
+        INNER JOIN foods f ON i.food_id = f.food_id
+        WHERE i.food_id IN (%s) AND f.user_id = %%s
+        FOR UPDATE
+    """ % holes, tuple(foods_on_order) + (owner_id,))
+    held = dict((int(row["food_id"]), int(row["quantity"]))
+                for row in cursor.fetchall())
+
+    for line in lines:
+        food = int(line["food_id"])
+        if food not in held:
             raise OrderError(
                 "Inventory record not found for %s." % line["food_name"])
-        if held["quantity"] < line["quantity"]:
+        if held[food] < wanted[food]:
             raise OrderError(
                 "Not enough stock for %s. Available: %s."
-                % (line["food_name"], held["quantity"]))
+                % (line["food_name"], held[food]))
 
-        cursor.execute("""
-            INSERT INTO order_items
-            (order_id, food_id, item_name, quantity, price, subtotal)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (order_id, line["food_id"], line["food_name"],
-              line["quantity"], line["price"], line["subtotal"]))
+    cursor.executemany("""
+        INSERT INTO order_items
+        (order_id, food_id, item_name, quantity, price, subtotal)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, [(order_id, line["food_id"], line["food_name"], line["quantity"],
+           line["price"], line["subtotal"]) for line in lines])
 
-        # The WHERE carries the check as well as the change, so two tills
-        # racing for the last croissant cannot both win: whichever runs
-        # second matches no row.
-        cursor.execute("""
-            UPDATE inventory
-            SET quantity = quantity - %s,
-                last_updated = CURRENT_TIMESTAMP
-            WHERE food_id = %s
-              AND quantity >= %s
-              AND EXISTS (
-                  SELECT 1 FROM foods f
-                  WHERE f.food_id = inventory.food_id AND f.user_id = %s
-              )
-        """, (line["quantity"], line["food_id"], line["quantity"], owner_id))
+    # The WHERE carries the check as well as the change, so two tills
+    # racing for the last croissant cannot both win: whichever runs
+    # second matches no row for it, and the count below comes up short.
+    taking = " ".join(["WHEN %s THEN %s"] * len(foods_on_order))
+    amounts = []
+    for food in foods_on_order:
+        amounts.extend([food, wanted[food]])
+    cursor.execute("""
+        UPDATE inventory
+        SET quantity = quantity - (CASE food_id %s END),
+            last_updated = CURRENT_TIMESTAMP
+        WHERE food_id IN (%s)
+          AND quantity >= (CASE food_id %s END)
+          AND EXISTS (
+              SELECT 1 FROM foods f
+              WHERE f.food_id = inventory.food_id AND f.user_id = %%s
+          )
+    """ % (taking, holes, taking),
+        tuple(amounts) + tuple(foods_on_order) + tuple(amounts) + (owner_id,))
 
-        if cursor.rowcount != 1:
-            raise OrderError(
-                "Could not update inventory for %s." % line["food_name"])
+    if cursor.rowcount != len(foods_on_order):
+        raise OrderError(
+            "Could not update inventory for %s." % lines[0]["food_name"])
 
-        # Stock at zero takes the food off the menu by itself.
-        cursor.execute("""
-            UPDATE foods f
-            INNER JOIN inventory i ON f.food_id = i.food_id
-            SET f.availability = CASE WHEN i.quantity > 0 THEN 1 ELSE 0 END
-            WHERE f.food_id = %s AND f.user_id = %s
-        """, (line["food_id"], owner_id))
+    # Stock at zero takes the food off the menu by itself.
+    cursor.execute("""
+        UPDATE foods f
+        INNER JOIN inventory i ON f.food_id = i.food_id
+        SET f.availability = CASE WHEN i.quantity > 0 THEN 1 ELSE 0 END
+        WHERE f.food_id IN (%s) AND f.user_id = %%s
+    """ % holes, tuple(foods_on_order) + (owner_id,))
 
     return dict(totals, order_id=order_id, daily_no=daily_no,
                 public_ref=public_ref)
@@ -2136,6 +2233,16 @@ _COLUMN_MIGRATIONS = [
     # A password an admin set for somebody, sealed so the admins can read
     # it again. Emptied the moment its owner chooses their own.
     ("users", "password_view", "TEXT NULL"),
+    # The packing charge an order was placed with. A table order is
+    # billed later, at the counter, and must be billed what the customer
+    # was shown - not whatever the charge is by then.
+    ("orders", "packing", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"),
+    # Whether customers can order from the table QR right now. On unless
+    # somebody switches it off.
+    ("cafes", "qr_ordering", "TINYINT NOT NULL DEFAULT 1"),
+    # The pages a teammate who is not an admin can open, as task keys
+    # separated by commas. Empty means their role's usual set.
+    ("users", "tasks", "VARCHAR(255) NULL"),
     # What a takeaway or a delivery container costs, and whether that is
     # once per order or once per item. Nothing until the owner says.
     ("cafes", "takeaway_packing", "DECIMAL(8,2) NOT NULL DEFAULT 0.00"),
@@ -3519,13 +3626,13 @@ def get_current_user():
         # every page, for one integer.
         cursor.execute("""
             SELECT u.user_id, u.username, u.full_name, u.role, u.is_active,
-                   u.tutorial_seen,
+                   u.tutorial_seen, u.tasks,
                    (u.photo_blob IS NOT NULL) AS has_photo, u.photo_version,
                    c.owner_user_id, c.is_active AS cafe_active,
                    c.theme, c.accent_hex, c.surface_hex, c.timezone,
                    c.tax_percent, c.discount_percent,
                    c.cafe_name, c.branding_version,
-                   c.brand_name, c.brand_tagline,
+                   c.brand_name, c.brand_tagline, c.qr_ordering,
                    (c.logo_blob IS NOT NULL) AS has_logo,
                    (c.login_photo_blob IS NOT NULL) AS has_login_photo
             FROM users u
@@ -3562,7 +3669,7 @@ def _shape_current_user(row, cafe_id):
                      "tax_percent", "discount_percent",
                      "cafe_name", "branding_version",
                      "brand_name", "brand_tagline",
-                     "has_logo", "has_login_photo")
+                     "has_logo", "has_login_photo", "qr_ordering")
 
     user = None
     if row:
@@ -3589,6 +3696,7 @@ def _shape_current_user(row, cafe_id):
             version = row["branding_version"] or 1
             g.cafe_branding_id = cafe_id
             g.cafe_branding = {
+                "qr_ordering": row["qr_ordering"] is None or bool(row["qr_ordering"]),
                 "cafe_name": row["cafe_name"] or app.config["CAFE_NAME"],
                 "brand_name": ((row["brand_name"] or "").strip()
                                or DEFAULT_BRAND_NAME),
@@ -3626,6 +3734,116 @@ def require_role(*roles):
     return None
 
 
+# ---------------------------------------------------------------------
+# Tasks: which pages a teammate can open
+#
+# Every page in the sidebar is a task. An admin ticks the ones a teammate
+# does when adding or editing them - a cashier who only takes payments
+# and reads reviews gets Billing and Reviews, and that is all their
+# sidebar shows; signing in opens the first of them. Each task brings the
+# pages that go with it (Billing brings the bill, the receipt and taking
+# a payment). The guard below lets nothing else through.
+#
+# User Management and the settings are not tasks: they stay with admins,
+# because someone who could add users could make themselves one. Admins
+# have every task. A teammate nobody has ticked anything for yet keeps
+# the pages staff have always had.
+# ---------------------------------------------------------------------
+TASKS = [
+    # key, label, icon, the page it opens, every page it brings
+    ("dashboard", "Dashboard", "bi-speedometer2", "home",
+     {"home", "dashboard_stats", "dashboard_insights_feed"}),
+    ("new_order", "New Order", "bi-cart-plus", "add_order",
+     {"add_order", "order_details", "print_bill", "print_kot",
+      "cancel_order", "complete_order"}),
+    ("kitchen", "Kitchen", "bi-fire", "kitchen_display",
+     {"kitchen_display", "kitchen_board", "kitchen_item_made",
+      "order_details", "print_kot", "complete_order"}),
+    ("billing", "Billing", "bi-credit-card-2-front", "billing",
+     {"billing", "mark_bill_paid", "start_online_payment",
+      "verify_online_payment", "edit_bill", "order_details", "print_bill"}),
+    ("reviews", "Reviews", "bi-star", "reviews", {"reviews"}),
+    ("categories", "Categories", "bi-tags", "categories",
+     {"categories", "add_category", "edit_category", "delete_category"}),
+    ("foods", "Food Management", "bi-egg-fried", "foods",
+     {"foods", "add_food", "edit_food", "delete_food", "food_guess"}),
+    ("inventory", "Inventory", "bi-boxes", "inventory",
+     {"inventory", "update_stock"}),
+    ("reports", "Reports", "bi-bar-chart-line", "reports",
+     {"reports", "export_report"}),
+]
+TASK_KEYS = [key for key, _, _, _, _ in TASKS]
+TASK_LABELS = dict((key, label) for key, label, _, _, _ in TASKS)
+TASK_LANDING = dict((key, landing) for key, _, _, landing, _ in TASKS)
+TASK_PAGES = dict((key, pages) for key, _, _, _, pages in TASKS)
+# What staff could always open, and so what a teammate starts with.
+DEFAULT_TASKS = ("new_order", "kitchen", "billing", "reviews",
+                 "categories", "foods", "inventory")
+
+# Open to every teammate whatever their tasks: their own account, the
+# order-status bell in the header, search (which shows only what they
+# can open), and pausing table ordering.
+EVERYONE_ENDPOINTS = {
+    "order_status_feed", "change_password", "logout", "tutorial_seen",
+    "timezone_guess", "account_photo", "user_media", "search",
+    "table_ordering_switch", "food_image",
+}
+
+
+def tasks_from_text(text):
+    """The task keys stored for someone, in sidebar order; None if unset."""
+    if text is None:
+        return None
+    chosen = {part.strip() for part in str(text).split(",")}
+    return [key for key in TASK_KEYS if key in chosen]
+
+
+def tasks_of(user):
+    """What this person does. Admins do everything."""
+    if not user:
+        return []
+    if user.get("role") == "admin":
+        return list(TASK_KEYS)
+    stored = tasks_from_text(user.get("tasks"))
+    return list(DEFAULT_TASKS) if stored is None else stored
+
+
+def endpoint_allowed(user, endpoint):
+    if not user:
+        return False
+    if user.get("role") == "admin":
+        return True
+    if endpoint in EVERYONE_ENDPOINTS:
+        return True
+    return any(endpoint in TASK_PAGES[key] for key in tasks_of(user))
+
+
+def landing_url(user):
+    """The first page this person can open, in sidebar order."""
+    for key in tasks_of(user):
+        return url_for(TASK_LANDING[key])
+    # Nothing ticked at all: their own account is still theirs.
+    return url_for("change_password")
+
+
+def user_can(task):
+    """For templates: may whoever is signed in open this task's pages?"""
+    if not has_request_context() or not session.get("user_id"):
+        return False
+    return task in tasks_of(get_current_user())
+
+
+app.jinja_env.globals["user_can"] = user_can
+
+
+def form_tasks():
+    """The ticked task boxes on Add or Edit User, in sidebar order."""
+    chosen = set(request.form.getlist("tasks"))
+    return [key for key in TASK_KEYS if key in chosen]
+
+
+# Kept for the pages that were written against it: the set a teammate
+# with the usual tasks can open.
 # Non-admin staff (manager/cashier/staff) are limited to these sections
 # only: New Order, the Kitchen screen, Food Management, Inventory, and
 # Billing (history).
@@ -3656,6 +3874,9 @@ STAFF_ALLOWED_ENDPOINTS = {
     "kitchen_item_made",
     # What customers said. Everybody who serves them gets to read it.
     "reviews",
+    # Pausing table ordering is for whoever is on shift, not only the
+    # owner.
+    "table_ordering_switch",
     # The picture and veg mark the Add Food form suggests as a name is
     # typed. Staff add food too.
     "food_guess",
@@ -4354,7 +4575,7 @@ def home():
         cursor = connection.cursor(dictionary=True)
 
         counts = dashboard_counts(
-            cursor, scope_user_id(), session.get("role") == "admin")
+            cursor, scope_user_id(), user_can("dashboard"))
         total_foods = counts["total_foods"]
         total_categories = counts["total_categories"]
         total_orders = counts["total_orders"]
@@ -5084,6 +5305,7 @@ def inventory():
                 -- one set of ids rather than two.
                 COALESCE(f.food_no, f.food_id) AS food_no,
                 f.food_name,
+                f.diet,
                 c.category_name,
                 f.price,
                 CASE
@@ -7197,7 +7419,7 @@ def ensure_missing_bills_for_user(user_id):
     try:
         cursor.execute(
             """
-            SELECT o.order_id
+            SELECT o.order_id, o.packing
             FROM orders o
             LEFT JOIN bills b ON b.order_id = o.order_id
             WHERE o.user_id = %s
@@ -7217,23 +7439,28 @@ def ensure_missing_bills_for_user(user_id):
                 (order["order_id"],),
             )
             row = cursor.fetchone()
+            # A takeaway from the table was placed with its packing
+            # charge; the bill carries the same one.
+            packing = Decimal(str(order.get("packing") or 0))
             totals = bill_totals(Decimal(str(row["subtotal"] or 0)),
-                                 tax_multiplier(), discount_multiplier())
+                                 tax_multiplier(), discount_multiplier(),
+                                 packing=packing)
             subtotal, tax = totals["subtotal"], totals["tax"]
             discount, total = totals["discount"], totals["total"]
 
             cursor.execute(
                 """
                 INSERT INTO bills
-                    (order_id, subtotal, tax, discount, total_amount,
+                    (order_id, subtotal, tax, discount, packing, total_amount,
                      payment_method, payment_status, bill_date)
-                VALUES (%s, %s, %s, %s, %s, 'Cash', 'Pending', %s)
+                VALUES (%s, %s, %s, %s, %s, %s, 'Cash', 'Pending', %s)
                 """,
                 (
                     order["order_id"],
                     subtotal,
                     tax,
                     discount,
+                    totals["packing"],
                     total,
                     utc_now(),
                 ),
@@ -7905,7 +8132,7 @@ def dashboard_stats():
         # Same single statement the page itself uses. This endpoint is polled
         # continuously, so it is the one place where trimming round trips
         # matters most.
-        counts = dashboard_counts(cursor, uid, session.get("role") == "admin")
+        counts = dashboard_counts(cursor, uid, user_can("dashboard"))
         total_foods = counts["total_foods"]
         total_categories = counts["total_categories"]
         total_orders = counts["total_orders"]
@@ -8026,8 +8253,11 @@ def search():
 
     if query:
         words = query.lower().split()
+        me = get_current_user()
         for endpoint, label, icon, extra, admin_only in SEARCH_PAGES:
-            if admin_only and not admin:
+            # Their pages, whatever the page was once marked: a manager
+            # given Reports finds Reports.
+            if not endpoint_allowed(me, endpoint):
                 continue
             haystack = (label + " " + extra).lower()
             if all(word in haystack for word in words):
@@ -8131,6 +8361,12 @@ def search():
             if connection:
                 connection.close()
 
+    # Results only where they lead somewhere this person can open.
+    me = get_current_user()
+    for kind, page in (("foods", "edit_food"), ("categories", "edit_category"),
+                       ("orders", "order_details")):
+        if not endpoint_allowed(me, page):
+            found[kind] = []
     total = sum(len(rows) for rows in found.values())
     return render_template("search.html", query=query, found=found,
                            total=total)
@@ -8482,9 +8718,12 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        # None when the form did not have the field at all; "" when it
-        # was left empty, which the form itself does not allow.
-        typed_cafe = request.form.get("cafe_name")
+        # Given, it must be the account's own cafe. Not given - no field,
+        # or a blank one the form itself would not have sent - signs in
+        # on the username alone, as every sign-in once did: the name is
+        # on every bill, so asking for it is about the right place, not
+        # a second secret.
+        typed_cafe = (request.form.get("cafe_name") or "").strip() or None
 
         connection = None
         cursor = None
@@ -8507,7 +8746,7 @@ def login():
             user = find_sign_in(
                 cursor, username,
                 "user_id, username, email, password_hash, full_name, "
-                "role, is_active, phone_number, cafe_id")
+                "role, is_active, phone_number, cafe_id, tasks")
 
             # An account that does not exist is still counted, under
             # what was typed. Skipping it here would answer "no such
@@ -8621,10 +8860,9 @@ def login():
                 if next_is_safe:
                     return redirect(next_page)
 
-                if user["role"] != "admin":
-                    return redirect(url_for("add_order"))
-
-                return redirect(url_for("home"))
+                # The first of their pages: a cashier given Billing and
+                # Reviews opens on Billing.
+                return redirect(landing_url(user))
 
             # Counted here, on the one branch that means "that was
             # wrong" - whether the name is unknown, the account is
@@ -8673,7 +8911,8 @@ def login_verify_otp():
         cursor = connection.cursor(dictionary=True)
 
         cursor.execute("""
-            SELECT user_id, username, full_name, role, is_active, phone_number, cafe_id
+            SELECT user_id, username, full_name, role, is_active, phone_number, cafe_id,
+                   tasks
             FROM users
             WHERE user_id = %s
         """, (pending_user_id,))
@@ -8759,14 +8998,9 @@ def login_verify_otp():
                 if next_page.startswith("/") and not next_page.startswith("//"):
                     return redirect(next_page)
 
-                # Where the password-only path already sent people.
-                # The dashboard is an admin page, and a cashier landing
-                # on it is bounced straight back out with a permission
-                # message - a strange thing to meet on the way in.
-                if user["role"] != "admin":
-                    return redirect(url_for("add_order"))
-
-                return redirect(url_for("home"))
+                # Where the password-only path already sends people:
+                # the first of their own pages.
+                return redirect(landing_url(user))
 
             cursor.execute("""
                 UPDATE login_otp_codes SET attempts = attempts + 1
@@ -9415,9 +9649,13 @@ def require_login():
         session.clear()
         return redirect(url_for("login"))
 
-    if user["role"] != "admin" and request.endpoint not in STAFF_ALLOWED_ENDPOINTS:
-        flash("You do not have permission to access that page.")
-        return redirect(url_for("add_order"))
+    if not endpoint_allowed(user, request.endpoint):
+        # Not one of their tasks. No telling-off: a page they are not
+        # given is simply not theirs, so they go to the first one that
+        # is - the same page signing in opens.
+        if wants_json_response() or request.path.startswith("/api/"):
+            return jsonify({"error": "Not one of your pages."}), 403
+        return redirect(landing_url(user))
 
     return None
 
@@ -9550,7 +9788,7 @@ def users():
             SELECT user_id, username, full_name, role, is_active, created_at,
                    phone_number, email, last_login_at, photo_version,
                    (photo_blob IS NOT NULL) AS has_photo,
-                   (password_view IS NOT NULL) AS password_kept
+                   (password_view IS NOT NULL) AS password_kept, tasks
             FROM users
             WHERE cafe_id = %s
             ORDER BY user_id DESC
@@ -9569,6 +9807,8 @@ def users():
             person["initials"] = "".join(w[0] for w in words[:2]).upper()
             person["last_active"] = ("Now" if person["user_id"] == me
                                      else last_active_label(person["last_login_at"]))
+            person["task_labels"] = ([] if person["role"] == "admin" else
+                                     [TASK_LABELS[key] for key in tasks_of(person)])
             counts[person["kind"]] = counts.get(person["kind"], 0) + 1
 
         # The owner first, then everyone else as they were added.
@@ -9622,6 +9862,14 @@ def add_user():
             flash("Invalid role.")
             return redirect(url_for("add_user"))
 
+        # The form marks that it sent the task boxes; one that did not
+        # (a script, an older page) gives the role's usual pages.
+        tasks_sent = bool(request.form.get("tasks_sent"))
+        tasks = form_tasks()
+        if role != "admin" and tasks_sent and not tasks:
+            flash("Tick at least one task, so they have a page to open.")
+            return redirect(url_for("add_user"))
+
         connection = None
         cursor = None
         try:
@@ -9633,8 +9881,8 @@ def add_user():
             cursor.execute("""
                 INSERT INTO users
                     (username, password_hash, password_view, full_name, role,
-                     is_active, phone_number, email, cafe_id)
-                VALUES (%s, %s, %s, %s, %s, 1, %s, %s, %s)
+                     is_active, phone_number, email, cafe_id, tasks)
+                VALUES (%s, %s, %s, %s, %s, 1, %s, %s, %s, %s)
             """, (
                 username,
                 generate_password_hash(password),
@@ -9644,6 +9892,7 @@ def add_user():
                 phone_number or None,
                 email or None,
                 require_cafe_session(),
+                (",".join(tasks) if role != "admin" and tasks_sent else None),
             ))
             connection.commit()
             flash(f"User '{username}' created successfully.")
@@ -9665,7 +9914,9 @@ def add_user():
             if connection:
                 connection.close()
 
-    return render_template("user_form.html", user=None)
+    return render_template("user_form.html", user=None, tasks=TASKS,
+                           chosen=list(DEFAULT_TASKS),
+                           default_tasks=list(DEFAULT_TASKS))
 
 
 @app.route("/users/<int:user_id>/password", methods=["POST"])
@@ -9732,7 +9983,7 @@ def edit_user(user_id):
         # other café just by changing the id in the URL.
         cursor.execute("""
             SELECT user_id, username, full_name, role, is_active,
-                   phone_number, email
+                   phone_number, email, tasks
             FROM users
             WHERE user_id = %s AND cafe_id = %s
         """, (user_id, require_cafe_session()))
@@ -9754,6 +10005,19 @@ def edit_user(user_id):
             if not full_name or role not in {"admin", "manager", "cashier", "staff"}:
                 flash("Please provide valid user details.")
                 return redirect(url_for("edit_user", user_id=user_id))
+
+            tasks_sent = bool(request.form.get("tasks_sent"))
+            tasks = form_tasks()
+            if role != "admin" and tasks_sent and not tasks:
+                flash("Tick at least one task, so they have a page to open.")
+                return redirect(url_for("edit_user", user_id=user_id))
+            if role == "admin":
+                tasks_text = None
+            elif tasks_sent:
+                tasks_text = ",".join(tasks)
+            else:
+                # Not on the form that was sent: left as they were.
+                tasks_text = user.get("tasks")
 
             try:
                 phone_number = clean_phone(phone_country, phone_number)
@@ -9793,7 +10057,7 @@ def edit_user(user_id):
                     UPDATE users
                     SET full_name=%s, role=%s, is_active=%s,
                         phone_number=%s, email=%s, password_hash=%s,
-                        password_view=%s
+                        password_view=%s, tasks=%s
                     WHERE user_id=%s AND cafe_id=%s
                 """, (
                     full_name, role, is_active,
@@ -9801,17 +10065,18 @@ def edit_user(user_id):
                     email or None,
                     generate_password_hash(new_password),
                     None if own else seal_password(new_password),
+                    tasks_text,
                     user_id, require_cafe_session()
                 ))
             else:
                 cursor.execute("""
                     UPDATE users
                     SET full_name=%s, role=%s, is_active=%s,
-                        phone_number=%s, email=%s
+                        phone_number=%s, email=%s, tasks=%s
                     WHERE user_id=%s AND cafe_id=%s
                 """, (
                     full_name, role, is_active, phone_number or None,
-                    email or None,
+                    email or None, tasks_text,
                     user_id, require_cafe_session()
                 ))
 
@@ -9826,7 +10091,10 @@ def edit_user(user_id):
 
             return redirect(url_for("users"))
 
-        return render_template("user_form.html", user=user)
+        return render_template("user_form.html", user=user, tasks=TASKS,
+                               chosen=(list(DEFAULT_TASKS) if user["role"] == "admin"
+                                       else tasks_of(user)),
+                               default_tasks=list(DEFAULT_TASKS))
 
     finally:
         if cursor:
@@ -10080,6 +10348,12 @@ def get_cafe_branding(cafe_id):
     if not cafe_id:
         return defaults
 
+    # The customer's pages ask this for every phone. Kept under the
+    # cafe's key, so saving a new name or logo forgets it straight away.
+    held = cache_get("brand:%s" % cafe_id)
+    if held is not None:
+        return held
+
     connection = None
     cursor = None
     try:
@@ -10097,7 +10371,8 @@ def get_cafe_branding(cafe_id):
         """, (cafe_id,))
         row = cursor.fetchone()
     except mysql.connector.Error:
-        # Branding must never take a page down.
+        # Branding must never take a page down. (Not remembered: the next
+        # page asks again.)
         app.logger.exception("branding lookup failed")
         return defaults
     finally:
@@ -10110,7 +10385,7 @@ def get_cafe_branding(cafe_id):
         return defaults
 
     version = row["branding_version"] or 1
-    return {
+    found = {
         "cafe_name": row["cafe_name"] or defaults["cafe_name"],
         "brand_name": (row["brand_name"] or "").strip() or DEFAULT_BRAND_NAME,
         "brand_tagline": ((row["brand_tagline"] or "").strip()
@@ -10124,6 +10399,8 @@ def get_cafe_branding(cafe_id):
             if row["has_login_photo"] else ""
         ),
     }
+    cache_put("brand:%s" % cafe_id, found)
+    return found
 
 
 @app.route("/settings/branding", methods=["GET", "POST"])
@@ -10512,9 +10789,26 @@ TUTORIAL_ADMIN = [_WELCOME, _step(
 TUTORIAL_STAFF = [_WELCOME] + _COUNTER + [_PROFILE]
 
 
-def tutorial_for(role):
-    """The tour this person should be given."""
-    return TUTORIAL_ADMIN if role == "admin" else TUTORIAL_STAFF
+# Which task each step of the staff tour shows off.
+_TOUR_TASK = {"[data-tour=categories]": "categories",
+              "[data-tour=foods]": "foods",
+              "[data-tour=inventory]": "inventory",
+              "[data-tour=add_order]": "new_order",
+              "[data-tour=kitchen]": "kitchen",
+              "[data-tour=billing]": "billing"}
+
+
+def tutorial_for(role, user=None):
+    """
+    The tour this person should be given: for a teammate, only the steps
+    about pages they have - a cashier given Billing is not walked to a
+    Kitchen link their sidebar does not have.
+    """
+    if role == "admin":
+        return TUTORIAL_ADMIN
+    mine = tasks_of(user) if user else list(DEFAULT_TASKS)
+    return [step for step in TUTORIAL_STAFF
+            if _TOUR_TASK.get(step["at"]) in (None,) + tuple(mine)]
 
 
 @app.context_processor
@@ -10530,7 +10824,7 @@ def inject_tutorial():
         return {"tutorial_steps": [], "tutorial_due": False}
 
     return {
-        "tutorial_steps": tutorial_for(user["role"]),
+        "tutorial_steps": tutorial_for(user["role"], user),
         "tutorial_due": not user.get("tutorial_seen"),
     }
 
@@ -10823,6 +11117,40 @@ def tax_settings():
             cursor.close()
         if connection:
             connection.close()
+
+
+@app.route("/settings/table-ordering", methods=["POST"])
+def table_ordering_switch():
+    """
+    Pause or resume ordering from the table QR.
+
+    Everybody who works there can: it is the kitchen that is swamped or
+    the cashier who is closing up, not only the owner. The customer's
+    menu still shows, with a kind word to order at the counter.
+    """
+    wanted = 1 if request.form.get("open") == "1" else 0
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cafe_id = require_cafe_session()
+        cursor.execute("UPDATE cafes SET qr_ordering = %s WHERE cafe_id = %s",
+                       (wanted, cafe_id))
+        connection.commit()
+    except mysql.connector.Error as error:
+        flash(database_error(error, "switching table ordering"))
+        return redirect(came_from())
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+    flash("Table ordering is on - customers can order from the QR again."
+          if wanted else
+          "Table ordering is paused. Customers who scan the QR are asked, "
+          "kindly, to order at the counter.")
+    return redirect(came_from())
 
 
 @app.route("/settings/packing", methods=["GET", "POST"])
@@ -11123,20 +11451,28 @@ def public_menu(token):
         if cafe is None:
             return render_template("public_gone.html"), 404
 
-        cursor.execute("""
-            SELECT f.food_id, f.food_name, f.price, f.description, f.diet,
-                   f.image_version, (f.image_blob IS NOT NULL) AS has_image,
-                   COALESCE(c.category_name, 'Other') AS category_name,
-                   COALESCE(i.quantity, 0) AS stock
-            FROM foods f
-            LEFT JOIN categories c ON c.category_id = f.category_id
-            LEFT JOIN inventory i ON i.food_id = f.food_id
-            WHERE f.user_id = %s
-              AND f.availability = 1
-              AND COALESCE(i.quantity, 0) > 0
-            ORDER BY c.category_name, f.food_name
-        """, (cafe["owner_user_id"],))
-        foods = cursor.fetchall()
+        # The dishes, remembered for a few seconds for every table at
+        # once, and forgotten the moment an order or a save moves stock.
+        # An order is checked against the shelf itself when it is sent,
+        # so a dish that sold out in those seconds cannot be oversold.
+        foods = cache_get("qrmenu:%s" % cafe["cafe_id"])
+        if foods is None:
+            cursor.execute("""
+                SELECT f.food_id, f.food_name, f.price, f.description, f.diet,
+                       f.image_version, (f.image_blob IS NOT NULL) AS has_image,
+                       COALESCE(c.category_name, 'Other') AS category_name,
+                       COALESCE(i.quantity, 0) AS stock
+                FROM foods f
+                LEFT JOIN categories c ON c.category_id = f.category_id
+                LEFT JOIN inventory i ON i.food_id = f.food_id
+                WHERE f.user_id = %s
+                  AND f.availability = 1
+                  AND COALESCE(i.quantity, 0) > 0
+                ORDER BY c.category_name, f.food_name
+            """, (cafe["owner_user_id"],))
+            foods = cursor.fetchall()
+            foods = [dict(row) for row in foods]
+            cache_put("qrmenu:%s" % cafe["cafe_id"], foods)
 
         return render_template(
             "public_menu.html",
@@ -11153,6 +11489,11 @@ def public_menu(token):
             tax_percent=get_tax_percent(cafe["cafe_id"]),
             tax_rate=float(tax_multiplier(cafe["cafe_id"])),
             discount_rate=float(discount_multiplier(cafe["cafe_id"])),
+            ordering_open=table_ordering_open(cafe),
+            paused_message=TABLE_ORDERING_PAUSED,
+            takeaway=dict(
+                amount=float(get_packing(cafe["cafe_id"])["takeaway"]["amount"]),
+                mode=get_packing(cafe["cafe_id"])["takeaway"]["mode"]),
         )
     finally:
         if cursor:
@@ -11177,9 +11518,14 @@ def public_place_order(token):
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
 
-        cafe = cafe_for_token(cursor, token)
+        cafe = cafe_for_token(cursor, token, fresh=True)
         if cafe is None:
             return render_template("public_gone.html"), 404
+
+        # Paused by the cafe: nothing is taken, and the menu says why.
+        if not table_ordering_open(cafe):
+            flash(TABLE_ORDERING_PAUSED)
+            return redirect(url_for("public_menu", token=token))
 
         # Before the menu is read, before stock is touched, and before
         # anything takes the per-cafe lock that orders queue on. This
@@ -11209,9 +11555,16 @@ def public_place_order(token):
             if field.startswith("quantity_"):
                 wanted[field[len("quantity_"):]] = value
 
+        # Eaten here or taken away - there is no delivery to a table. A
+        # takeaway carries the cafe's packing charge, as at the counter.
+        order_type = order_type_of(request.form.get("order_type"))
+        if order_type not in TABLE_ORDER_TYPES:
+            order_type = "dine_in"
+
         try:
             foods = available_foods_for(cursor, cafe["owner_user_id"])
             lines = collect_order_items(foods, wanted)
+            units = sum(int(line["quantity"]) for line in lines)
             result = write_order(
                 cursor,
                 cafe["owner_user_id"],
@@ -11220,6 +11573,9 @@ def public_place_order(token):
                 tax_multiplier(cafe["cafe_id"]),
                 source="qr",
                 discount_mult=discount_multiplier(cafe["cafe_id"]),
+                order_type=order_type,
+                packing=packing_charge(order_type, units,
+                                       get_packing(cafe["cafe_id"])),
             )
             # Counted only once the order is real. An order that fails
             # for its own reasons - the last sandwich went while the
@@ -11227,6 +11583,8 @@ def public_place_order(token):
             # table that tried.
             note_qr_order(cursor, token, request_source())
             connection.commit()
+            # Stock moved: the menu other tables are shown is read again.
+            cache_drop("qrmenu:%s" % cafe["cafe_id"])
         except OrderError as error:
             connection.rollback()
             flash(str(error))
@@ -11275,24 +11633,39 @@ def public_order_placed(token, ref):
         if cafe is None:
             return render_template("public_gone.html"), 404
 
+        # The order and its lines in one trip.
         cursor.execute("""
-            SELECT order_id, order_date, order_day, total_amount,
-                   order_status, daily_no, public_ref
-            FROM orders
-            WHERE public_ref = %s AND user_id = %s AND source = 'qr'
+            SELECT o.order_id, o.order_date, o.order_day, o.total_amount,
+                   o.order_status, o.daily_no, o.public_ref, o.order_type,
+                   o.packing,
+                   oi.order_item_id, oi.item_name, oi.quantity, oi.price,
+                   oi.subtotal, oi.made, f.diet
+            FROM orders o
+            LEFT JOIN order_items oi ON oi.order_id = o.order_id
+            LEFT JOIN foods f ON f.food_id = oi.food_id
+            WHERE o.public_ref = %s AND o.user_id = %s AND o.source = 'qr'
+            ORDER BY oi.order_item_id
         """, (ref, cafe["owner_user_id"]))
-        order = cursor.fetchone()
+        rows = cursor.fetchall()
 
-        if order is None:
+        if not rows:
             return render_template("public_gone.html"), 404
 
-        cursor.execute("""
-            SELECT order_item_id, item_name, quantity, price, subtotal, made
-            FROM order_items
-            WHERE order_id = %s
-            ORDER BY order_item_id
-        """, (order["order_id"],))
-        items = cursor.fetchall()
+        order_keys = ("order_id", "order_date", "order_day", "total_amount",
+                      "order_status", "daily_no", "public_ref", "order_type",
+                      "packing")
+        order = dict((key, rows[0][key]) for key in order_keys)
+        items = [dict((key, row[key]) for key in
+                      ("order_item_id", "item_name", "quantity", "price",
+                       "subtotal", "made", "diet"))
+                 for row in rows if row["order_item_id"] is not None]
+
+        order["type_label"] = ORDER_TYPE_LABELS.get(
+            order_type_of(order.get("order_type")), "Dine-in")
+        # Asked only while the kitchen still has it: once it is ready, a
+        # busy kitchen is nobody's concern at this table.
+        busy = (order["order_status"] == "Pending"
+                and kitchen_is_busy(cursor, cafe["owner_user_id"]))
 
         # A finished order reads as all made, whatever the lines say. An
         # order closed with the Done button, or by the overnight sweep,
@@ -11302,13 +11675,16 @@ def public_order_placed(token, ref):
             for line in items:
                 line["made"] = 1
 
-        # What they said about it, if they have rated it already.
-        said = review_of(cursor, order["order_id"])
+        # What they said about it, if they have rated it already - which
+        # they can only have done once it was ready.
+        said = (review_of(cursor, order["order_id"])
+                if order["order_status"] == "Completed" else None)
 
         # The rest of today's, so the number they were given an hour ago
         # is on the page in front of them rather than in a tab they have
-        # since closed.
+        # since closed. Asked only when this phone has others to show.
         held = remembered_refs(token)
+        others = [other for other in held if other != ref]
         answer = make_response(render_template(
             "public_placed.html",
             token=token,
@@ -11317,8 +11693,8 @@ def public_order_placed(token, ref):
             order=order,
             items=items,
             review=said,
-            mine=[other for other in table_orders(cursor, cafe, held)
-                  if other["public_ref"] != ref],
+            busy=busy,
+            mine=table_orders(cursor, cafe, others),
         ))
 
         # Reached by its own address - a reload after the cookie was
@@ -11361,28 +11737,29 @@ def public_order_status(token, ref):
         if cafe is None:
             return jsonify({"status": "gone"}), 404
 
+        # The order and its lines together: one trip, asked every few
+        # seconds by every table that is waiting.
         cursor.execute(
-            "SELECT order_id, order_status FROM orders "
-            "WHERE public_ref = %s AND user_id = %s AND source = 'qr'",
+            "SELECT o.order_status, oi.order_item_id, oi.made "
+            "FROM orders o "
+            "LEFT JOIN order_items oi ON oi.order_id = o.order_id "
+            "WHERE o.public_ref = %s AND o.user_id = %s AND o.source = 'qr' "
+            "ORDER BY oi.order_item_id",
             (ref, cafe["owner_user_id"])
         )
-        order = cursor.fetchone()
-        if order is None:
+        rows = cursor.fetchall()
+        if not rows:
             return jsonify({"status": "gone"}), 404
 
-        finished = order["order_status"] == "Completed"
-
-        cursor.execute(
-            "SELECT order_item_id, made FROM order_items "
-            "WHERE order_id = %s ORDER BY order_item_id",
-            (order["order_id"],))
+        status = rows[0]["order_status"]
+        finished = status == "Completed"
 
         return jsonify({
-            "status": order["order_status"],
+            "status": status,
             "items": [
                 {"id": row["order_item_id"],
                  "made": bool(row["made"]) or finished}
-                for row in cursor.fetchall()
+                for row in rows if row["order_item_id"] is not None
             ],
         })
     finally:

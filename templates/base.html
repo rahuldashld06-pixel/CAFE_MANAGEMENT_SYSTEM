@@ -200,11 +200,13 @@
                     <i class="bi bi-search" aria-hidden="true"></i>
                 </button>
 
+                {% if user_can('new_order') %}
                 <a href="{{ url_for('add_order') }}" class="topbar-create"
                    title="Take a new order">
                     <i class="bi bi-plus-lg" aria-hidden="true"></i>
                     <span>New order</span>
                 </a>
+                {% endif %}
 
                 {# Hidden by script where the browser has no Fullscreen
                    API - an iPhone in Safari has none, and there the
@@ -284,6 +286,23 @@
                         <a href="{{ url_for('change_password') }}" class="profile-dropdown__item">
                             <i class="bi bi-shield-lock"></i><span>Change Password</span>
                         </a>
+
+                        {# Anybody on shift can pause ordering from the table
+                           QR - the kitchen that is swamped, the cashier who
+                           is closing up. Customers then see a kind note to
+                           order at the counter. #}
+                        {% set qr_on = cafe_branding is not defined or cafe_branding.qr_ordering is not defined or cafe_branding.qr_ordering %}
+                        <div class="profile-dropdown__section">Service</div>
+                        <form method="POST" action="{{ url_for('table_ordering_switch') }}" class="qr-switch-form">
+                            <input type="hidden" name="open" value="{{ '0' if qr_on else '1' }}">
+                            <button type="submit" class="profile-dropdown__item qr-switch"
+                                    role="switch" aria-checked="{{ 'true' if qr_on else 'false' }}"
+                                    id="qrSwitch">
+                                <i class="bi bi-qr-code-scan"></i>
+                                <span>Table QR ordering</span>
+                                <span class="qr-switch__state {{ 'is-on' if qr_on }}">{{ "On" if qr_on else "Paused" }}</span>
+                            </button>
+                        </form>
 
                         {% if session.get('role') == 'admin' %}
                         <div class="profile-dropdown__section">Customize</div>
@@ -368,7 +387,9 @@
 
             <nav class="sidebar-nav" aria-label="Sections"><!--nav:start-->
 
-                {% if session.get('role') == 'admin' %}
+                {# Each link is a task. A teammate sees the ones they were
+                   given; an admin sees them all. #}
+                {% if user_can('dashboard') %}
                 <a href="{{ url_for('home') }}"
                    data-tour="home"
                    class="nav-link {{ 'active' if request.endpoint in ['home', 'dashboard'] else '' }}">
@@ -376,62 +397,84 @@
                 </a>
                 {% endif %}
 
+                {% if user_can('new_order') or user_can('kitchen') or user_can('billing') or user_can('reviews') %}
                 <div class="nav-section" role="presentation">Service</div>
+                {% endif %}
 
+                {% if user_can('new_order') %}
                 <a href="{{ url_for('add_order') }}"
                    data-tour="add_order"
                    class="nav-link {{ 'active' if request.endpoint in ['add_order'] else '' }}">
                     <i class="bi bi-cart-plus"></i><span>New Order</span>
                 </a>
+                {% endif %}
 
-                {# The screen left on in the kitchen. Staff work, so it
-                   is offered to everyone who takes orders. #}
+                {# The screen left on in the kitchen. #}
+                {% if user_can('kitchen') %}
                 <a href="{{ url_for('kitchen_display') }}"
                    data-tour="kitchen"
                    class="nav-link {{ 'active' if request.endpoint in ['kitchen_display', 'order_details'] else '' }}">
                     <i class="bi bi-fire"></i><span>Kitchen</span>
                 </a>
+                {% endif %}
 
+                {% if user_can('billing') %}
                 <a href="{{ url_for('billing') }}"
                    data-tour="billing"
                     class="nav-link {{ 'active' if request.endpoint in ['billing'] else '' }}">
                     <i class="bi bi-credit-card-2-front"></i><span>Billing</span>
                 </a>
+                {% endif %}
 
-                {# What customers said, for everybody who serves them. #}
+                {# What customers said. #}
+                {% if user_can('reviews') %}
                 <a href="{{ url_for('reviews') }}"
                    class="nav-link {{ 'active' if request.endpoint in ['reviews'] else '' }}">
                     <i class="bi bi-star"></i><span>Reviews</span>
                 </a>
+                {% endif %}
 
+                {% if user_can('categories') or user_can('foods') or user_can('inventory') %}
                 <div class="nav-section" role="presentation">Menu</div>
+                {% endif %}
 
+                {% if user_can('categories') %}
                 <a href="{{ url_for('categories') }}"
                    data-tour="categories"
                    class="nav-link {{ 'active' if request.endpoint in ['categories', 'add_category', 'edit_category'] else '' }}">
                     <i class="bi bi-tags"></i><span>Categories</span>
                 </a>
+                {% endif %}
 
+                {% if user_can('foods') %}
                 <a href="{{ url_for('foods') }}"
                    data-tour="foods"
                    class="nav-link {{ 'active' if request.endpoint in ['foods', 'add_food', 'edit_food'] else '' }}">
                     <i class="bi bi-egg-fried"></i><span>Food Management</span>
                 </a>
+                {% endif %}
+                {% if user_can('inventory') %}
                 <a href="{{ url_for('inventory') }}"
                    data-tour="inventory"
                    class="nav-link {{ 'active' if request.endpoint in ['inventory', 'update_stock'] else '' }}">
                     <i class="bi bi-boxes"></i><span>Inventory</span>
                 </a>
+                {% endif %}
 
-                {% if session.get('role') == 'admin' %}
+                {% if user_can('reports') or session.get('role') == 'admin' %}
                 <div class="nav-section" role="presentation">Manage</div>
+                {% endif %}
 
+                {% if user_can('reports') %}
                 <a href="{{ url_for('reports') }}"
                    data-tour="reports"
                    class="nav-link {{ 'active' if request.endpoint in ['reports'] else '' }}">
                     <i class="bi bi-bar-chart-line"></i>
                     <span>Reports</span>
                 </a>
+                {% endif %}
+                {# Not a task: whoever manages the team can make admins. #}
+                {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('users') }}"
                    data-tour="users"
                    class="nav-link {{ 'active' if request.endpoint in ['users', 'add_user', 'edit_user'] else '' }}">
