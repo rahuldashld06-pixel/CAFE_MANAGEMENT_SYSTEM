@@ -2133,6 +2133,9 @@ _COLUMN_MIGRATIONS = [
     ("bills", "packing", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"),
     # The name a customer gave with their review.
     ("reviews", "reviewer_name", "VARCHAR(60) NULL"),
+    # A password an admin set for somebody, sealed so the admins can read
+    # it again. Emptied the moment its owner chooses their own.
+    ("users", "password_view", "TEXT NULL"),
     # What a takeaway or a delivery container costs, and whether that is
     # once per order or once per item. Nothing until the owner says.
     ("cafes", "takeaway_packing", "DECIMAL(8,2) NOT NULL DEFAULT 0.00"),
@@ -8479,6 +8482,9 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
+        # None when the form did not have the field at all; "" when it
+        # was left empty, which the form itself does not allow.
+        typed_cafe = request.form.get("cafe_name")
 
         connection = None
         cursor = None
@@ -8518,6 +8524,8 @@ def login():
             if (
                 user
                 and user["is_active"]
+                and (typed_cafe is None
+                     or cafe_name_matches(cursor, user.get("cafe_id"), typed_cafe))
                 and check_password_hash(user["password_hash"], password)
             ):
                 # A right answer wipes the slate, so a busy counter that
@@ -8561,6 +8569,7 @@ def login():
                     session["otp_remember"] = bool(
                         request.form.get("remember"))
                     session["otp_login_name"] = username
+                    session["otp_login_cafe"] = typed_cafe or ""
                     if next_is_safe:
                         session["otp_next"] = next_page
 
@@ -8593,6 +8602,7 @@ def login():
 
                 @after_this_request
                 def _keep_the_name(response):
+                    remember_cafe(response, typed_cafe, wanted)
                     return remember_login(response, typed_name, wanted)
 
                 # The form carried what clock this screen is on. Settled
@@ -8628,6 +8638,10 @@ def login():
             if failures >= LOGIN_MAX_FAILURES:
                 flash("Too many failed sign-in attempts. Try again in %s."
                       % describe_lockout(LOGIN_LOCKOUT_SECONDS))
+            elif typed_cafe is not None:
+                # One message for all three, for the same reason as below.
+                flash("That café name, username or password is not right. "
+                      "Check all three and try again.")
             else:
                 flash("Invalid username or password.")
 
@@ -8639,7 +8653,9 @@ def login():
             if connection:
                 connection.close()
 
-    return render_template("login.html", remembered_login=remembered_login())
+    return render_template("login.html", remembered_login=remembered_login(),
+                           remembered_cafe=remembered_cafe(),
+                           typed_cafe=request.form.get("cafe_name", ""))
 
 
 @app.route("/login/verify", methods=["GET", "POST"])
@@ -8722,6 +8738,7 @@ def login_verify_otp():
                 # screen never asks again, so the answer is carried.
                 remembered = session.get("otp_remember")
                 typed_name = session.get("otp_login_name", "")
+                typed_cafe = session.get("otp_login_cafe", "")
                 session.clear()
                 session.permanent = True
                 session["user_id"] = user["user_id"]
@@ -8732,6 +8749,7 @@ def login_verify_otp():
 
                 @after_this_request
                 def _keep_the_name(response):
+                    remember_cafe(response, typed_cafe, remembered)
                     return remember_login(response, typed_name, remembered)
 
                 # Carried across from the sign-in form, because the code
@@ -8956,7 +8974,7 @@ def forgot_password():
             # in a mood to also remember which of the two they chose.
             user = find_sign_in(
                 cursor, username,
-                "user_id, full_name, is_active, phone_number")
+                "user_id, full_name, is_active, phone_number, role")
 
             # Username + full name alone was NOT a security check: full names
             # are displayed throughout the UI (order lists, user management),
@@ -8990,9 +9008,22 @@ def forgot_password():
                 )
                 return redirect(url_for("forgot_password"))
 
+            # Only an owner or an admin resets their own password here.
+            # Everybody else's is set by them, from User Management - so
+            # a till's cashier cannot lock the owner out of knowing it.
+            # Said only after name, full name and number all matched, so
+            # it tells nobody anything they had not just proved.
+            if user["role"] != "admin":
+                flash(
+                    "Staff passwords are looked after by your café's owner "
+                    "or admin. Ask them to set a new one for you from User "
+                    "Management - it only takes a moment."
+                )
+                return redirect(url_for("forgot_password"))
+
             cursor.execute("""
                 UPDATE users
-                SET password_hash=%s
+                SET password_hash=%s, password_view=NULL
                 WHERE user_id=%s
             """, (generate_password_hash(new_password), user["user_id"]))
             connection.commit()
@@ -9010,6 +9041,95 @@ def forgot_password():
                 connection.close()
 
     return render_template("forgot_password.html")
+
+
+# ---------------------------------------------------------------------
+# A password an admin set, readable again by the admins
+#
+# An owner who sets up the till's accounts is asked for them again: "what
+# did I give Sam?" The login itself is still checked against a one-way
+# hash, as every password is. Beside it, a password set by an admin for
+# somebody else is also kept sealed - encrypted with a key that is not
+# in the database (PASSWORD_VIEW_KEY, or one drawn from SECRET_KEY) - so
+# the admins can read it again behind the eye on User Management.
+#
+# Only a password an admin chose for someone else. The owner's own, an
+# admin's own, and any password a person sets for themselves - Change
+# Password, or a reset - are never kept this way, and setting one throws
+# away what was kept: a password somebody chose is theirs, and may be the
+# one they use everywhere else.
+# ---------------------------------------------------------------------
+def _password_view_key():
+    configured = os.environ.get("PASSWORD_VIEW_KEY", "").strip()
+    if configured:
+        return configured.encode("ascii")
+    digest = hashlib.sha256(
+        b"cafora-password-view\x00" + str(app.secret_key).encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
+def seal_password(plain):
+    """The password, encrypted for keeping; None if it cannot be."""
+    try:
+        from cryptography.fernet import Fernet
+        return Fernet(_password_view_key()).encrypt(
+            plain.encode("utf-8")).decode("ascii")
+    except Exception:                   # noqa: BLE001 - never block a save over this
+        app.logger.warning("A set password could not be sealed for viewing.")
+        return None
+
+
+def open_password(sealed):
+    """The password back from what seal_password kept, or None."""
+    if not sealed:
+        return None
+    try:
+        from cryptography.fernet import Fernet, InvalidToken
+    except ImportError:
+        return None
+    try:
+        return Fernet(_password_view_key()).decrypt(
+            sealed.encode("ascii")).decode("utf-8")
+    except (InvalidToken, ValueError, UnicodeError):
+        # Sealed under another key - SECRET_KEY was changed since.
+        return None
+
+
+# ---------------------------------------------------------------------
+# Signing in names the cafe
+#
+# The sign-in form asks which cafe or restaurant first, then who. The
+# name decides whose place it is; the username, whose account there -
+# the owner, an admin, or one of their staff. A username belongs to one
+# cafe only, so the name is checked against the account's own cafe: the
+# name it registered with, or the name it shows in its corner. Typed
+# however it comes - "moms cafe" is Mom's Café.
+#
+# It is not a secret: it is on the bill and on the door. A form that
+# does not send it at all - one cached from before, or a script - signs
+# in on the username alone, as every sign-in did before.
+# ---------------------------------------------------------------------
+def cafe_name_key(name):
+    """A cafe's name with case, accents, spacing and punctuation ignored."""
+    plain = unicodedata.normalize("NFKD", name or "")
+    plain = "".join(ch for ch in plain if not unicodedata.combining(ch))
+    return "".join(ch for ch in plain.casefold() if ch.isalnum())
+
+
+def cafe_name_matches(cursor, cafe_id, typed):
+    wanted = cafe_name_key(typed)
+    if not wanted or not cafe_id:
+        return False
+    cursor.execute(
+        "SELECT cafe_name, brand_name FROM cafes WHERE cafe_id = %s", (cafe_id,))
+    row = cursor.fetchone()
+    if not row:
+        return False
+    names = [row["cafe_name"], row["brand_name"]]
+    return any(cafe_name_key(name) == wanted for name in names if name)
+
+
+REMEMBERED_CAFE_COOKIE = "cafora_cafe"
 
 
 def remember_login(response, name, wanted):
@@ -9039,9 +9159,30 @@ def remember_login(response, name, wanted):
     return response
 
 
+def remember_cafe(response, cafe, wanted):
+    """The cafe's name kept beside the sign-in name, or forgotten with it."""
+    cafe = " ".join((cafe or "").split())[:150]
+    if wanted and cafe:
+        response.set_cookie(
+            REMEMBERED_CAFE_COOKIE, cafe,
+            max_age=REMEMBERED_LOGIN_DAYS * 24 * 60 * 60,
+            path=url_for("login"),
+            httponly=True,
+            samesite="Lax",
+            secure=bool(app.config.get("SESSION_COOKIE_SECURE")),
+        )
+    else:
+        response.delete_cookie(REMEMBERED_CAFE_COOKIE, path=url_for("login"))
+    return response
+
+
 def remembered_login():
     """The name kept from the last sign-in with the box ticked, if any."""
     return (request.cookies.get(REMEMBERED_LOGIN_COOKIE) or "").strip()[:254]
+
+
+def remembered_cafe():
+    return (request.cookies.get(REMEMBERED_CAFE_COOKIE) or "").strip()[:150]
 
 
 # ==========================================
@@ -9379,7 +9520,7 @@ def change_password():
 
             cursor.execute("""
                 UPDATE users
-                SET password_hash=%s
+                SET password_hash=%s, password_view=NULL
                 WHERE user_id=%s
             """, (generate_password_hash(new_password), user["user_id"]))
             connection.commit()
@@ -9408,7 +9549,8 @@ def users():
         cursor.execute("""
             SELECT user_id, username, full_name, role, is_active, created_at,
                    phone_number, email, last_login_at, photo_version,
-                   (photo_blob IS NOT NULL) AS has_photo
+                   (photo_blob IS NOT NULL) AS has_photo,
+                   (password_view IS NOT NULL) AS password_kept
             FROM users
             WHERE cafe_id = %s
             ORDER BY user_id DESC
@@ -9490,12 +9632,13 @@ def add_user():
             # failed with "Column count doesn't match value count".
             cursor.execute("""
                 INSERT INTO users
-                    (username, password_hash, full_name, role,
+                    (username, password_hash, password_view, full_name, role,
                      is_active, phone_number, email, cafe_id)
-                VALUES (%s, %s, %s, %s, 1, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, 1, %s, %s, %s)
             """, (
                 username,
                 generate_password_hash(password),
+                seal_password(password),
                 full_name,
                 role,
                 phone_number or None,
@@ -9523,6 +9666,53 @@ def add_user():
                 connection.close()
 
     return render_template("user_form.html", user=None)
+
+
+@app.route("/users/<int:user_id>/password", methods=["POST"])
+def reveal_password(user_id):
+    """
+    The password an admin set for this person, for the eye on User
+    Management. Asked for by POST, so it carries the form token and no
+    link or prefetch can fetch it; never cached; admins only, and only
+    for somebody in their own cafe.
+    """
+    denied = require_role("admin")
+    if denied:
+        return jsonify({"ok": False, "message": "Only an admin can see this."}), 403
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT user_id, username, password_view FROM users "
+            "WHERE user_id = %s AND cafe_id = %s",
+            (user_id, require_cafe_session()))
+        person = cursor.fetchone()
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+    if person is None:
+        answer = jsonify({"ok": False, "message": "No such person here."}), 404
+    else:
+        shown = open_password(person["password_view"])
+        if shown is None:
+            answer = jsonify({
+                "ok": False,
+                "message": "Their own password - they chose it, so it is not "
+                           "kept. Set a new one from Edit to see it here.",
+            }), 200
+        else:
+            app.logger.info("Password shown: user %s viewed user %s's password",
+                            session.get("user_id"), person["user_id"])
+            answer = jsonify({"ok": True, "password": shown}), 200
+    response = make_response(answer)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/users/<int:user_id>/edit", methods=["GET", "POST"])
@@ -9596,16 +9786,21 @@ def edit_user(user_id):
                 if len(new_password) < 8:
                     flash("New password must be at least 8 characters.")
                     return redirect(url_for("edit_user", user_id=user_id))
+                # Kept for reading again only when it is somebody else's:
+                # an admin changing their own here is choosing their own.
+                own = user_id == session.get("user_id")
                 cursor.execute("""
                     UPDATE users
                     SET full_name=%s, role=%s, is_active=%s,
-                        phone_number=%s, email=%s, password_hash=%s
+                        phone_number=%s, email=%s, password_hash=%s,
+                        password_view=%s
                     WHERE user_id=%s AND cafe_id=%s
                 """, (
                     full_name, role, is_active,
                     phone_number or None,
                     email or None,
                     generate_password_hash(new_password),
+                    None if own else seal_password(new_password),
                     user_id, require_cafe_session()
                 ))
             else:

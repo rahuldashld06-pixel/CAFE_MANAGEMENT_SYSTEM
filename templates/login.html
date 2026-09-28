@@ -105,6 +105,22 @@
 
         <form method="POST" id="signInForm">
 
+            {# Which place first: the name decides whose cafe it is, the
+               username whose account there - owner, admin or staff. #}
+            <div class="field">
+                <label for="cafe_name">Café or restaurant name</label>
+                <input
+                    type="text"
+                    id="cafe_name"
+                    name="cafe_name"
+                    placeholder="e.g. The Coffee House"
+                    autocomplete="organization"
+                    maxlength="150"
+                    value="{{ typed_cafe or remembered_cafe or '' }}"
+                    required
+                    {% if not remembered_cafe %}autofocus{% endif %}>
+            </div>
+
             <div class="field">
                 <label for="username">Username or email</label>
                 <input
@@ -121,7 +137,7 @@
                        field pair because of the autocomplete names. #}
                     value="{{ request.form.get('username') or remembered_login or '' }}"
                     required
-                    {% if not remembered_login %}autofocus{% endif %}>
+                    {% if remembered_cafe and not remembered_login %}autofocus{% endif %}>
             </div>
 
             <div class="field">
@@ -133,7 +149,7 @@
                     placeholder="Your password"
                     autocomplete="current-password"
                     required
-                    {% if remembered_login %}autofocus{% endif %}>
+                    {% if remembered_cafe and remembered_login %}autofocus{% endif %}>
             </div>
 
             {# Without the box a sign-in ends after eight hours of nobody

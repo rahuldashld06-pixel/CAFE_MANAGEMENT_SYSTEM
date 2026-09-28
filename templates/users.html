@@ -287,6 +287,7 @@
         .team-table td.team-cell-user { display: none; }
         .team-table td.team-cell-role,
         .team-table td.team-cell-seen,
+        .team-table td.team-cell-pass,
         .team-table td.team-cell-status {
             grid-column: 1 / -1;
             display: inline-flex;
@@ -296,7 +297,8 @@
             font-size: 12.5px;
         }
         .team-table td.team-cell-role::before,
-        .team-table td.team-cell-seen::before {
+        .team-table td.team-cell-seen::before,
+        .team-table td.team-cell-pass::before {
             content: attr(data-label);
             color: var(--cream-faint);
             font-size: 11px;
@@ -305,6 +307,38 @@
             text-transform: uppercase;
         }
     }
+
+    /* The password an admin set, behind an eye. */
+    .pass-view { display: inline-flex; align-items: center; gap: 6px; }
+
+    .pass-view__text {
+        min-width: 92px;
+        padding: 3px 8px;
+        border-radius: 8px;
+        background: var(--espresso-900);
+        color: var(--cream);
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: 13px;
+        letter-spacing: .04em;
+        user-select: all;
+    }
+
+    .pass-view__eye {
+        display: inline-grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 8px;
+        background: none;
+        color: var(--cream-dim);
+        cursor: pointer;
+    }
+
+    .pass-view__eye:hover,
+    .pass-view__eye[aria-pressed="true"] { color: var(--cream); border-color: var(--copper); }
+
+    .pass-own { color: var(--cream-faint); font-size: 12.5px; }
 </style>
 
 <div class="page-header team-head">
@@ -349,6 +383,7 @@
                 <tr>
                     <th>Team member</th>
                     <th>Username</th>
+                    <th>Password</th>
                     <th>Role</th>
                     <th>Last active</th>
                     <th>Status</th>
@@ -380,6 +415,21 @@
                         </span>
                     </td>
                     <td class="team-cell-user">{{ u.username }}</td>
+                    <td class="team-cell-pass" data-label="Password">
+                        {% if u.password_kept %}
+                        <span class="pass-view">
+                            <code class="pass-view__text" aria-live="polite">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code>
+                            <button type="button" class="pass-view__eye" data-reveal="{{ u.user_id }}"
+                                    aria-pressed="false"
+                                    aria-label="Show {{ u.full_name or u.username }}'s password"
+                                    title="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </span>
+                        {% else %}
+                        <span class="pass-own" title="They chose this password themselves, so it is not kept. Set a new one from Edit to see it here.">Their own</span>
+                        {% endif %}
+                    </td>
                     <td class="team-cell-role" data-label="Role"><span class="team-role role-badge role-badge--{{ u.role }}">{{ u.role_label }}</span></td>
                     <td class="team-cell-seen" data-label="Last active">{{ u.last_active }}</td>
                     <td class="team-cell-status">
@@ -419,9 +469,9 @@
                     </td>
                 </tr>
             {% else %}
-                <tr><td colspan="6" class="team-none">No users found.</td></tr>
+                <tr><td colspan="7" class="team-none">No users found.</td></tr>
             {% endfor %}
-                <tr id="teamNone" hidden><td colspan="6" class="team-none">Nobody on the team matches that.</td></tr>
+                <tr id="teamNone" hidden><td colspan="7" class="team-none">Nobody on the team matches that.</td></tr>
             </tbody>
         </table>
     </div>
@@ -463,6 +513,47 @@
 </div>
 
 <script>
+// The eye beside a password an admin set: asked of the server each time
+// (never written into the page), shown for half a minute, then hidden.
+(function () {
+    var MASK = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+    [].forEach.call(document.querySelectorAll("[data-reveal]"), function (eye) {
+        var text = eye.parentNode.querySelector(".pass-view__text");
+        var timer = null;
+
+        function hide() {
+            clearTimeout(timer);
+            text.textContent = MASK;
+            eye.setAttribute("aria-pressed", "false");
+            eye.innerHTML = '<i class="bi bi-eye" aria-hidden="true"></i>';
+        }
+
+        eye.addEventListener("click", function () {
+            if (eye.getAttribute("aria-pressed") === "true") { hide(); return; }
+            eye.disabled = true;
+            fetch("/users/" + eye.getAttribute("data-reveal") + "/password", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {"X-CSRFToken": (window.CafeShell || {}).csrfToken || "",
+                          "X-Requested-With": "XMLHttpRequest"}
+            }).then(function (response) { return response.json(); })
+              .then(function (data) {
+                  if (data.ok) {
+                      text.textContent = data.password;
+                      eye.setAttribute("aria-pressed", "true");
+                      eye.innerHTML = '<i class="bi bi-eye-slash" aria-hidden="true"></i>';
+                      timer = setTimeout(hide, 30000);
+                  } else {
+                      text.textContent = "Not kept";
+                      text.title = data.message || "";
+                  }
+              })
+              .catch(function () { text.textContent = "Try again"; })
+              .then(function () { eye.disabled = false; });
+        });
+    });
+}());
+
 (function () {
     var search = document.getElementById("teamSearch");
     var role = document.getElementById("teamRole");

@@ -77,6 +77,23 @@ branding, fully isolated from the others.
   the best and the lowest named; the Reviews page - open to everyone who
   serves customers - has the averages, how the stars fall, and each
   review with who wrote it and the bill it was on.
+- **Signing in names the café.** The sign-in form asks for the café or
+  restaurant first, then the username or email and the password. The
+  name decides whose place it is - the one it registered with, or the
+  one it shows in its corner, typed in any case or spacing - and the
+  username whose account there. A wrong name is refused with the same
+  words as a wrong password, and counts towards the lockout the same
+  way. Remember me keeps the café's name too.
+- **Forgot password is for owners and admins.** Staff are told, kindly,
+  that their owner or admin sets a new one for them from User
+  Management; everyone can still change their own under Change Password.
+- **The eye on User Management.** A password an admin sets for a
+  teammate is shown behind an eye in the team list, fetched only when
+  the eye is pressed and hidden again after half a minute. It is kept
+  encrypted (`cryptography`'s Fernet, with `PASSWORD_VIEW_KEY` or a key
+  drawn from `SECRET_KEY`) beside the one-way hash that sign-in checks.
+  A password somebody chooses for themselves - the owner's own, Change
+  Password, a reset - is never kept, and choosing one discards what was.
 - **Help while an account is set up.** Register and Add User say "That
   username is already taken" as it is typed, and offer free ones near
   it. Every field where a password is chosen reads it as Weak, Medium or
@@ -668,9 +685,10 @@ python tests/menu_marks_test.py   # expect PASSED: 96   FAILED: 0
 python tests/compression_test.py  # expect PASSED: 32   FAILED: 0
 python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
 python tests/account_fields_browser_test.py # expect PASSED: 26  FAILED: 0
+python tests/sign_in_cafe_test.py # expect PASSED: 40   FAILED: 0
 ```
 
-All forty-seven run in memory against a SQLite stand-in — no database or
+All forty-eight run in memory against a SQLite stand-in — no database or
 network needed. The twenty-one that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
@@ -813,8 +831,11 @@ already being taken, and opens the bill where it can be read.
 ## Known limitations
 
 - **Usernames are unique platform-wide**, not per cafe. Two cafes cannot
-  both have a user called `admin`. Sign-in therefore needs only a
-  username and password, with no cafe selector.
+  both have a user called `admin`. The café's name on the sign-in form
+  is checked against the account's own café; a form that does not send
+  it at all (an older page, a script) signs in on the username alone.
+  Café names are not unique, and the name is not a secret, so it is a
+  check of the right place, not a second password.
 - **CSRF tokens are injected into forms by JavaScript** in `base.html`.
   Forms built dynamically after page load need the token added manually,
   and the app will not accept form submissions with JavaScript disabled.

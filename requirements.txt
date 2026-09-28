@@ -13,3 +13,6 @@ tzdata>=2024.1
 # Only used when REDIS_URL is set. Without it the app keeps its cache
 # in each worker's own memory and never imports this.
 redis>=5.0,<7
+# Seals a password an admin sets for a teammate, so the admins can read
+# it again on User Management (Fernet: AES with an HMAC).
+cryptography>=42,<47
