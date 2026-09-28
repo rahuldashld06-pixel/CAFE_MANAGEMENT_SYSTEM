@@ -4,364 +4,559 @@
 
 {% block content %}
 
-<div class="page-header">
+{% set w = report.window %}
+{% set k = report.kpis %}
+{% set comparable = w.first is not none and w.last is not none %}
+
+{# A figure's change against the period before. Everything it needs is
+   passed in: a macro does not see the block's own variables. #}
+{% macro trend(change, versus, comparable, worse_up=False) -%}
+    {%- if change is none -%}
+        <span class="kpi__none">{% if comparable %}Nothing earlier to compare with{% else %}Everything on record{% endif %}</span>
+    {%- else -%}
+        {%- set up = change > 0 -%}
+        {%- set kind = 'flat' if change == 0 else (('down' if up else 'up') if worse_up else ('up' if up else 'down')) -%}
+        <span class="kpi__trend kpi__trend--{{ kind }}">
+            <i class="bi {{ 'bi-dash' if change == 0 else ('bi-arrow-up-right' if up else 'bi-arrow-down-right') }}"></i>{{ "%.1f"|format(change|abs) }}%
+        </span>
+        {% if versus %}<span class="kpi__versus">{{ versus }}</span>{% endif %}
+    {%- endif -%}
+{%- endmacro %}
+
+<style>
+    /* ---- The period, in the header ---- */
+    .report-period {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin: 0;
+    }
+
+    .report-period__dates {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .report-period__dates[hidden],
+    #reportApply[hidden] { display: none; }
+
+    .report-period__dates input {
+        height: 42px;
+        padding: 0 10px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-900);
+        color: var(--cream);
+        font: inherit;
+        font-size: 13px;
+    }
+
+    .report-shown {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 4px 11px;
+        border-radius: 999px;
+        background: var(--espresso-850);
+        color: var(--cream-dim);
+        font-size: 12.5px;
+        font-weight: 700;
+    }
+
+    .report-icon-btn {
+        display: inline-grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-900);
+        color: var(--cream-dim);
+        font-size: 16px;
+        cursor: pointer;
+    }
+
+    .report-icon-btn:hover { background: var(--espresso-850); color: var(--cream); }
+
+    /* ---- Sales by category ---- */
+    .donut-wrap {
+        display: grid;
+        place-items: center;
+        padding: 6px 0 14px;
+    }
+
+    .donut-wrap svg { width: 168px; height: 168px; }
+
+    .share-list { margin: 0; padding: 0; list-style: none; }
+
+    .share-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 2px;
+        border-bottom: 1px solid var(--espresso-800);
+        font-size: 13.5px;
+    }
+
+    .share-list li:last-child { border-bottom: 0; }
+
+    .share-row__dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+    }
+
+    .share-row strong { color: var(--cream); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .share-row span:last-child { color: var(--cream); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    /* ---- Top menu items ---- */
+    .top-table .num-trend { text-align: right; white-space: nowrap; }
+    .item-more[hidden] { display: none; }
+    .items-toggle {
+        margin-top: 12px;
+        border: 0;
+        background: none;
+        color: var(--copper-light);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    /* ---- How it was paid ---- */
+    .pay-row { padding: 11px 2px; border-bottom: 1px solid var(--espresso-800); }
+    .pay-list li:last-child .pay-row { border-bottom: 0; }
+    .pay-list { margin: 0; padding: 0; list-style: none; }
+
+    .pay-row__top {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 13.5px;
+    }
+
+    .pay-row__top strong { color: var(--cream); }
+    .pay-row__top small { color: var(--cream-faint); font-size: 12px; }
+    .pay-row__top span { color: var(--cream); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    .pay-bar {
+        height: 6px;
+        margin-top: 8px;
+        border-radius: 999px;
+        background: var(--espresso-800);
+        overflow: hidden;
+    }
+
+    .pay-bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--copper-dark), var(--copper-light));
+    }
+
+    /* ---- Cancelled and stock ---- */
+    .mini-list { margin: 0; padding: 0; list-style: none; }
+
+    .mini-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 2px;
+        border-bottom: 1px solid var(--espresso-800);
+        font-size: 13.5px;
+        color: var(--cream);
+    }
+
+    .mini-list li:last-child .mini-row { border-bottom: 0; }
+    .mini-row small { display: block; color: var(--cream-faint); font-size: 12px; }
+    .mini-row b { font-variant-numeric: tabular-nums; }
+    a.mini-row:hover { background: rgba(var(--copper-rgb), .04); }
+
+    .level-pill {
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .level-pill--ok { background: rgba(143, 187, 153, .14); color: var(--sage); }
+    .level-pill--low { background: rgba(242, 201, 76, .14); color: var(--gold); }
+    .level-pill--out { background: rgba(225, 97, 79, .16); color: var(--berry); }
+
+    .scroll-list { max-height: 360px; overflow-y: auto; }
+
+    @media (max-width: 760px) {
+        .dash-head .dash-head__tools { flex-wrap: wrap; }
+        .dash-head__tools .report-period { flex: 1 1 100%; }
+        .dash-head__tools > .btn { flex: 1 1 auto; }
+        .report-period .dash-select { flex: 1 1 auto; }
+        .report-period select { width: 100%; }
+        .report-period__dates { width: 100%; }
+        .report-period__dates input { flex: 1 1 0; min-width: 0; }
+        .top-table .top-cat { display: none; }
+    }
+
+    @media print {
+        .report-period, .report-icon-btn, .dash-head .btn, .items-toggle { display: none !important; }
+        .item-more[hidden] { display: table-row !important; }
+    }
+</style>
+
+<div class="page-header dash-head">
     <div>
-        <h1><i class="bi bi-bar-chart-line"></i> Reports Management</h1>
-        <p class="page-subtitle">Sales, orders, payments and stock for a period</p>
+        <div class="eyebrow">Café operations</div>
+        <h1>Reports</h1>
+        <p class="page-subtitle">See sales patterns and the items guests love most.</p>
+        <span class="report-shown"><i class="bi bi-calendar3"></i> {{ w.shown }}</span>
     </div>
 
-    <div class="page-header__actions">
-        <button onclick="window.print()" class="btn btn--ghost">
-            <i class="bi bi-printer-fill"></i> Print Report
+    <div class="dash-head__tools">
+        <form method="GET" action="{{ url_for('reports') }}" class="report-period"
+              id="reportPeriod" data-no-draft>
+            <label class="dash-select">
+                <span class="sr-only">Period</span>
+                <select name="period" id="reportPeriodSelect" aria-label="Report period">
+                    {% for key, label in periods %}
+                    <option value="{{ key }}" {% if key == w.period %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <i class="bi bi-chevron-down" aria-hidden="true"></i>
+            </label>
+            <span class="report-period__dates" id="reportDates"
+                  {% if w.period != 'custom' %}hidden{% endif %}>
+                <input type="date" name="from_date" value="{{ w.from_date if w.period == 'custom' else '' }}"
+                       aria-label="From">
+                <input type="date" name="to_date" value="{{ w.to_date if w.period == 'custom' else '' }}"
+                       aria-label="To">
+            </span>
+            <button type="submit" class="btn btn--ghost" id="reportApply">Apply</button>
+        </form>
+        <button type="button" class="report-icon-btn" onclick="window.print()"
+                title="Print this report" aria-label="Print this report">
+            <i class="bi bi-printer"></i>
         </button>
+        <a class="btn btn--primary" data-no-instant
+           href="{{ url_for('export_report', period=w.period, from_date=w.from_date if w.period == 'custom' else None, to_date=w.to_date if w.period == 'custom' else None) }}">
+            <i class="bi bi-download"></i> Export report
+        </a>
     </div>
 </div>
 
 
-<!-- DATE FILTER -->
-
-<div class="panel panel--toolbar">
-
-    <div class="panel-header">
-        <div>
-            <h2><i class="bi bi-calendar3"></i> Report period</h2>
-            <p class="panel-subtitle">
-                {% if from_date or to_date %}The dates below.{% else %}Everything so far.{% endif %}
-            </p>
+<!-- ==========================================
+     THE FOUR FIGURES
+     ========================================== -->
+<section class="kpi-grid" aria-label="Figures">
+    <article class="kpi">
+        <div class="kpi__top">
+            <span class="kpi__label">Net sales</span>
+            <span class="kpi__icon"><i class="bi bi-currency-rupee"></i></span>
         </div>
-    </div>
+        <div class="kpi__value">₹{{ "{:,.0f}".format(k.sales.value) }}</div>
+        <div class="kpi__foot">{{ trend(k.sales.change, w.versus, comparable) }}</div>
+    </article>
 
-    <form method="GET" action="{{ url_for('reports') }}" class="filter-form">
-
-        <div>
-            <label>From Date</label>
-            <input
-                type="date"
-                name="from_date"
-                value="{{ from_date or '' }}"
-            >
+    <article class="kpi">
+        <div class="kpi__top">
+            <span class="kpi__label">Orders</span>
+            <span class="kpi__icon"><i class="bi bi-receipt"></i></span>
         </div>
+        <div class="kpi__value">{{ "{:,}".format(k.orders.value) }}</div>
+        <div class="kpi__foot">{{ trend(k.orders.change, w.versus, comparable) }}</div>
+    </article>
 
-        <div>
-            <label>To Date</label>
-            <input
-                type="date"
-                name="to_date"
-                value="{{ to_date or '' }}"
-            >
+    <article class="kpi">
+        <div class="kpi__top">
+            <span class="kpi__label">Avg. ticket</span>
+            <span class="kpi__icon"><i class="bi bi-graph-up-arrow"></i></span>
         </div>
+        <div class="kpi__value">₹{{ "{:,.0f}".format(k.average.value) }}</div>
+        <div class="kpi__foot">{{ trend(k.average.change, w.versus, comparable) }}</div>
+    </article>
 
-        <div class="filter-actions">
-            <button type="submit" class="btn btn--primary">
-                <i class="bi bi-search"></i> Generate Report
-            </button>
-
-            <a href="{{ url_for('reports') }}" class="btn btn--ghost">
-                <i class="bi bi-arrow-counterclockwise"></i> Reset
-            </a>
+    <article class="kpi kpi--warn">
+        <div class="kpi__top">
+            <span class="kpi__label">Cancelled orders</span>
+            <span class="kpi__icon"><i class="bi bi-x-octagon"></i></span>
         </div>
+        <div class="kpi__value">{{ k.cancelled.value }}<small style="font-size:15px;color:var(--cream-faint);font-family:var(--font-body);font-weight:700;"> &middot; {{ k.cancelled.rate }}% of orders</small></div>
+        <div class="kpi__foot">{{ trend(k.cancelled.change, w.versus, comparable, worse_up=True) }}</div>
+    </article>
+</section>
 
-    </form>
 
-</div>
+<!-- ==========================================
+     SALES OVER TIME, AND BY CATEGORY
+     ========================================== -->
+<div class="dash-row">
 
-
-<!-- SUMMARY -->
-
-<div class="stats-grid">
-
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--today">
-            <i class="bi bi-cart-check"></i>
+    <section class="panel" aria-labelledby="overTimeTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="overTimeTitle">Sales over time</h2>
+                <p id="overTimeNote">{{ {'hour': 'By the hour', 'day': 'By the day', 'week': 'By the week', 'month': 'By the month'}[report.grain] }} &middot; {{ w.label|lower }}</p>
+            </div>
+            <label class="dash-select">
+                <span class="sr-only">What to draw</span>
+                <select id="curveMetric" aria-label="What the chart shows">
+                    <option value="sales">Net sales</option>
+                    <option value="orders">Orders</option>
+                </select>
+                <i class="bi bi-chevron-down" aria-hidden="true"></i>
+            </label>
         </div>
-        <div>
-            <div class="stat-card__label">Total Orders</div>
-            <div class="stat-card__value">{{ total_orders }}</div>
+        <div class="curve" id="curve">
+            <svg id="curveSvg" role="img" aria-label="Sales over the period"></svg>
+            <div class="curve__tip" id="curveTip" hidden></div>
+            <div class="curve__empty" id="curveEmpty" hidden>No paid bills in this period</div>
         </div>
-    </div>
+    </section>
 
-
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--categories">
-            <i class="bi bi-receipt"></i>
+    <section class="panel" aria-labelledby="byCategoryTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="byCategoryTitle">Sales by category</h2>
+                <p>Share of what was sold</p>
+            </div>
+            <span class="chip-soft">{{ w.label }}</span>
         </div>
-        <div>
-            <div class="stat-card__label">Total Bills</div>
-            <div class="stat-card__value">{{ total_bills }}</div>
+        {% if report.categories %}
+        <div class="donut-wrap">
+            <svg id="categoryDonut" role="img" aria-label="Sales by category"></svg>
         </div>
-    </div>
-
-
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--sales">
-            <i class="bi bi-currency-rupee"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Total Sales</div>
-            <div class="stat-card__value">₹{{ "%.2f"|format(total_sales|float) }}</div>
-        </div>
-    </div>
-
-
-    <div class="stat-card">
-        <div class="stat-card__icon stat-card__icon--warning">
-            <i class="bi bi-x-octagon"></i>
-        </div>
-        <div>
-            <div class="stat-card__label">Cancelled Orders</div>
-            <div class="stat-card__value">{{ cancelled_orders }}</div>
-        </div>
-    </div>
-
-</div>
-
-
-<!-- PAYMENT SUMMARY -->
-
-<div class="panel">
-
-    <div class="panel-header">
-        <h2><i class="bi bi-credit-card-2-front"></i> Payment summary</h2>
-    </div>
-
-    <table class="data-table">
-
-        <thead>
-            <tr>
-                <th>Payment Method</th>
-                <th>Number of Bills</th>
-                <th>Amount</th>
-            </tr>
-        </thead>
-
-        <tbody>
-
-            {% for payment in payment_summary %}
-
-            <tr>
-                <td>{{ payment.payment_method }}</td>
-
-                <td>
-                    {{ payment.bill_count }}
-                </td>
-
-                <td>
-                    ₹{{ "%.2f"|format(payment.amount|float) }}
-                </td>
-            </tr>
-
-            {% else %}
-
-            <tr>
-                <td colspan="3">
-                    No payment data available.
-                </td>
-            </tr>
-
+        <ul class="share-list">
+            {% for row in report.categories %}
+            <li class="share-row">
+                <i class="share-row__dot" style="background: var(--donut-{{ [loop.index0, 5]|min }});"></i>
+                <strong>{{ row.name }}</strong>
+                <span>{{ row.share }}%</span>
+            </li>
             {% endfor %}
-
-        </tbody>
-
-    </table>
+        </ul>
+        {% else %}
+        <div class="dash-empty">Nothing sold in this period</div>
+        {% endif %}
+    </section>
 
 </div>
 
 
-<!-- TOP FOOD ITEMS -->
-
-<div class="panel">
-
-    <div class="panel-header">
-        <h2><i class="bi bi-egg-fried"></i> Food sales</h2>
+<!-- ==========================================
+     WHAT SOLD
+     ========================================== -->
+<section class="panel" aria-labelledby="itemsTitle">
+    <div class="dash-panel__head">
+        <div>
+            <h2 id="itemsTitle">Top menu items</h2>
+            <p>Every dish sold in the period, most sold first{% if w.versus %}, and how it moved {{ w.versus }}{% endif %}</p>
+        </div>
+        <a href="{{ url_for('foods') }}" class="btn btn--ghost btn--sm"><i class="bi bi-egg-fried"></i> View menu</a>
     </div>
 
-    <table class="data-table">
-
-        <thead>
-            <tr>
-                <th>Food</th>
-                <th>Quantity Sold</th>
-                <th>Sales</th>
-            </tr>
-        </thead>
-
-        <tbody>
-
-            {% for food in food_sales %}
-
-            <tr>
-
-                <td>
-                    {{ food.food_name }}
-                </td>
-
-                <td>
-                    {{ food.quantity_sold }}
-                </td>
-
-                <td>
-                    ₹{{ "%.2f"|format(food.sales|float) }}
-                </td>
-
-            </tr>
-
+    <div class="table-wrap">
+        <table class="top-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th class="top-cat">Category</th>
+                    <th class="num">Units sold</th>
+                    <th class="num">Net sales</th>
+                    <th class="num-trend">Trend</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in report['items'] %}
+                <tr class="{% if loop.index > 10 %}item-more{% endif %}" {% if loop.index > 10 %}hidden{% endif %}>
+                    <td><span class="top-item"><span class="top-rank">{{ loop.index }}</span><span>{{ item.name }}</span></span></td>
+                    <td class="top-cat">{{ item.category }}</td>
+                    <td class="num">{{ item.qty }}</td>
+                    <td class="num">₹{{ "{:,.0f}".format(item.sales) }}</td>
+                    <td class="num-trend">
+                        {% if item.change is none %}
+                            {% if w.versus %}<span class="kpi__none">New</span>{% else %}<span class="kpi__none">&ndash;</span>{% endif %}
+                        {% else %}
+                            {{ trend(item.change, '', comparable) }}
+                        {% endif %}
+                    </td>
+                </tr>
             {% else %}
-
-            <tr>
-                <td colspan="3">
-                    No food sales found.
-                </td>
-            </tr>
-
+                <tr><td colspan="5" class="dash-empty">Nothing sold in this period</td></tr>
             {% endfor %}
-
-        </tbody>
-
-    </table>
-
-</div>
-
-
-<!-- INVENTORY REPORT -->
-
-<div class="panel">
-
-    <div class="panel-header">
-        <h2><i class="bi bi-boxes"></i> Inventory</h2>
+            </tbody>
+        </table>
     </div>
+    {% if report['items']|length > 10 %}
+    <button type="button" class="items-toggle" id="itemsToggle">
+        Show all {{ report['items']|length }} items
+    </button>
+    {% endif %}
+</section>
 
-    <table class="data-table">
 
-        <thead>
-            <tr>
-                <th>Food</th>
-                <th>Current Stock</th>
-                <th>Minimum Stock</th>
-                <th>Status</th>
-            </tr>
-        </thead>
+<!-- ==========================================
+     PAYMENTS, CANCELLATIONS, STOCK
+     ========================================== -->
+<div class="dash-row">
 
-        <tbody>
-
-            {% for item in inventory_report %}
-
-            <tr>
-
-                <td>
-                    {{ item.food_name }}
-                </td>
-
-                <td>
-                    {{ item.quantity }}
-                </td>
-
-                <td>
-                    {{ item.minimum_stock }}
-                </td>
-
-                <td>
-
-                    {% if item.quantity == 0 %}
-
-                        <span class="status cancelled">
-                            Unavailable
-                        </span>
-
-                    {% elif item.quantity <= item.minimum_stock %}
-
-                        <span class="status pending">
-                            Low Stock
-                        </span>
-
-                    {% else %}
-
-                        <span class="status paid">
-                            Available
-                        </span>
-
-                    {% endif %}
-
-                </td>
-
-            </tr>
-
-            {% else %}
-
-            <tr>
-                <td colspan="4">
-                    No inventory data found.
-                </td>
-            </tr>
-
+    <section class="panel" aria-labelledby="payTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="payTitle">Payment summary</h2>
+                <p>{{ report.paid_bills }} paid of {{ report.bills }} bill{% if report.bills != 1 %}s{% endif %} raised</p>
+            </div>
+        </div>
+        {% if report.payments %}
+        <ul class="pay-list">
+            {% for row in report.payments %}
+            <li class="pay-row">
+                <div class="pay-row__top">
+                    <strong>{{ row.method }} <small>&middot; {{ row.bills }} bill{% if row.bills != 1 %}s{% endif %}</small></strong>
+                    <span>₹{{ "{:,.2f}".format(row.amount) }}</span>
+                </div>
+                <div class="pay-bar"><span style="width: {{ row.share }}%"></span></div>
+            </li>
             {% endfor %}
+        </ul>
+        {% else %}
+        <div class="dash-empty">No paid bills in this period</div>
+        {% endif %}
+    </section>
 
-        </tbody>
-
-    </table>
+    <section class="panel" aria-labelledby="cancelTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="cancelTitle">Cancelled orders</h2>
+                <p>Kept on record; their stock went back on the shelf</p>
+            </div>
+            <span class="chip-soft">{{ report.cancelled|length }}</span>
+        </div>
+        {% if report.cancelled %}
+        <ul class="mini-list scroll-list">
+            {% for row in report.cancelled %}
+            <li><a class="mini-row" href="{{ url_for('order_details', order_id=row.order_id) }}">
+                <span>Order #{{ row.number }}<small>{{ row.when|local_time }}</small></span>
+                <b>₹{{ "{:,.2f}".format(row.total) }}</b>
+            </a></li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="dash-empty">No cancelled orders found.</div>
+        {% endif %}
+    </section>
 
 </div>
 
-
-<!-- CANCELLED ORDERS -->
-
-<div class="panel">
-
-    <div class="panel-header">
-        <h2><i class="bi bi-x-octagon"></i> Cancelled orders</h2>
+<section class="panel" aria-labelledby="stockTitle">
+    <div class="dash-panel__head">
+        <div>
+            <h2 id="stockTitle">Stock levels</h2>
+            <p>As it stands now, fewest left first</p>
+        </div>
+        <a href="{{ url_for('inventory') }}" class="btn btn--ghost btn--sm"><i class="bi bi-boxes"></i> Inventory</a>
     </div>
-
-    <table class="data-table">
-
-        <thead>
-            <tr>
-                <th>Order ID</th>
-                <th>Date</th>
-                <th>Amount</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-
-        <tbody>
-
-            {% for order in cancelled_order_list %}
-
-            <tr>
-
-                <td>
-                    #{{ order.order_id }}
-                </td>
-
-                <td>
-                    {{ order.order_date|local_time }}
-                </td>
-
-                <td>
-                    ₹{{ "%.2f"|format(order.total_amount|float) }}
-                </td>
-
-                <td>
-                    <span class="status cancelled">
-                        Cancelled
-                    </span>
-                </td>
-
-            </tr>
-
+    <div class="table-wrap scroll-list">
+        <table class="top-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th class="num">In stock</th>
+                    <th class="num">Minimum</th>
+                    <th class="num-trend">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in report.stock %}
+                <tr>
+                    <td><span class="top-item">{{ item.name }}</span></td>
+                    <td class="num">{{ item.quantity }}</td>
+                    <td class="num">{{ item.minimum }}</td>
+                    <td class="num-trend">
+                        {% if item.quantity <= 0 %}<span class="level-pill level-pill--out">Out</span>
+                        {% elif item.quantity <= item.minimum %}<span class="level-pill level-pill--low">Low</span>
+                        {% else %}<span class="level-pill level-pill--ok">In stock</span>{% endif %}
+                    </td>
+                </tr>
             {% else %}
-
-            <tr>
-                <td colspan="4">
-                    No cancelled orders found.
-                </td>
-            </tr>
-
+                <tr><td colspan="4" class="dash-empty">No food on the menu yet</td></tr>
             {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
 
-        </tbody>
 
-    </table>
+<script src="{{ asset_url('js/charts.js') }}"></script>
+<script>
+(function () {
+    var curve = {{ report.curve|tojson }};
+    var categories = {{ report.categories|tojson }};
+    var metric = document.getElementById("curveMetric");
 
-</div>
+    function draw() {
+        var which = metric ? metric.value : "sales";
+        window.CafeCharts.curve({
+            box: document.getElementById("curve"),
+            svg: document.getElementById("curveSvg"),
+            tip: document.getElementById("curveTip"),
+            empty: document.getElementById("curveEmpty")
+        }, curve.map(function (p) { return {label: p.label, value: p[which]}; }),
+           which === "orders" ? "" : "₹");
+        var empty = document.getElementById("curveEmpty");
+        if (empty) empty.textContent = which === "orders"
+            ? "No orders in this period" : "No paid bills in this period";
+    }
 
+    draw();
+    if (metric) metric.addEventListener("change", draw);
+
+    window.CafeCharts.donut(document.getElementById("categoryDonut"),
+        categories.map(function (c) { return {label: c.name + " " + c.share + "%", value: c.sales}; }));
+
+    var redraw = null;
+    window.addEventListener("resize", function () {
+        clearTimeout(redraw);
+        redraw = setTimeout(draw, 120);
+    });
+
+    // The period: a named one applies at once; custom dates wait for Apply.
+    var form = document.getElementById("reportPeriod");
+    var select = document.getElementById("reportPeriodSelect");
+    var dates = document.getElementById("reportDates");
+    var apply = document.getElementById("reportApply");
+    function showDates() {
+        var custom = select.value === "custom";
+        dates.hidden = !custom;
+        apply.hidden = !custom;
+    }
+    if (form && select) {
+        showDates();
+        select.addEventListener("change", function () {
+            showDates();
+            if (select.value !== "custom") {
+                dates.querySelectorAll("input").forEach(function (input) { input.value = ""; });
+                form.requestSubmit ? form.requestSubmit() : form.submit();
+            }
+        });
+    }
+
+    var toggle = document.getElementById("itemsToggle");
+    if (toggle) {
+        toggle.addEventListener("click", function () {
+            var hidden = document.querySelectorAll(".item-more[hidden]");
+            var opening = hidden.length > 0;
+            document.querySelectorAll(".item-more").forEach(function (row) { row.hidden = !opening; });
+            toggle.textContent = opening ? "Show the top 10" : toggle.getAttribute("data-all");
+        });
+        toggle.setAttribute("data-all", toggle.textContent.trim());
+    }
+}());
+</script>
 
 {% endblock %}

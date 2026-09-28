@@ -5205,3 +5205,585 @@ body.tour-open { overflow: hidden; }
 @media (max-width: 360px) {
     .topbar-brand__name { font-size: 17px; }
 }
+
+/* ============================================================
+   Figures, charts and lists
+
+   The dashboard's and Reports' shared parts: the figure cards across
+   the top with their comparison, the panels in rows of two, the curve
+   and the donut, the tables of best sellers, and the small pills that
+   say where something stands. Every colour is the theme's own.
+   ============================================================ */
+:root {
+    /* A donut's slices: the accent's own shades, darkest first, then the
+       browns the page is made of. */
+    --donut-0: var(--copper-dark);
+    --donut-1: var(--copper);
+    --donut-2: var(--copper-light);
+    --donut-3: var(--espresso-600);
+    --donut-4: var(--cream-faint);
+    --donut-5: var(--espresso-700);
+}
+    /* ================================================================
+       The dashboard
+
+       Four figures across the top, each against the period before it;
+       then the day's sales as a curve beside the orders still being
+       made; then what sold best beside the stock that needs checking.
+       Every colour is one of the theme's own.
+       ================================================================ */
+
+    .dash-head {
+        align-items: flex-end;
+        margin-bottom: 22px;
+    }
+
+    .dash-head h1 {
+        font-size: 34px;
+        letter-spacing: -.4px;
+    }
+
+    .dash-head__tools {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    /* A native select, dressed as a button: the keyboard and a phone's
+       own picker still work. */
+    .dash-select {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .dash-select select {
+        appearance: none;
+        -webkit-appearance: none;
+        height: 42px;
+        padding: 0 36px 0 16px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-900);
+        color: var(--cream);
+        font: inherit;
+        font-size: 13.5px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .dash-select select:hover { border-color: var(--espresso-600); }
+
+    .dash-select select:focus-visible {
+        outline: 2px solid var(--copper-light);
+        outline-offset: 2px;
+    }
+
+    .dash-select i {
+        position: absolute;
+        right: 13px;
+        pointer-events: none;
+        font-size: 12px;
+        color: var(--cream-faint);
+    }
+
+    .dash-head .btn--primary { height: 42px; padding: 0 18px; white-space: nowrap; }
+
+    /* The title and the two controls share a row where they fit and
+       stack where they do not - a phone's one-row header would cut the
+       word Dashboard short to make room for them. */
+    .page-header.dash-head { flex-wrap: wrap; }
+    .page-header.dash-head h1 { white-space: normal; overflow: visible; }
+
+    /* ---- The four figures ---- */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .kpi {
+        position: relative;
+        min-width: 0;
+        padding: 20px 22px 18px;
+        border: 1px solid var(--espresso-800);
+        border-radius: var(--radius-lg);
+        background: var(--surface-lift), var(--espresso-900);
+        box-shadow: var(--inset-light), var(--shadow-soft);
+    }
+
+    .kpi__top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .kpi__label {
+        font-size: 13.5px;
+        font-weight: 600;
+        color: var(--cream-dim);
+    }
+
+    .kpi__icon {
+        display: grid;
+        place-items: center;
+        flex: 0 0 36px;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: rgba(var(--copper-rgb), .14);
+        color: var(--copper-light);
+        font-size: 16px;
+    }
+
+    .kpi__icon .day-chip {
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: .04em;
+    }
+
+    .kpi--warn .kpi__icon {
+        background: rgba(225, 97, 79, .16);
+        color: var(--berry);
+    }
+
+    .kpi__value {
+        margin: 10px 0 6px;
+        font-family: var(--font-display);
+        font-size: 36px;
+        font-weight: 700;
+        line-height: 1.05;
+        color: var(--cream);
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+    }
+
+    .kpi__foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        min-height: 18px;
+        font-size: 12.5px;
+        color: var(--cream-faint);
+    }
+
+    .kpi__trend {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-weight: 800;
+    }
+
+    .kpi__trend--up { color: var(--sage); }
+    .kpi__trend--down { color: var(--berry); }
+    .kpi__trend--flat { color: var(--cream-dim); }
+    .kpi__alert { color: var(--berry); font-weight: 800; }
+    .kpi__ok { color: var(--sage); font-weight: 800; }
+    .kpi__none { color: var(--cream-faint); }
+    #stock-note > span { white-space: nowrap; }
+
+    /* ---- The two rows of panels ---- */
+    .dash-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+        gap: 18px;
+        margin-bottom: 18px;
+        align-items: stretch;
+    }
+
+    .dash-row > .panel { margin-bottom: 0; min-width: 0; }
+
+    .dash-panel__head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .dash-panel__head h2 {
+        font-size: 21px;
+        letter-spacing: -.2px;
+    }
+
+    .dash-panel__head p {
+        margin-top: 3px;
+        font-size: 13px;
+        color: var(--cream-faint);
+    }
+
+    .dash-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--copper-light);
+        white-space: nowrap;
+    }
+
+    .dash-link:hover { text-decoration: underline; }
+
+    /* The period, on the chart too - the same choice as the one at the
+       top of the page, so the two can never disagree. */
+    .seg {
+        display: inline-flex;
+        padding: 3px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-950);
+    }
+
+    .seg button {
+        border: 0;
+        padding: 6px 11px;
+        border-radius: 8px;
+        background: none;
+        color: var(--cream-faint);
+        font: inherit;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .seg button[aria-pressed="true"] {
+        background: var(--espresso-800);
+        color: var(--cream);
+    }
+
+    /* ---- The curve ---- */
+    .curve {
+        position: relative;
+        height: 270px;
+    }
+
+    .curve svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+    }
+
+    .curve__grid line {
+        stroke: var(--espresso-800);
+        stroke-dasharray: 3 5;
+    }
+
+    .curve__line {
+        fill: none;
+        stroke: var(--copper-light);
+        stroke-width: 2.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .curve__x text,
+    .curve__y text {
+        fill: var(--cream-faint);
+        font-size: 11.5px;
+        font-family: var(--font-body);
+    }
+
+    .curve__guide {
+        stroke: var(--espresso-600);
+        stroke-width: 1;
+    }
+
+    .curve__dot {
+        fill: var(--espresso-900);
+        stroke: var(--copper-light);
+        stroke-width: 2.5;
+    }
+
+    .curve__tip {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 2;
+        padding: 7px 10px;
+        border: 1px solid var(--espresso-700);
+        border-radius: 10px;
+        background: var(--espresso-850);
+        box-shadow: var(--shadow-soft);
+        font-size: 12px;
+        color: var(--cream-dim);
+        white-space: nowrap;
+        pointer-events: none;
+        transform: translate(-50%, -115%);
+    }
+
+    .curve__tip strong {
+        display: block;
+        font-size: 14px;
+        color: var(--cream);
+    }
+
+    .curve__tip[hidden] { display: none; }
+
+    .curve__empty[hidden] { display: none; }
+
+    .curve__empty {
+        position: absolute;
+        inset: 0 0 28px;
+        display: grid;
+        place-items: center;
+        color: var(--cream-faint);
+        font-size: 13px;
+        pointer-events: none;
+    }
+
+    /* ---- Lists: live orders and stock ---- */
+    .live-list,
+    .stock-rows {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .live-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 12px;
+        padding: 13px 4px;
+        border-bottom: 1px solid var(--espresso-800);
+        color: var(--cream);
+    }
+
+    .live-list li:last-child .live-row { border-bottom: 0; }
+
+    .live-row:hover { background: rgba(var(--copper-rgb), .04); }
+
+    .live-row strong { display: block; font-size: 14.5px; }
+
+    .live-row small {
+        display: block;
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--cream-faint);
+    }
+
+    .live-row__total {
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        min-width: 64px;
+    }
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 800;
+        white-space: nowrap;
+        border: 1px solid rgba(var(--copper-rgb), .4);
+        background: rgba(var(--copper-rgb), .12);
+        color: var(--copper-light);
+    }
+
+    .status-pill--done {
+        border-color: rgba(143, 187, 153, .4);
+        background: rgba(143, 187, 153, .12);
+        color: var(--sage);
+    }
+
+    .status-pill--cancelled {
+        border-color: rgba(225, 97, 79, .4);
+        background: rgba(225, 97, 79, .12);
+        color: var(--berry);
+    }
+
+    .live-waiting {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12.5px;
+        color: var(--cream-faint);
+    }
+
+    .live-waiting__dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--sage);
+        box-shadow: 0 0 0 4px rgba(143, 187, 153, .12);
+    }
+
+    .dash-empty {
+        padding: 28px 8px;
+        text-align: center;
+        color: var(--cream-faint);
+        font-size: 13.5px;
+    }
+
+    /* ---- Best sellers ---- */
+    .top-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+    }
+
+    .top-table th {
+        padding: 0 10px 10px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--cream-faint);
+        border-bottom: 1px solid var(--espresso-800);
+    }
+
+    .top-table td {
+        padding: 11px 10px;
+        border-bottom: 1px solid var(--espresso-800);
+        color: var(--cream-dim);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .top-table tr:last-child td { border-bottom: 0; }
+
+    .top-table .num { text-align: right; }
+
+    .top-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        color: var(--cream);
+        font-weight: 700;
+    }
+
+    .top-item__pic {
+        display: grid;
+        place-items: center;
+        flex: 0 0 32px;
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        overflow: hidden;
+        background: rgba(var(--copper-rgb), .14);
+        color: var(--copper-light);
+        font-size: 13px;
+    }
+
+    .top-item__pic img { width: 100%; height: 100%; object-fit: cover; }
+
+    .top-rank {
+        display: inline-block;
+        width: 18px;
+        color: var(--cream-faint);
+        font-weight: 800;
+    }
+
+    .chip-soft {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        background: rgba(var(--copper-rgb), .12);
+        color: var(--copper-light);
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    /* ---- Stock to check ---- */
+    .stock-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 4px;
+        border-bottom: 1px solid var(--espresso-800);
+    }
+
+    .stock-rows li:last-child { border-bottom: 0; }
+
+    .stock-row__text { min-width: 0; }
+
+    .stock-row__name {
+        display: block;
+        font-size: 14.5px;
+        color: var(--cream);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .stock-row small {
+        display: block;
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--cream-faint);
+    }
+
+    .stock-row__left { color: var(--cream-dim); }
+
+    .stock-pill {
+        flex: 0 0 auto;
+        padding: 4px 11px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 800;
+    }
+
+    .stock-pill--low {
+        background: rgba(242, 201, 76, .14);
+        color: var(--gold);
+    }
+
+    .stock-pill--out {
+        background: rgba(225, 97, 79, .16);
+        color: var(--berry);
+    }
+
+    .stock-more {
+        padding: 10px 4px 2px;
+        font-size: 12.5px;
+        color: var(--cream-faint);
+    }
+
+    .stock-clear {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 22px 6px;
+        color: var(--sage);
+        font-weight: 700;
+    }
+
+    .stock-clear i { font-size: 20px; }
+
+    /* ---- Narrower screens ---- */
+    @media (max-width: 1100px) {
+        .dash-row { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    @media (max-width: 760px) {
+        .dash-head { align-items: flex-start; }
+        .dash-head h1 { font-size: 28px; }
+        .dash-head__tools { width: 100%; }
+        .dash-head__tools .dash-select { flex: 1 1 auto; }
+        .dash-head__tools .dash-select select { width: 100%; }
+
+        .kpi-grid { gap: 10px; }
+        .kpi { padding: 14px 14px 12px; }
+        .kpi__label { font-size: 12px; }
+        .kpi__icon { flex-basis: 30px; width: 30px; height: 30px; font-size: 14px; border-radius: 9px; }
+        .kpi__value { font-size: 25px; margin: 8px 0 4px; }
+        .kpi__foot { font-size: 11px; }
+        .kpi__versus { display: none; }
+
+        .curve { height: 220px; }
+        .dash-panel__head { flex-wrap: wrap; }
+        .dash-panel__head h2 { font-size: 18px; }
+
+        .top-table .top-cat { display: none; }
+    }

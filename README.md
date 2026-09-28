@@ -63,6 +63,15 @@ branding, fully isolated from the others.
   owner. Search and a role filter narrow the list in place, and a role
   overview says what each role can reach and how many hold it. Managers,
   cashiers and staff reach the same pages, and the overview says so.
+- **Reports.** Pick today, the last 7 or 30 days, this month, all time or
+  your own dates. Net sales, orders, the average ticket and cancelled
+  orders sit across the top, each against the same number of days before
+  (today against this time yesterday). Then sales over time - by the hour,
+  day, week or month to suit the period, as sales or as orders - beside
+  sales by category as a donut; every dish sold, most first, with how it
+  moved; the payment summary by method; the cancelled orders; and stock as
+  it stands. Export report downloads the same report as a CSV, and Print
+  prints it.
 - **Search.** The box in the header finds pages ("tax" finds Tax &
   Discount), dishes by name, description or category, categories, an
   order by the number the kitchen calls ("#12"), and - for an owner -
@@ -369,6 +378,7 @@ tests/settings_test.py Tax rate, profile photo, name and symbol suite
 tests/tablet_layout_test.py Real-browser tablet layout test suite
 tests/stock_alert_test.py Dashboard stock-alert test suite
 tests/dashboard_feed_test.py The dashboard's figures and the header's search
+tests/reports_test.py  Reports: periods, figures, comparisons and the CSV export
 tests/shell_browser_test.py Real-browser suite for the header, the guide and the dashboard
 tests/print_test.py  Printable bill and kitchen ticket test suite
 tests/staff_access_test.py Non-admin permission test suite
@@ -598,10 +608,11 @@ python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
 python tests/draft_restore_test.py # expect PASSED: 35  FAILED: 0
 python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
 python tests/dashboard_feed_test.py # expect PASSED: 43  FAILED: 0
+python tests/reports_test.py      # expect PASSED: 39   FAILED: 0
 python tests/shell_browser_test.py # expect PASSED: 58  FAILED: 0
 ```
 
-All forty run in memory against a SQLite stand-in — no database or
+All forty-one run in memory against a SQLite stand-in — no database or
 network needed. The twenty that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 

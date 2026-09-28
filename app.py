@@ -6943,396 +6943,503 @@ def billing():
 # REPORTS MANAGEMENT
 # ==========================================
 
+REPORT_PERIODS = [
+    ("today", "Today"),
+    ("7d", "Last 7 days"),
+    ("30d", "Last 30 days"),
+    ("month", "This month"),
+    ("all", "All time"),
+    ("custom", "Custom dates"),
+]
+REPORT_PERIOD_KEYS = dict(REPORT_PERIODS)
+
+
+def as_day(value):
+    """A DATE() result as a date, whatever the driver made of it."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def day_label(day, with_year=False):
+    text = "%d %s" % (day.day, day.strftime("%b"))
+    return text + (" %d" % day.year if with_year else "")
+
+
+def report_window(args):
+    """
+    Which days a report covers, and the same number of days before them.
+
+    A period by name, or a from and a to. An address with only dates on it
+    is a custom period, which is what every report link was before periods
+    had names; an address with nothing is the last seven days.
+    """
+    today = utc_now().date()
+
+    def parse(value):
+        try:
+            return date.fromisoformat((value or "").strip()[:10])
+        except ValueError:
+            return None
+
+    given_from = parse(args.get("from_date"))
+    given_to = parse(args.get("to_date"))
+    period = (args.get("period") or "").strip()
+    if period not in REPORT_PERIOD_KEYS:
+        period = "custom" if (given_from or given_to) else "7d"
+
+    first = last = None
+    if period == "today":
+        first = last = today
+    elif period == "7d":
+        first, last = today - timedelta(days=6), today
+    elif period == "30d":
+        first, last = today - timedelta(days=29), today
+    elif period == "month":
+        first, last = today.replace(day=1), today
+    elif period == "custom":
+        first, last = given_from, given_to
+        if first and last and first > last:
+            first, last = last, first
+
+    prev_first = prev_last = None
+    versus = ""
+    if first and last:
+        length = (last - first).days + 1
+        prev_last = first - timedelta(days=1)
+        prev_first = prev_last - timedelta(days=length - 1)
+        versus = ("vs. this time yesterday" if period == "today"
+                  else "vs. the day before" if length == 1
+                  else "vs. the %d days before" % length)
+
+    if first and last:
+        shown = (day_label(first, with_year=True) if first == last else
+                 "%s – %s" % (day_label(first, first.year != last.year),
+                              day_label(last, with_year=True)))
+    elif first:
+        shown = "From %s" % day_label(first, with_year=True)
+    elif last:
+        shown = "Up to %s" % day_label(last, with_year=True)
+    else:
+        shown = "Everything so far"
+
+    return {
+        "period": period,
+        "label": REPORT_PERIOD_KEYS[period],
+        "first": first, "last": last,
+        "prev_first": prev_first, "prev_last": prev_last,
+        "versus": versus, "shown": shown, "today": today,
+        "from_date": first.isoformat() if first else "",
+        "to_date": last.isoformat() if last else "",
+    }
+
+
+def build_report(cursor, owner_id, args):
+    w = report_window(args)
+    first, last = w["first"], w["last"]
+    prev_first, prev_last = w["prev_first"], w["prev_last"]
+    now = utc_now()
+    iso = lambda d: d.isoformat() if d else None  # noqa: E731
+
+    # A day of margin either side: which window a row belongs to is decided
+    # below, on the day it is stamped with, not by the database.
+    lo = prev_first or first
+    sql_lo = iso(lo - timedelta(days=1)) if lo else None
+    sql_hi = iso(last + timedelta(days=1)) if last else None
+
+    # ---- orders and bills, one statement ----
+    records = []
+    if w["period"] == "today":
+        # Today is not over, so it is compared with the same part of
+        # yesterday - which needs the time of each row, not only its day.
+        cursor.execute("""
+            SELECT o.order_date, LOWER(COALESCE(o.order_status, '')) AS status,
+                   b.bill_id, b.bill_date,
+                   LOWER(COALESCE(b.payment_status, '')) AS payment,
+                   COALESCE(b.total_amount, 0) AS amount
+            FROM orders o
+            LEFT JOIN bills b ON b.order_id = o.order_id
+            WHERE o.user_id = %s AND o.order_date >= %s
+        """, (owner_id, datetime.combine(lo - timedelta(days=1),
+                                         datetime.min.time())))
+        for row in cursor.fetchall():
+            placed = stored_stamp(row["order_date"])
+            billed = stored_stamp(row["bill_date"]) or placed
+            records.append({
+                "order_day": placed.date() if placed else None,
+                "order_at": placed,
+                "bill_day": billed.date() if (billed and row["bill_id"]) else None,
+                "bill_at": billed if row["bill_id"] else None,
+                "status": row["status"], "payment": row["payment"],
+                "orders": 1, "bills": 1 if row["bill_id"] else 0,
+                "amount": float(row["amount"] or 0),
+            })
+    else:
+        cursor.execute("""
+            SELECT DATE(o.order_date) AS order_day,
+                   LOWER(COALESCE(o.order_status, '')) AS status,
+                   DATE(b.bill_date) AS bill_day,
+                   LOWER(COALESCE(b.payment_status, '')) AS payment,
+                   COUNT(*) AS orders,
+                   COUNT(b.bill_id) AS bills,
+                   COALESCE(SUM(b.total_amount), 0) AS amount
+            FROM orders o
+            LEFT JOIN bills b ON b.order_id = o.order_id
+            WHERE o.user_id = %s
+              AND (%s IS NULL OR DATE(o.order_date) >= %s)
+              AND (%s IS NULL OR DATE(o.order_date) <= %s)
+            GROUP BY DATE(o.order_date), LOWER(COALESCE(o.order_status, '')),
+                     DATE(b.bill_date), LOWER(COALESCE(b.payment_status, ''))
+        """, (owner_id, sql_lo, sql_lo, sql_hi, sql_hi))
+        for row in cursor.fetchall():
+            order_day = as_day(row["order_day"])
+            records.append({
+                "order_day": order_day, "order_at": None,
+                "bill_day": as_day(row["bill_day"]) if row["bills"] else None,
+                "bill_at": None,
+                "status": row["status"], "payment": row["payment"],
+                "orders": int(row["orders"] or 0),
+                "bills": int(row["bills"] or 0),
+                "amount": float(row["amount"] or 0),
+            })
+
+    def side_of(day, moment=None):
+        if day is None:
+            return None
+        if (first is None or day >= first) and (last is None or day <= last):
+            return "now"
+        if prev_first and prev_first <= day <= prev_last:
+            if w["period"] == "today" and moment and moment.time() > now.time():
+                return None
+            return "before"
+        return None
+
+    figures = {side: {"orders": 0, "cancelled": 0, "bills": 0, "paid": 0,
+                      "sales": 0.0} for side in ("now", "before")}
+    sales_by_day, orders_by_day, sales_by_hour, orders_by_hour = {}, {}, {}, {}
+
+    for rec in records:
+        side = side_of(rec["order_day"], rec["order_at"])
+        if side:
+            if rec["status"] == "cancelled":
+                figures[side]["cancelled"] += rec["orders"]
+            else:
+                figures[side]["orders"] += rec["orders"]
+                if side == "now":
+                    orders_by_day[rec["order_day"]] = (
+                        orders_by_day.get(rec["order_day"], 0) + rec["orders"])
+                    if rec["order_at"]:
+                        hour = as_cafe_time(rec["order_at"]).replace(
+                            minute=0, second=0, microsecond=0)
+                        orders_by_hour[hour] = orders_by_hour.get(hour, 0) + 1
+        bill_side = side_of(rec["bill_day"], rec["bill_at"])
+        if bill_side and rec["bills"]:
+            figures[bill_side]["bills"] += rec["bills"]
+            if rec["payment"] == "paid" and rec["status"] != "cancelled":
+                figures[bill_side]["paid"] += rec["bills"]
+                figures[bill_side]["sales"] += rec["amount"]
+                if bill_side == "now":
+                    sales_by_day[rec["bill_day"]] = (
+                        sales_by_day.get(rec["bill_day"], 0.0) + rec["amount"])
+                    if rec["bill_at"]:
+                        hour = as_cafe_time(rec["bill_at"]).replace(
+                            minute=0, second=0, microsecond=0)
+                        sales_by_hour[hour] = sales_by_hour.get(hour, 0.0) + rec["amount"]
+
+    def average(side):
+        paid = figures[side]["paid"]
+        return figures[side]["sales"] / paid if paid else 0.0
+
+    compare = prev_first is not None
+
+    def change(now_value, before_value):
+        return percent_change(now_value, before_value) if compare else None
+
+    kpis = {
+        "sales": {"value": figures["now"]["sales"],
+                  "change": change(figures["now"]["sales"], figures["before"]["sales"])},
+        "orders": {"value": figures["now"]["orders"],
+                   "change": change(figures["now"]["orders"], figures["before"]["orders"])},
+        "average": {"value": average("now"),
+                    "change": change(average("now"), average("before"))},
+        "cancelled": {"value": figures["now"]["cancelled"],
+                      "change": change(figures["now"]["cancelled"],
+                                       figures["before"]["cancelled"])},
+    }
+    taken = figures["now"]["orders"] + figures["now"]["cancelled"]
+    kpis["cancelled"]["rate"] = (round(figures["now"]["cancelled"] / taken * 100)
+                                 if taken else 0)
+
+    # ---- the curve: by the hour for one day, then by day, week or month ----
+    curve = []
+    grain = "hour"
+    if w["period"] == "today":
+        this_hour = cafe_now().replace(minute=0, second=0, microsecond=0)
+        start = this_hour.replace(hour=min(9, this_hour.hour))
+        seen = list(sales_by_hour) + list(orders_by_hour)
+        if seen:
+            start = min(start, min(seen))
+        if this_hour - start < timedelta(hours=5):
+            start = this_hour - timedelta(hours=5)
+        step = start
+        while step <= this_hour:
+            curve.append({"label": hour_label(step),
+                          "sales": round(sales_by_hour.get(step, 0.0), 2),
+                          "orders": orders_by_hour.get(step, 0)})
+            step += timedelta(hours=1)
+    else:
+        days_seen = [d for d in list(sales_by_day) + list(orders_by_day) if d]
+        span_first = first or (min(days_seen) if days_seen else w["today"])
+        span_last = last or w["today"]
+        if span_first > span_last:
+            span_first = span_last
+        length = (span_last - span_first).days + 1
+        grain = "day" if length <= 31 else "week" if length <= 190 else "month"
+
+        def bucket_of(day):
+            if length <= 31:
+                return day
+            if length <= 190:
+                return day - timedelta(days=(day - span_first).days % 7)
+            return day.replace(day=1)
+
+        buckets, order = {}, []
+        day = span_first
+        while day <= span_last:
+            key = bucket_of(day)
+            if key not in buckets:
+                buckets[key] = {"sales": 0.0, "orders": 0}
+                order.append(key)
+            buckets[key]["sales"] += sales_by_day.get(day, 0.0)
+            buckets[key]["orders"] += orders_by_day.get(day, 0)
+            day += timedelta(days=1)
+        for key in order:
+            if length <= 7:
+                label = key.strftime("%a")
+            elif length <= 190:
+                label = day_label(key)
+            else:
+                label = "%s %d" % (key.strftime("%b"), key.year)
+            curve.append({"label": label,
+                          "sales": round(buckets[key]["sales"], 2),
+                          "orders": buckets[key]["orders"]})
+
+    # ---- what sold, by item and by category, against the period before ----
+    cursor.execute("""
+        SELECT oi.food_id,
+               COALESCE(oi.item_name, f.food_name, 'Removed item') AS food_name,
+               c.category_name,
+               DATE(o.order_date) AS day,
+               COALESCE(SUM(oi.quantity), 0) AS qty,
+               COALESCE(SUM(oi.quantity * oi.price), 0) AS sales
+        FROM order_items oi
+        LEFT JOIN foods f ON oi.food_id = f.food_id
+        LEFT JOIN categories c ON c.category_id = f.category_id
+        INNER JOIN orders o ON oi.order_id = o.order_id
+        WHERE o.user_id = %s
+          AND LOWER(COALESCE(o.order_status, '')) != 'cancelled'
+          AND (%s IS NULL OR DATE(o.order_date) >= %s)
+          AND (%s IS NULL OR DATE(o.order_date) <= %s)
+        -- Grouped on the order line's own food_id, not the menu row's.
+        -- After a deletion the menu row is gone and every removed food
+        -- would otherwise collapse into one anonymous heap.
+        GROUP BY oi.food_id, COALESCE(oi.item_name, f.food_name, 'Removed item'),
+                 c.category_name, DATE(o.order_date)
+    """, (owner_id, sql_lo, sql_lo, sql_hi, sql_hi))
+
+    items, categories = {}, {}
+    for row in cursor.fetchall():
+        side = side_of(as_day(row["day"]))
+        if not side:
+            continue
+        key = (row["food_id"], row["food_name"])
+        item = items.setdefault(key, {
+            "name": row["food_name"],
+            "category": row["category_name"] or UNCATEGORISED_LABEL,
+            "qty": 0, "sales": 0.0, "qty_before": 0})
+        if side == "now":
+            item["qty"] += int(row["qty"] or 0)
+            item["sales"] += float(row["sales"] or 0)
+            name = row["category_name"] or UNCATEGORISED_LABEL
+            categories[name] = categories.get(name, 0.0) + float(row["sales"] or 0)
+        else:
+            item["qty_before"] += int(row["qty"] or 0)
+
+    top_items = sorted((i for i in items.values() if i["qty"] > 0),
+                       key=lambda i: (-i["qty"], -i["sales"], i["name"]))
+    for item in top_items:
+        item["change"] = change(item["qty"], item["qty_before"])
+    category_total = sum(categories.values())
+    by_category = [{"name": name, "sales": round(amount, 2),
+                    "share": round(amount / category_total * 100) if category_total else 0}
+                   for name, amount in sorted(categories.items(),
+                                              key=lambda kv: (-kv[1], kv[0]))]
+
+    # ---- how it was paid ----
+    cursor.execute("""
+        SELECT COALESCE(b.payment_method, 'Not Selected') AS payment_method,
+               COUNT(*) AS bill_count,
+               COALESCE(SUM(b.total_amount), 0) AS amount
+        FROM bills b
+        INNER JOIN orders o ON b.order_id = o.order_id
+        WHERE (%s IS NULL OR DATE(b.bill_date) >= %s)
+          AND (%s IS NULL OR DATE(b.bill_date) <= %s)
+          AND o.user_id = %s
+          AND LOWER(COALESCE(o.order_status, '')) != 'cancelled'
+          AND LOWER(COALESCE(b.payment_status, '')) = 'paid'
+        GROUP BY b.payment_method
+        ORDER BY amount DESC
+    """, (iso(first), iso(first), iso(last), iso(last), owner_id))
+    payments = [{"method": row["payment_method"],
+                 "bills": int(row["bill_count"] or 0),
+                 "amount": float(row["amount"] or 0)} for row in cursor.fetchall()]
+    paid_total = sum(p["amount"] for p in payments)
+    for p in payments:
+        p["share"] = round(p["amount"] / paid_total * 100) if paid_total else 0
+
+    # ---- what was cancelled ----
+    cursor.execute("""
+        SELECT order_id, daily_no, order_date, total_amount
+        FROM orders
+        WHERE user_id = %s
+          AND LOWER(COALESCE(order_status, '')) = 'cancelled'
+          AND (%s IS NULL OR DATE(order_date) >= %s)
+          AND (%s IS NULL OR DATE(order_date) <= %s)
+        ORDER BY order_date DESC
+    """, (owner_id, iso(first), iso(first), iso(last), iso(last)))
+    cancelled = [{"order_id": row["order_id"],
+                  "number": row["daily_no"] or row["order_id"],
+                  "when": row["order_date"],
+                  "total": float(row["total_amount"] or 0)}
+                 for row in cursor.fetchall()]
+
+    # ---- stock as it stands now; no period applies ----
+    cursor.execute("""
+        SELECT f.food_name,
+               COALESCE(i.quantity, 0) AS quantity,
+               COALESCE(i.minimum_stock, 0) AS minimum_stock
+        FROM foods f
+        LEFT JOIN inventory i ON f.food_id = i.food_id
+        WHERE f.user_id = %s
+        ORDER BY quantity ASC, f.food_name ASC
+    """, (owner_id,))
+    stock = [{"name": row["food_name"], "quantity": int(row["quantity"] or 0),
+              "minimum": int(row["minimum_stock"] or 0)}
+             for row in cursor.fetchall()]
+
+    return {
+        "window": w,
+        "kpis": kpis,
+        "bills": figures["now"]["bills"],
+        "paid_bills": figures["now"]["paid"],
+        "curve": curve,
+        "grain": grain,
+        "items": top_items,
+        "categories": by_category,
+        "payments": payments,
+        "cancelled": cancelled,
+        "stock": stock,
+    }
+
+
 @app.route("/reports")
 def reports():
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        report = build_report(cursor, scope_user_id(), request.args)
+        return render_template("reports.html", report=report,
+                               periods=REPORT_PERIODS)
+    except mysql.connector.Error as error:
+        flash(database_error(error, "building a report"))
+        return redirect(url_for("home"))
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/reports/export")
+def export_report():
+    """The report on screen, as a CSV a spreadsheet opens."""
+    import csv
 
     connection = None
     cursor = None
-
     try:
-
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-
-        # ======================================
-        # DATE FILTER
-        # ======================================
-
-        from_date = request.args.get("from_date")
-        to_date = request.args.get("to_date")
-
-
-        # If no dates are selected,
-        # use all available records.
-
-        if not from_date:
-            from_date = None
-
-        if not to_date:
-            to_date = None
-
-
-        # ======================================
-        # TOTAL ORDERS
-        # Excludes cancelled orders
-        # ======================================
-
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-            FROM orders
-            WHERE user_id = %s
-              AND (%s IS NULL OR DATE(order_date) >= %s)
-              AND (%s IS NULL OR DATE(order_date) <= %s)
-              AND LOWER(COALESCE(order_status, '')) != 'cancelled'
-        """, (
-            scope_user_id(),
-            from_date,
-            from_date,
-            to_date,
-            to_date
-        ))
-
-        total_orders = cursor.fetchone()["total"]
-
-
-        # ======================================
-        # TOTAL BILLS
-        # ======================================
-
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-            FROM bills b
-            INNER JOIN orders o ON b.order_id=o.order_id
-            WHERE o.user_id = %s
-              AND (%s IS NULL OR DATE(b.bill_date) >= %s)
-              AND (%s IS NULL OR DATE(b.bill_date) <= %s)
-        """, (
-            scope_user_id(),
-            from_date,
-            from_date,
-            to_date,
-            to_date
-        ))
-
-        total_bills = cursor.fetchone()["total"]
-
-
-        # ======================================
-        # TOTAL SALES
-        #
-        # Cancelled orders are excluded.
-        # Only Paid bills are counted as sales.
-        # ======================================
-
-        cursor.execute("""
-            SELECT
-                COALESCE(SUM(b.total_amount), 0) AS total
-
-            FROM bills b
-
-            INNER JOIN orders o
-                ON b.order_id = o.order_id
-
-            WHERE
-                (%s IS NULL OR DATE(b.bill_date) >= %s)
-
-                AND
-
-                (%s IS NULL OR DATE(b.bill_date) <= %s)
-
-                AND
-
-                o.user_id = %s
-                AND
-                LOWER(COALESCE(o.order_status, '')) != 'cancelled'
-
-                AND
-
-                LOWER(COALESCE(b.payment_status, '')) = 'paid'
-        """, (
-            from_date,
-            from_date,
-            to_date,
-            to_date,
-            scope_user_id()
-        ))
-
-        total_sales = cursor.fetchone()["total"]
-
-
-        # ======================================
-        # CANCELLED ORDERS
-        # ======================================
-
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-
-            FROM orders
-
-            WHERE user_id = %s
-              AND LOWER(
-                COALESCE(order_status, '')
-            ) = 'cancelled'
-
-            AND (%s IS NULL OR DATE(order_date) >= %s)
-
-            AND (%s IS NULL OR DATE(order_date) <= %s)
-        """, (
-            scope_user_id(),
-            from_date,
-            from_date,
-            to_date,
-            to_date
-        ))
-
-        cancelled_orders = cursor.fetchone()["total"]
-
-
-        # ======================================
-        # PAYMENT SUMMARY
-        # ======================================
-
-        cursor.execute("""
-            SELECT
-
-                COALESCE(
-                    b.payment_method,
-                    'Not Selected'
-                ) AS payment_method,
-
-                COUNT(*) AS bill_count,
-
-                COALESCE(
-                    SUM(b.total_amount),
-                    0
-                ) AS amount
-
-            FROM bills b
-
-            INNER JOIN orders o
-                ON b.order_id = o.order_id
-
-            WHERE
-
-                (%s IS NULL OR DATE(b.bill_date) >= %s)
-
-                AND
-
-                (%s IS NULL OR DATE(b.bill_date) <= %s)
-
-                AND
-
-                o.user_id = %s
-                AND
-                LOWER(
-                    COALESCE(o.order_status, '')
-                ) != 'cancelled'
-
-                AND
-
-                LOWER(
-                    COALESCE(b.payment_status, '')
-                ) = 'paid'
-
-            GROUP BY b.payment_method
-
-            ORDER BY amount DESC
-        """, (
-            from_date,
-            from_date,
-            to_date,
-            to_date,
-            scope_user_id()
-        ))
-
-        payment_summary = cursor.fetchall()
-
-
-        # ======================================
-        # FOOD SALES REPORT
-        # ======================================
-
-        cursor.execute("""
-            SELECT
-
-                COALESCE(oi.item_name, f.food_name, 'Removed item')
-                    AS food_name,
-
-                COALESCE(
-                    SUM(oi.quantity),
-                    0
-                ) AS quantity_sold,
-
-                COALESCE(
-                    SUM(
-                        oi.quantity * oi.price
-                    ),
-                    0
-                ) AS sales
-
-            FROM order_items oi
-
-            LEFT JOIN foods f
-                ON oi.food_id = f.food_id
-
-            INNER JOIN orders o
-                ON oi.order_id = o.order_id
-
-            WHERE
-
-                o.user_id = %s
-                AND
-                LOWER(
-                    COALESCE(o.order_status, '')
-                ) != 'cancelled'
-
-                AND
-
-                (%s IS NULL OR DATE(o.order_date) >= %s)
-
-                AND
-
-                (%s IS NULL OR DATE(o.order_date) <= %s)
-
-            -- Grouped on the order line's own food_id, not the menu row's.
-            -- After a deletion the menu row is gone and every removed food
-            -- would otherwise collapse into one anonymous heap.
-            GROUP BY
-                oi.food_id,
-                COALESCE(oi.item_name, f.food_name, 'Removed item')
-
-            ORDER BY
-                quantity_sold DESC
-        """, (
-            scope_user_id(),
-            from_date,
-            from_date,
-            to_date,
-            to_date
-        ))
-
-        food_sales = cursor.fetchall()
-
-
-        # ======================================
-        # INVENTORY REPORT
-        #
-        # This is current stock, so it is not
-        # restricted by the report dates.
-        # ======================================
-
-        cursor.execute("""
-            SELECT
-
-                f.food_name,
-
-                COALESCE(
-                    i.quantity,
-                    0
-                ) AS quantity,
-
-                COALESCE(
-                    i.minimum_stock,
-                    0
-                ) AS minimum_stock
-
-            FROM foods f
-
-            LEFT JOIN inventory i
-                ON f.food_id = i.food_id
-
-            WHERE f.user_id = %s
-
-            ORDER BY
-                quantity ASC,
-
-                f.food_name ASC
-        """, (scope_user_id(),))
-
-        inventory_report = cursor.fetchall()
-
-
-        # ======================================
-        # CANCELLED ORDER LIST
-        # ======================================
-
-        cursor.execute("""
-            SELECT
-
-                order_id,
-
-                order_date,
-
-                total_amount,
-
-                order_status
-
-            FROM orders
-
-            WHERE user_id = %s
-              AND LOWER(
-                COALESCE(order_status, '')
-            ) = 'cancelled'
-
-            AND (%s IS NULL OR DATE(order_date) >= %s)
-
-            AND (%s IS NULL OR DATE(order_date) <= %s)
-
-            ORDER BY order_date DESC
-        """, (
-            scope_user_id(),
-            from_date,
-            from_date,
-            to_date,
-            to_date
-        ))
-
-        cancelled_order_list = cursor.fetchall()
-
-
-        # ======================================
-        # SEND DATA TO reports.html
-        # ======================================
-
-        return render_template(
-            "reports.html",
-
-            from_date=from_date,
-            to_date=to_date,
-
-            total_orders=total_orders,
-            total_bills=total_bills,
-            total_sales=total_sales,
-            cancelled_orders=cancelled_orders,
-
-            payment_summary=payment_summary,
-
-            food_sales=food_sales,
-
-            inventory_report=inventory_report,
-
-            cancelled_order_list=cancelled_order_list
-        )
-
-
+        report = build_report(cursor, scope_user_id(), request.args)
     except mysql.connector.Error as error:
-
-        flash(
-            database_error(error, "building a report")
-        )
-
-        return redirect(
-            url_for("home")
-        )
-
-
+        flash(database_error(error, "exporting a report"))
+        return redirect(url_for("reports"))
     finally:
-
         if cursor:
             cursor.close()
-
         if connection:
             connection.close()
+
+    w, k = report["window"], report["kpis"]
+    out = io.StringIO()
+    sheet = csv.writer(out)
+
+    def pct(value):
+        return "" if value is None else "%+.1f%%" % value
+
+    sheet.writerow(["Report", w["label"], w["shown"]])
+    sheet.writerow([])
+    sheet.writerow(["Figure", "Value", "Change " + (w["versus"] or "")])
+    sheet.writerow(["Net sales", "%.2f" % k["sales"]["value"], pct(k["sales"]["change"])])
+    sheet.writerow(["Orders", k["orders"]["value"], pct(k["orders"]["change"])])
+    sheet.writerow(["Average ticket", "%.2f" % k["average"]["value"],
+                    pct(k["average"]["change"])])
+    sheet.writerow(["Cancelled orders", k["cancelled"]["value"],
+                    pct(k["cancelled"]["change"])])
+    sheet.writerow(["Bills raised", report["bills"], ""])
+    sheet.writerow(["Bills paid", report["paid_bills"], ""])
+    sheet.writerow([])
+    sheet.writerow(["When", "Net sales", "Orders"])
+    for point in report["curve"]:
+        sheet.writerow([point["label"], "%.2f" % point["sales"], point["orders"]])
+    sheet.writerow([])
+    sheet.writerow(["Item", "Category", "Units sold", "Sales", "Change"])
+    for item in report["items"]:
+        sheet.writerow([item["name"], item["category"], item["qty"],
+                        "%.2f" % item["sales"], pct(item["change"])])
+    sheet.writerow([])
+    sheet.writerow(["Category", "Sales", "Share"])
+    for row in report["categories"]:
+        sheet.writerow([row["name"], "%.2f" % row["sales"], "%d%%" % row["share"]])
+    sheet.writerow([])
+    sheet.writerow(["Payment method", "Bills", "Amount", "Share"])
+    for row in report["payments"]:
+        sheet.writerow([row["method"], row["bills"], "%.2f" % row["amount"],
+                        "%d%%" % row["share"]])
+    sheet.writerow([])
+    sheet.writerow(["Cancelled order", "When", "Amount"])
+    for row in report["cancelled"]:
+        sheet.writerow(["#%s" % row["number"], format_order_time(row["when"]),
+                        "%.2f" % row["total"]])
+
+    name = "report-%s.csv" % ((w["from_date"] + "-to-" + w["to_date"])
+                              if w["from_date"] and w["to_date"] else w["period"])
+    # A byte-order mark, so a spreadsheet reads the rupee and the cafe's
+    # own dish names as UTF-8 rather than guessing.
+    response = make_response("\ufeff" + out.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = 'attachment; filename="%s"' % name
+    return response
+
 
 # Dashboard live statistics
 @app.route("/api/dashboard-stats")
