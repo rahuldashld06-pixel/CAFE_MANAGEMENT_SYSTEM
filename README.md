@@ -685,7 +685,7 @@ python tests/menu_marks_test.py   # expect PASSED: 96   FAILED: 0
 python tests/compression_test.py  # expect PASSED: 32   FAILED: 0
 python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
 python tests/account_fields_browser_test.py # expect PASSED: 26  FAILED: 0
-python tests/sign_in_cafe_test.py # expect PASSED: 40   FAILED: 0
+python tests/sign_in_cafe_test.py # expect PASSED: 41   FAILED: 0
 ```
 
 All forty-eight run in memory against a SQLite stand-in — no database or
@@ -832,8 +832,8 @@ already being taken, and opens the bill where it can be read.
 
 - **Usernames are unique platform-wide**, not per cafe. Two cafes cannot
   both have a user called `admin`. The café's name on the sign-in form
-  is checked against the account's own café; a form that does not send
-  it at all (an older page, a script) signs in on the username alone.
+  is checked against the account's own café when given; one that leaves
+  it out (an older page, a script) signs in on the username alone.
   Café names are not unique, and the name is not a secret, so it is a
   check of the right place, not a second password.
 - **CSRF tokens are injected into forms by JavaScript** in `base.html`.

@@ -157,7 +157,10 @@ client, response = sign_in("Nowhere", "sam", "wrong")
 check("the same words for a wrong password",
       said_on(response) == said, said_on(response))
 client, _ = sign_in("", "sam", "TillPass-2026")
-check("an empty name signs nobody in", signed_in(client) is None)
+check("a blank name is taken as not given - the form itself asks for it",
+      signed_in(client) == SAM)
+client, _ = sign_in("   ", "sam", "wrong")
+check("and is no way round the password", signed_in(client) is None)
 
 for _ in range(10):
     sign_in("Dosa Point", "sam", "TillPass-2026")

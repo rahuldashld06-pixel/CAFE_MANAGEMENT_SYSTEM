@@ -8482,9 +8482,12 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        # None when the form did not have the field at all; "" when it
-        # was left empty, which the form itself does not allow.
-        typed_cafe = request.form.get("cafe_name")
+        # Given, it must be the account's own cafe. Not given - no field,
+        # or a blank one the form itself would not have sent - signs in
+        # on the username alone, as every sign-in once did: the name is
+        # on every bill, so asking for it is about the right place, not
+        # a second secret.
+        typed_cafe = (request.form.get("cafe_name") or "").strip() or None
 
         connection = None
         cursor = None
