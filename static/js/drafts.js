@@ -364,8 +364,12 @@
 
     // ---- A page arriving -------------------------------------------
 
-    function arrive() {
-        settle(location.pathname);
+    function arrive(event) {
+        // A page shown ahead of its save's answer (instant.js puts Food
+        // Management up the moment Add Food is pressed) says nothing yet
+        // about whether the save went; its answer does, when it comes.
+        var early = event && event.detail && event.detail.optimistic;
+        if (!early) settle(location.pathname);
         prune();
 
         formsHere().forEach(function (form) {

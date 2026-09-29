@@ -393,6 +393,7 @@
             <tbody id="teamRows">
             {% for u in users %}
                 <tr data-user-id="{{ u.user_id }}" data-username="{{ u.username }}"
+                    data-row-key="user-{{ u.user_id }}"
                     data-kind="{{ u.kind }}"
                     data-find="{{ (u.full_name ~ ' ' ~ u.username ~ ' ' ~ u.role_label ~ ' ' ~ (u.email or ''))|lower }}">
                     <td class="team-cell-member">
@@ -449,7 +450,8 @@
                             <div class="row-menu__list">
                                 <a class="row-menu__item" href="{{ url_for('edit_user', user_id=u.user_id) }}"><i class="bi bi-pencil"></i> Edit</a>
                                 {% if u.user_id != session.get('user_id') %}
-                                <form method="POST" action="{{ url_for('toggle_user', user_id=u.user_id) }}">
+                                <form method="POST" action="{{ url_for('toggle_user', user_id=u.user_id) }}"
+                                      data-optimistic="toggle" class="team-toggle">
                                     <button class="row-menu__item" type="submit">
                                         {% if u.is_active %}<i class="bi bi-pause-circle"></i> Deactivate{% else %}<i class="bi bi-play-circle"></i> Activate{% endif %}
                                     </button>
@@ -461,6 +463,7 @@
                                 {% if u.user_id != cafe_owner_id %}
                                 <form method="POST"
                                       action="{{ url_for('delete_user', user_id=u.user_id) }}"
+                                      data-optimistic="remove"
                                       data-confirm="Delete {{ (u.full_name or u.username)|e }} permanently? Orders and bills they handled are kept.">
                                     <button class="row-menu__item row-menu__item--danger" type="submit"><i class="bi bi-trash3"></i> Delete</button>
                                 </form>
@@ -515,6 +518,36 @@
 </div>
 
 <script nonce="{{ csp_nonce() }}">
+// Activate / Deactivate shows its answer at once; instant.js sends it
+// behind and says if the server refused, and it flips back.
+(function () {
+    function flip(form) {
+        var row = form.closest("tr");
+        if (!row) return;
+        var pill = row.querySelector(".team-pill");
+        var button = form.querySelector("button");
+        var now = pill && pill.classList.contains("team-pill--active");
+        if (pill) {
+            pill.classList.toggle("team-pill--active", !now);
+            pill.classList.toggle("team-pill--inactive", !!now);
+            pill.textContent = now ? "Inactive" : "Active";
+        }
+        if (button) {
+            button.innerHTML = now
+                ? '<i class="bi bi-play-circle"></i> Activate'
+                : '<i class="bi bi-pause-circle"></i> Deactivate';
+        }
+        var menu = form.closest("details");
+        if (menu) menu.open = false;
+    }
+    function heard(event) {
+        var form = event.detail && event.detail.form;
+        if (form && form.classList.contains("team-toggle")) flip(form);
+    }
+    document.addEventListener("instant:queued", heard);
+    document.addEventListener("instant:unsaved", heard);
+}());
+
 // The eye beside a password an admin set: asked of the server each time
 // (never written into the page), shown for half a minute, then hidden.
 (function () {

@@ -2064,6 +2064,38 @@ button.order-status-badge:disabled {
     }
 }
 
+/* Saves on their way (see instant.js): a quiet marker in the header. */
+.save-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 11px;
+    border: 1px solid var(--espresso-700);
+    border-radius: 999px;
+    color: var(--cream-dim);
+    font-size: 12.5px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.save-state[hidden] { display: none; }
+
+.save-state__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--copper-light);
+    animation: save-pulse 1s ease-in-out infinite;
+}
+
+@keyframes save-pulse {
+    0%, 100% { opacity: .35; }
+    50% { opacity: 1; }
+}
+
+/* A row on its way out, before the server has said. */
+tr.is-leaving, li.is-leaving { display: none; }
+
 /* Notices float under the header for a second (see base.html). */
 .toast-host {
     position: fixed;

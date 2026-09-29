@@ -406,7 +406,7 @@
         live.innerHTML = fresh;
     }
 
-    function swap(html, url) {
+    function swap(html, url, optimistic) {
         var viewHtml = between(html, VIEW_START, VIEW_END);
         var live = currentView();
         if (viewHtml === null || !live) return false;
@@ -456,7 +456,9 @@
             if (window.CafeShell && window.CafeShell.applyCsrf) {
                 window.CafeShell.applyCsrf(live);
             }
-            document.dispatchEvent(new CustomEvent("instant:load", { detail: { url: url } }));
+            document.dispatchEvent(new CustomEvent("instant:load", {
+                detail: { url: url, optimistic: !!optimistic }
+            }));
         });
 
         return true;
@@ -510,11 +512,11 @@
     function apply(html, url, options) {
         hideProgress();
 
-        if (!swap(html, url)) {
-            hardNavigate(url);
-            return;
-        }
-
+        // The address changes before the page does, so the page's own
+        // scripts - which run during the swap - read the address they
+        // belong to, as they would on a full load. drafts.js files the
+        // copy of a form under it: a refused save that came back while the
+        // address still said Categories found nothing to put back.
         if (!options.pop) {
             // Re-clicking the section you are already on refreshes it; it
             // should not stack another entry the Back button has to chew
@@ -524,6 +526,11 @@
             } else {
                 history.pushState({ instant: true, scroll: 0 }, "", url);
             }
+        }
+
+        if (!swap(html, url, options.optimistic)) {
+            hardNavigate(url);
+            return;
         }
         window.scrollTo(0, options.scroll || 0);
     }
@@ -658,18 +665,236 @@
     });
 
     // ------------------------------------------------------------------
-    // Saving something
+    // Saving something - shown at once, sent behind
     //
-    // A form post used to reload everything: the sidebar, the top bar,
-    // every stylesheet and every script, to change one panel. Posts go
-    // through the same swap as a link now, so the browser keeps the shell
-    // it already has and only the page region is replaced.
+    // A save used to wait on the server before anything moved: the post,
+    // its redirect, the next page drawn - a second or two on the live
+    // site, with the button greyed out. Now what the save will do is on
+    // screen the moment it is pressed, and the post goes behind it:
+    //
+    //   - a form that says where it leads (data-then: Add Food leads to
+    //     Food Management) shows that page straight away, from the pages
+    //     already fetched ahead, and the server's own copy - with the
+    //     new row in it - replaces it quietly when the save lands;
+    //   - a row's Delete (data-optimistic="remove") takes the row away at
+    //     once; a switch (data-optimistic="toggle") flips at once;
+    //   - anything else waits for its answer, as before.
+    //
+    // Saves go one at a time, in the order they were made, so the server
+    // sees them as the person made them. A save the server refuses puts
+    // things back: the row returns, the switch flips back, a form comes
+    // back with what was typed (drafts.js kept it) and what the server
+    // said. Nothing is sent twice: a save that never gets an answer is
+    // not tried again by itself - it may already have gone through - and
+    // the person is told.
     //
     // The server answers a post with a redirect to the page to show.
     // fetch follows it, and response.url is where it landed - that is what
     // both the swap and the address bar use, so Back still works and a
     // refresh does not re-post.
     // ------------------------------------------------------------------
+    var saves = [];            // waiting to be sent or answered, oldest first
+    var saving = false;
+
+    function queueChanged() {
+        document.dispatchEvent(new CustomEvent("instant:queue", {
+            detail: { waiting: saves.length }
+        }));
+    }
+
+    // The server's word on the last save: "done" or "failed", and where.
+    function answerCookie() {
+        var found = document.cookie.match(/(?:^|;\s*)cafora_post=([^;]*)/);
+        if (!found) return null;
+        var parts = decodeURIComponent(found[1]).replace(/^"|"$/g, "").split("|");
+        return { how: parts[0], path: parts.slice(1).join("|") };
+    }
+
+    // What a page the server sent back said, for when that page is not
+    // the one being shown.
+    function messagesIn(html) {
+        try {
+            var doc = new DOMParser().parseFromString(html, "text/html");
+            return Array.prototype.map.call(
+                doc.querySelectorAll(".flash-stack .alert"),
+                function (node) { return node.textContent.trim(); }
+            ).filter(Boolean);
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function tell(messages, tone) {
+        var shell = window.CafeShell;
+        if (!shell || !shell.notice) return;
+        for (var i = 0; i < messages.length; i++) shell.notice(messages[i], tone);
+    }
+
+    function stillHere(item) {
+        return item.token === navToken;
+    }
+
+    function rowOf(form) {
+        return form.closest("[data-row-key], tr, li");
+    }
+
+    // A row the server kept after all - its key is still in the page it
+    // sent back.
+    function rowStillThere(item, html) {
+        var key = item.row && item.row.getAttribute("data-row-key");
+        if (!key) return false;
+        return html.indexOf('data-row-key="' + key + '"') !== -1;
+    }
+
+    function putRowBack(item) {
+        if (!item.row) return;
+        item.row.hidden = false;
+        item.row.classList.remove("is-leaving");
+    }
+
+    function flipBack(item) {
+        if (item.kind !== "toggle") return;
+        document.dispatchEvent(new CustomEvent("instant:unsaved", {
+            detail: { form: item.form }
+        }));
+    }
+
+    function pump() {
+        if (saving || !saves.length) return;
+        saving = true;
+        send(saves[0]);
+    }
+
+    function nextSave() {
+        saves.shift();
+        saving = false;
+        queueChanged();
+        pump();
+    }
+
+    function send(item) {
+        rawFetch.call(window, item.action, {
+            method: "POST",
+            body: item.body,
+            credentials: "same-origin",
+            redirect: "follow"
+        }).then(function (response) {
+            return response.text().then(function (html) {
+                return { html: html, url: response.url || item.action, ok: response.ok };
+            });
+        }).then(function (result) {
+            settleSave(item, result);
+        }, function () {
+            settleSave(item, null);
+        });
+    }
+
+    function settleSave(item, result) {
+        // A write makes every cached read stale, and the refill starts
+        // straight away so the next screen opened is not back to paying
+        // full price for itself.
+        cache.clear();
+        rewarmSoon();
+        if (item.submitter) item.submitter.disabled = false;
+        if (item.progress) {
+            rawClearTimeout.call(window, item.progress);
+            if (stillHere(item)) hideProgress();
+        }
+
+        // Never answered: the connection went, or the site did. It may
+        // have been saved, so it is not sent again; the person is told,
+        // and a form comes back with what was typed.
+        if (!result) {
+            putRowBack(item);
+            flipBack(item);
+            tell(["That change could not be sent - check the connection. It may " +
+                  "not have been saved."], "off");
+            if (item.kind === "then" && stillHere(item)) visit(item.from, {});
+            nextSave();
+            return;
+        }
+
+        var landed;
+        try {
+            landed = new URL(result.url);
+        } catch (error) {
+            landed = null;
+        }
+        var told = answerCookie();
+        var failed = !result.ok || !landed || !safePath(landed.pathname)
+            || (told && told.path === item.actionPath && told.how === "failed");
+        // A refused form is answered by coming back to itself.
+        var refused = !failed && item.kind === "then"
+            && landed.pathname === item.fromPath;
+        if (item.kind === "remove" && !failed && rowStillThere(item, result.html)) {
+            refused = true;
+        }
+
+        // Said before any page goes in, so drafts.js settles the copy it
+        // kept of the form before the page it lands on starts.
+        document.dispatchEvent(new CustomEvent("instant:posted", {
+            detail: { url: result.url }
+        }));
+
+        var said = messagesIn(result.html);
+        var samePage = landed && landed.pathname === location.pathname;
+
+        if (failed || refused) {
+            putRowBack(item);
+            flipBack(item);
+            if (item.kind === "then" && stillHere(item)) {
+                if (landed && landed.pathname === item.fromPath) {
+                    // Refused: the form again, with what the server said;
+                    // drafts.js puts back what was typed.
+                    apply(result.html, result.url, { scroll: 0 });
+                } else {
+                    // Fell over: back to the form, where drafts.js has
+                    // kept what was typed, and why.
+                    tell(said.length ? said : ["That was not saved."], "off");
+                    visit(item.from, {});
+                }
+            } else if (item.kind === "wait" && stillHere(item) && landed
+                       && safePath(landed.pathname)) {
+                // As it always was: the page the server answered with.
+                apply(result.html, result.url, { scroll: window.scrollY });
+            } else {
+                // A row, a switch, or somebody who has moved on: things
+                // are put back where they were, and they are told - never
+                // taken to another page for it.
+                tell(said.length ? said : ["That change was not saved."], "off");
+            }
+            nextSave();
+            return;
+        }
+
+        // Saved.
+        if (item.kind === "remove") {
+            if (item.row && item.row.parentNode) item.row.parentNode.removeChild(item.row);
+            tell(said, "on");
+        } else if (stillHere(item) && (item.kind !== "toggle" || samePage)) {
+            // The server's own copy of the page: the new row, the fresh
+            // figures, and its message floated up by the shell.
+            apply(result.html, result.url, { scroll: window.scrollY });
+        } else {
+            tell(said, "on");
+        }
+        nextSave();
+    }
+
+    // Where a save leads, if the form says and that page is already here.
+    function shownAtOnce(form) {
+        var then = form.getAttribute("data-then");
+        if (!then) return null;
+        var url;
+        try {
+            url = new URL(then, location.href).href;
+        } catch (error) {
+            return null;
+        }
+        var cached = cache.get(url);
+        return cached ? { url: url, html: cached.html } : null;
+    }
+
     function onPost(event) {
         if (event.defaultPrevented) return;      // a confirm() said no,
                                                  // or a page handled it
@@ -710,78 +935,87 @@
         event.preventDefault();
         saveScroll();
 
-        var token = ++navToken;
-        if (submitter) submitter.disabled = true;   // no double posts
-
-        var progressTimer = rawSetTimeout.call(window, function () {
-            if (token === navToken) showProgress();
-        }, PROGRESS_DELAY_MS);
-
-        function release() {
-            rawClearTimeout.call(window, progressTimer);
-            if (submitter) submitter.disabled = false;
-        }
-
-        function giveUpToTheBrowser() {
-            release();
-            hideProgress();
-            // Post it the ordinary way rather than losing what was typed.
-            form.setAttribute("data-no-instant", "");
-            if (form.requestSubmit) {
-                form.requestSubmit(submitter);
-            } else {
-                form.submit();
-            }
-        }
-
-        rawFetch.call(window, action.href, {
-            method: "POST",
+        var item = {
+            form: form,
+            action: action.href,
+            actionPath: action.pathname,
             body: body,
-            credentials: "same-origin",
-            redirect: "follow"
-        }).then(function (response) {
-            return response.text().then(function (html) {
-                return {
-                    html: html,
-                    url: response.url || action.href,
-                    ok: response.ok
-                };
-            });
-        }).then(function (result) {
-            // A write makes every cached read stale, and the refill
-            // starts straight away so the next screen opened is not back
-            // to paying full price for itself.
-            cache.clear();
-            rewarmSoon();
-            release();
-            if (token !== navToken) return;
+            from: location.href,
+            fromPath: location.pathname,
+            submitter: null,
+            row: null,
+            kind: "wait",
+            token: 0,
+            progress: null
+        };
 
-            var landed;
-            try {
-                landed = new URL(result.url);
-            } catch (error) {
-                giveUpToTheBrowser();
-                return;
+        var optimistic = form.getAttribute("data-optimistic");
+        var ahead = optimistic ? null : shownAtOnce(form);
+
+        if (optimistic === "remove") {
+            item.kind = "remove";
+            item.row = rowOf(form);
+            if (item.row) {
+                item.row.classList.add("is-leaving");
+                item.row.hidden = true;
             }
-
-            if (!result.ok || !safePath(landed.pathname)) {
-                hideProgress();
-                hardNavigate(result.url);
-                return;
-            }
-
-            // Answered. Said before the new page goes in, so that what
-            // listens - drafts.js deciding whether a copy of the form can
-            // go - has settled that before the page it landed on starts.
-            document.dispatchEvent(new CustomEvent("instant:posted", {
-                detail: { url: result.url }
+            item.token = navToken;
+        } else if (optimistic === "toggle") {
+            item.kind = "toggle";
+            document.dispatchEvent(new CustomEvent("instant:queued", {
+                detail: { form: form }
             }));
+            item.token = navToken;
+        } else if (ahead) {
+            // The page it leads to, now; the server's copy when it lands.
+            item.kind = "then";
+            item.token = ++navToken;
+            apply(ahead.html, ahead.url, { optimistic: true });
+        } else {
+            // Nothing to show ahead of the answer: wait for it, as before.
+            item.token = ++navToken;
+            item.submitter = submitter;
+            if (submitter) submitter.disabled = true;   // no double posts
+            item.progress = rawSetTimeout.call(window, function () {
+                if (stillHere(item)) showProgress();
+            }, PROGRESS_DELAY_MS);
+        }
 
-            apply(result.html, result.url, {});
-        }).catch(function () {
-            giveUpToTheBrowser();
-        });
+        saves.push(item);
+        queueChanged();
+        pump();
     }
+
+    function fetchWhereFormsLead() {
+        var view = currentView();
+        if (!view) return;
+        var forms = view.querySelectorAll("form[data-then]");
+        for (var i = 0; i < forms.length; i++) {
+            try {
+                prefetch(new URL(forms[i].getAttribute("data-then"), location.href).href);
+            } catch (error) { /* not an address */ }
+        }
+    }
+    rawAdd.call(document, "instant:load", function () {
+        rawSetTimeout.call(window, fetchWhereFormsLead, 200);
+    });
+    rawAdd.call(window, "load", function () {
+        rawSetTimeout.call(window, fetchWhereFormsLead, 400);
+    });
+    // And again after a save has emptied the cache, if the person is
+    // still on a form that leads somewhere.
+    rawAdd.call(document, "instant:queue", function (event) {
+        if (event.detail && event.detail.waiting === 0) {
+            rawSetTimeout.call(window, fetchWhereFormsLead, 400);
+        }
+    });
+
+    // Closing the tab with a save still on its way would lose it.
+    rawAdd.call(window, "beforeunload", function (event) {
+        if (!saves.length) return;
+        event.preventDefault();
+        event.returnValue = "";
+    });
 
     // Registered last, and moved back to last after every swap.
     //
@@ -844,9 +1078,13 @@
         var link = navigator.connection || {};
         var kind = link.effectiveType || "";
         if (link.saveData || /2g$/.test(kind)) return 0;
+        // A phone's screen, not a guess at the network: effectiveType is
+        // Chrome's estimate from the speeds it has seen lately, and on a busy
+        // laptop it will say "3g" about a local network - which cut that
+        // laptop's warm-up to two pages for no reason.
         var small = window.matchMedia
             && window.matchMedia("(max-width: 700px)").matches;
-        if (small || kind === "3g") return 2;
+        if (small) return 2;
         return 99;
     }
 

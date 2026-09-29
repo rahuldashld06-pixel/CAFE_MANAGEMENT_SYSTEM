@@ -323,6 +323,20 @@ branding, fully isolated from the others.
 - **A customer's bill is dressed for a customer.** The cafe's name in a
   serif, its symbol pale behind the text, a line at the foot chosen from
   the order's own number so a reprint reads the same, and who served it.
+- **Saves show at once and go behind.** What a save will do is on screen
+  the moment it is pressed; the post goes to the server behind it, in a
+  queue, one at a time in the order they were made. Add or edit a food, a
+  category or a teammate and the list it leads to (the form's `data-then`,
+  fetched ahead while the form is filled in) is shown straight away; the
+  server's own copy, with the new row, replaces it when the save lands. A
+  Delete takes its row away at once (`data-optimistic="remove"`); switching
+  a teammate off shows it at once (`data-optimistic="toggle"`). A quiet
+  "Saving..." sits in the header while anything is on its way, and closing
+  the tab with a save still going asks first. A save the server refuses
+  puts things back - the row returns, the switch flips back, the form comes
+  back with what was typed and why. Nothing is sent twice: a save that gets
+  no answer is not retried by itself, because it may already have gone
+  through; the person is told, and drafts.js still has what they typed.
 - **Nothing reloads the whole page.** Following a link swaps only the page
   region, and saving a form now does the same: the post is sent in the
   background and the page that comes back is swapped in, so the sidebar,
@@ -762,10 +776,11 @@ python tests/table_order_test.py  # expect PASSED: 35   FAILED: 0
 python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0
 python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0
 python tests/table_switch_browser_test.py # expect PASSED: 12  FAILED: 0
+python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
 ```
 
-All fifty-two run in memory against a SQLite stand-in — no database or
-network needed. The twenty-two that drive a browser use a headless Edge or
+All fifty-three run in memory against a SQLite stand-in — no database or
+network needed. The twenty-three that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
 Each browser suite binds its own fixed port. A run that is killed part

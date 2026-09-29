@@ -199,6 +199,13 @@
                     <i class="bi bi-search" aria-hidden="true"></i>
                 </button>
 
+                {# On while any save is on its way to the server; the change
+                   itself is already on screen. #}
+                <span class="save-state" id="saveState" role="status" aria-live="polite" hidden>
+                    <span class="save-state__dot" aria-hidden="true"></span>
+                    <span class="save-state__text">Saving…</span>
+                </span>
+
                 {% if user_can('new_order') %}
                 <a href="{{ url_for('add_order') }}" class="topbar-create"
                    title="Take a new order">
@@ -662,6 +669,30 @@ window.CafeShell = {
             event.stopImmediatePropagation();
         }
     }, true);
+    // ---- Saves on their way ------------------------------------------
+    // instant.js says how many saves are still waiting for the server.
+    // The marker only shows for one that takes a moment - most land
+    // before it would have been read.
+    const saveState = document.getElementById("saveState");
+    let saveTimer = 0;
+    document.addEventListener("instant:queue", function (event) {
+        const waiting = event.detail ? event.detail.waiting : 0;
+        if (!saveState) return;
+        // A count, not a timer id: the shell's timers outlive page swaps,
+        // and only the latest word on the queue should show.
+        const asked = ++saveTimer;
+        if (waiting > 0) {
+            window.CafeShell.later(function () {
+                if (asked !== saveTimer) return;
+                saveState.querySelector(".save-state__text").textContent =
+                    waiting > 1 ? "Saving " + waiting + " changes…" : "Saving…";
+                saveState.hidden = false;
+            }, 300);
+        } else {
+            saveState.hidden = true;
+        }
+    });
+
     // ---- Table QR ordering: switched here, heard everywhere ----------
     // The switch asks by script and draws itself from the answer; the
     // page is not reloaded, so it cannot be drawn from a worker that
@@ -1084,14 +1115,27 @@ window.CafeShell = {
         var LINGER = 1000;
         var FADE = 180;
 
+        // The shell's own clock. A timer set from here would otherwise be
+        // counted as the page's (it is set while a page is showing) and
+        // cancelled with it on the next swap - leaving a notice raised in
+        // the last second of one page stuck over every page after it.
+        function later(fn, ms) {
+            if (window.Instant && window.Instant.untracked) {
+                window.Instant.untracked(function () { setTimeout(fn, ms); });
+            } else {
+                setTimeout(fn, ms);
+            }
+        }
+        window.CafeShell.later = later;
+
         function dismiss(notice) {
             if (notice.dataset.going) return;
             notice.dataset.going = "1";
 
-            setTimeout(function () {
+            later(function () {
                 notice.style.transition = "opacity " + FADE + "ms ease";
                 notice.style.opacity = "0";
-                setTimeout(function () {
+                later(function () {
                     if (notice.parentNode) notice.remove();
                 }, FADE);
             }, LINGER);

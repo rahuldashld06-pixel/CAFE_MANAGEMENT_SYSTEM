@@ -189,6 +189,18 @@ class SignInSession(SecureCookieSessionInterface):
             return datetime.now(timezone.utc) + timedelta(hours=SESSION_HOURS)
         return super(SignInSession, self).get_expiration_time(app, session)
 
+    def save_session(self, app, session, response):
+        # A page instant.js fetches ahead in the background changes nothing
+        # about the session, so it does not write the cookie. It used to:
+        # every response re-sends the whole session, and a warm-up that
+        # left before a save and landed after the save's page had shown its
+        # message put that message back - so "Category deleted." appeared
+        # again on the next page. With saves now sent behind the screen,
+        # warm-ups and saves overlap all the time.
+        if has_request_context() and request.headers.get("X-Instant-Prefetch") == "1":
+            return None
+        return super(SignInSession, self).save_session(app, session, response)
+
 
 app.session_interface = SignInSession()
 
