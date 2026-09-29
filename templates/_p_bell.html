@@ -1,0 +1,136 @@
+{# ------------------------------------------------------------------
+   The bell at the top of the customer's pages.
+
+   What this phone has ordered here today, with where each order is:
+   being made, ready, cancelled. Tapping it opens the list; each order
+   leads to its own page. While anything is still being made the page
+   asks, every fifteen seconds, whether it is ready - and says so when it
+   is, so a customer reading the menu for a second round hears that the
+   first is waiting at the counter.
+
+   `orders` is table_orders() for this phone: checked against the cafe,
+   today's only, newest first.
+   ------------------------------------------------------------------ #}
+{% set SAY = {"Pending": "Being made", "Completed": "Ready", "Cancelled": "Cancelled"} %}
+{% macro order_bell(token, orders) %}
+{% set waiting = orders | selectattr("order_status", "equalto", "Pending") | list %}
+<div class="p-bell" id="orderBell"
+     data-status-url="{{ url_for('public_order_status', token=token, ref='REF') }}">
+    <button type="button" class="p-bell__button" id="orderBellButton"
+            aria-haspopup="dialog" aria-expanded="false" aria-controls="orderBellPanel"
+            aria-label="Your orders today{% if waiting %}, {{ waiting|length }} being made{% endif %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 9a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9z"/>
+            <path d="M10 19a2 2 0 0 0 4 0"/>
+        </svg>
+        <span class="p-bell__count" id="orderBellCount" {% if not waiting %}hidden{% endif %}>{{ waiting|length }}</span>
+    </button>
+
+    <div class="p-bell__panel" id="orderBellPanel" role="dialog" aria-label="Your orders today" hidden>
+        <p class="p-bell__title">Your orders today</p>
+        {% if orders %}
+        <ul class="p-bell__list">
+            {% for order in orders %}
+            <li data-ref="{{ order.public_ref }}" data-status="{{ order.order_status or 'Pending' }}"
+                data-no="{{ order.daily_no or order.order_id }}">
+                <a href="{{ url_for('public_order_placed', token=token, ref=order.public_ref) }}">
+                    <span class="p-bell__no">#{{ order.daily_no or order.order_id }}</span>
+                    <span class="p-bell__when">{{ order.when }}</span>
+                    <span class="p-bell__state">{{ SAY.get(order.order_status or 'Pending', order.order_status) }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        <a class="p-bell__all" href="{{ url_for('public_table_orders', token=token) }}">All your orders &rsaquo;</a>
+        {% else %}
+        <p class="p-bell__none">Nothing ordered from this phone yet today. What you order shows
+            here, and you are told when it is ready.</p>
+        {% endif %}
+    </div>
+</div>
+<div class="p-toast" id="pToast" role="status" aria-live="polite"></div>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    "use strict";
+    var bell = document.getElementById("orderBell");
+    if (!bell) return;
+    var button = document.getElementById("orderBellButton");
+    var panel = document.getElementById("orderBellPanel");
+    var count = document.getElementById("orderBellCount");
+    var toast = document.getElementById("pToast");
+    var SAY = {Pending: "Being made", Completed: "Ready", Cancelled: "Cancelled"};
+    var EVERY = 15000;
+
+    function open(yes) {
+        panel.hidden = !yes;
+        button.setAttribute("aria-expanded", yes ? "true" : "false");
+        if (yes) bell.classList.remove("is-ringing");
+    }
+    button.addEventListener("click", function (event) {
+        event.stopPropagation();
+        open(panel.hidden);
+    });
+    document.addEventListener("click", function (event) {
+        if (!panel.hidden && !bell.contains(event.target)) open(false);
+    });
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && !panel.hidden) { open(false); button.focus(); }
+    });
+
+    function say(text) {
+        var note = document.createElement("div");
+        note.className = "p-toast__note";
+        note.textContent = text;
+        toast.appendChild(note);
+        setTimeout(function () {
+            note.classList.add("is-going");
+            setTimeout(function () { note.remove(); }, 250);
+        }, 3000);
+    }
+
+    function waiting() {
+        return [].filter.call(bell.querySelectorAll("li[data-ref]"), function (row) {
+            return row.getAttribute("data-status") === "Pending";
+        });
+    }
+
+    function recount() {
+        var left = waiting().length;
+        count.textContent = String(left);
+        count.hidden = left === 0;
+        button.setAttribute("aria-label", "Your orders today"
+            + (left ? ", " + left + " being made" : ""));
+    }
+
+    function ask() {
+        if (document.hidden) return;
+        var rows = waiting();
+        if (!rows.length) return;
+        rows.forEach(function (row) {
+            var url = bell.getAttribute("data-status-url").replace("REF", row.getAttribute("data-ref"));
+            fetch(url, {credentials: "same-origin", headers: {"Accept": "application/json"}})
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    if (!data || !SAY[data.status]
+                            || data.status === row.getAttribute("data-status")) return;
+                    row.setAttribute("data-status", data.status);
+                    row.querySelector(".p-bell__state").textContent = SAY[data.status];
+                    recount();
+                    if (data.status === "Completed") {
+                        bell.classList.add("is-ringing");
+                        say("Your order #" + row.getAttribute("data-no") +
+                            " is ready - collect it from the counter.");
+                    }
+                })
+                .catch(function () {});
+        });
+    }
+
+    if (waiting().length) {
+        setInterval(ask, EVERY);
+        document.addEventListener("visibilitychange", ask);
+    }
+}());
+</script>
+{% endmacro %}

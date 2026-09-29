@@ -58,6 +58,25 @@ branding, fully isolated from the others.
   Inventory, on the customer's menu (which can be narrowed to either) and
   on the customer's own order. A dish nobody
   has marked shows no mark rather than a guess.
+- **The customer's menu, narrowed to Veg or Non-veg.** Veg shows the veg
+  dishes and nothing else; Non-veg the same. Each button says how many
+  there are, and the one that is on is lifted off the page in glass over
+  its own colour - green for veg, red for non-veg - so which the menu is
+  showing is plain at a glance. A section with nothing of that kind
+  loses its tab (and the menu goes back to All if it was the one open),
+  and the search and the filter work together. The filter once marked
+  dishes hidden and left them all on screen: a dish is a flex row, and a
+  page's own `display` beats the `hidden` attribute, so public.css now
+  says `[hidden] { display: none !important }` for every customer page.
+- **A bell on the customer's pages.** Top right of the menu and of Your
+  orders, beside the cafe's name: what this phone has ordered here today,
+  each with Being made, Ready or Cancelled, and a number on the bell for
+  those still being made. While any is, the page asks its status every
+  fifteen seconds (and whenever the phone comes back to the page) - one
+  small query each - and when one is ready the bell rings and says so,
+  so somebody reading the menu for a second round hears that the first
+  is waiting. Nothing extra is fetched to draw it: the orders are the
+  ones the page already had.
 - **A picture for every dish.** A dish without a photo gets a drawing of
   what it is, on a tile in its own colour: a latte a cup, a dosa a dosa,
   a Coca-Cola a can, a Bisleri a bottle - thirty-two of them, read from
@@ -777,10 +796,11 @@ python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0
 python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0
 python tests/table_switch_browser_test.py # expect PASSED: 12  FAILED: 0
 python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
+python tests/customer_menu_browser_test.py # expect PASSED: 48  FAILED: 0
 ```
 
-All fifty-three run in memory against a SQLite stand-in — no database or
-network needed. The twenty-three that drive a browser use a headless Edge or
+All fifty-four run in memory against a SQLite stand-in — no database or
+network needed. The twenty-four that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 
 Each browser suite binds its own fixed port. A run that is killed part

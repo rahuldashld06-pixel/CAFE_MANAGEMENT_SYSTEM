@@ -1,6 +1,7 @@
 {% from "_brand_mark.html" import coffee_mark %}
 {% from "_table_orders.html" import table_orders_link %}
 {% from "_diet.html" import diet_mark %}
+{% from "_p_bell.html" import order_bell %}
 {% from "_food_art.html" import food_sprite, food_art %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ cafe_theme }}">
@@ -39,6 +40,7 @@
             <h1 class="p-head__name">{{ branding.cafe_name }}</h1>
             <p class="p-head__sub">Just choose what you like</p>
         </div>
+        {{ order_bell(token, mine) }}
     </header>
 
     <main>
@@ -110,9 +112,11 @@
     <div class="p-diet" id="menuDiet" role="group" aria-label="Veg or non-veg">
         <button type="button" data-diet="veg" aria-pressed="false">
             <span class="diet-mark diet-mark--veg" aria-hidden="true"></span> Veg
+            <span class="p-diet__count" data-count="veg"></span>
         </button>
         <button type="button" data-diet="nonveg" aria-pressed="false">
             <span class="diet-mark diet-mark--nonveg" aria-hidden="true"></span> Non-veg
+            <span class="p-diet__count" data-count="nonveg"></span>
         </button>
     </div>
 
@@ -502,6 +506,23 @@
         var wanted = search.value.trim().toLowerCase();
         var found = 0;
 
+        // A section with nothing of the chosen kind loses its tab, and
+        // the menu goes back to All if that was the one being looked at.
+        [].forEach.call(tabs.querySelectorAll(".p-tab[data-section]"), function (tab) {
+            var key = tab.getAttribute("data-section");
+            if (key === "all") return;
+            var group = groups.filter(function (g) {
+                return g.getAttribute("data-section") === key;
+            })[0];
+            var has = !diet || !group
+                || !!group.querySelector('.p-item[data-diet="' + diet + '"]');
+            tab.hidden = !has;
+            if (!has && section === key) section = "all";
+        });
+        [].forEach.call(tabs.querySelectorAll(".p-tab"), function (each) {
+            each.classList.toggle("is-on", each.getAttribute("data-section") === section);
+        });
+
         groups.forEach(function (group) {
             var inSection = section === "all"
                 || group.getAttribute("data-section") === section;
@@ -529,6 +550,16 @@
     }
 
     search.addEventListener("input", show);
+
+    // How many of each there are, on the buttons themselves.
+    if (diets) {
+        [].forEach.call(diets.querySelectorAll("[data-count]"), function (tally) {
+            var kind = tally.getAttribute("data-count");
+            var many = document.querySelectorAll('.p-item[data-diet="' + kind + '"]').length;
+            tally.textContent = String(many);
+            tally.parentNode.hidden = many === 0;
+        });
+    }
 
     // Veg or non-veg: pressing the one that is on turns it off again.
     if (diets) {

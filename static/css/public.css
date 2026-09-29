@@ -44,14 +44,175 @@ body {
     padding: 0 16px;
 }
 
+/* Whatever a page's own rules say about display, hidden is hidden. A
+   dish is a flex row, and that used to beat the hidden attribute: the
+   Veg filter and the menu search marked dishes hidden and every one of
+   them stayed on screen. */
+[hidden] { display: none !important; }
+
 /* ---------- The cafe at the top ---------- */
 .p-head {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 13px;
     padding: 20px 0 16px;
     border-bottom: 1px solid var(--p-line);
 }
+
+/* Some room under the line before the page starts. */
+.p-wrap > main { padding-top: 18px; }
+
+/* ---------- The bell: this phone's orders, and when they are ready ---------- */
+.p-bell {
+    position: relative;
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+
+.p-bell__button {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    border: 1px solid var(--p-line);
+    border-radius: 50%;
+    background: var(--p-card);
+    color: var(--p-text);
+    cursor: pointer;
+}
+
+.p-bell__button svg {
+    width: 21px;
+    height: 21px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.p-bell__count {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--copper-light, #EED6B6);
+    color: #1E140E;
+    font-size: 11.5px;
+    font-weight: 800;
+    line-height: 20px;
+    text-align: center;
+}
+
+.p-bell.is-ringing .p-bell__button {
+    border-color: #8FBB99;
+    box-shadow: 0 0 0 4px rgba(143, 187, 153, .22);
+    animation: p-ring .9s ease-in-out 2;
+}
+
+@keyframes p-ring {
+    0%, 100% { transform: rotate(0); }
+    20% { transform: rotate(-14deg); }
+    40% { transform: rotate(12deg); }
+    60% { transform: rotate(-8deg); }
+    80% { transform: rotate(5deg); }
+}
+
+.p-bell__panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    z-index: 70;
+    width: min(320px, calc(100vw - 32px));
+    padding: 14px;
+    border: 1px solid var(--p-line);
+    border-radius: 16px;
+    background: var(--p-card);
+    box-shadow: 0 24px 50px -18px rgba(0, 0, 0, .75);
+}
+
+.p-bell__title {
+    margin: 0 0 10px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--p-faint);
+}
+
+.p-bell__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+
+.p-bell__list a {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--p-bg);
+    color: var(--p-text);
+    text-decoration: none;
+}
+
+.p-bell__no { font-weight: 800; }
+.p-bell__when { color: var(--p-faint); font-size: 12.5px; }
+
+.p-bell__state {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(242, 201, 76, .14);
+    color: #F2C94C;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+li[data-status="Completed"] .p-bell__state { background: rgba(143, 187, 153, .18); color: #8FBB99; }
+li[data-status="Cancelled"] .p-bell__state { background: rgba(225, 97, 79, .16); color: #E1614F; }
+
+.p-bell__all {
+    display: block;
+    margin-top: 10px;
+    color: var(--copper-light, #EED6B6);
+    font-size: 13.5px;
+    font-weight: 700;
+    text-align: right;
+    text-decoration: none;
+}
+
+.p-bell__none { margin: 0; color: var(--p-dim); font-size: 13.5px; line-height: 1.5; }
+
+/* What the bell says aloud when an order is ready. */
+.p-toast {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    z-index: 90;
+    display: grid;
+    gap: 8px;
+    width: min(420px, calc(100% - 32px));
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.p-toast__note {
+    padding: 12px 16px;
+    border: 1px solid rgba(143, 187, 153, .45);
+    border-left: 4px solid #8FBB99;
+    border-radius: 12px;
+    background: var(--p-card);
+    color: var(--p-text);
+    font-size: 14px;
+    font-weight: 700;
+    box-shadow: 0 18px 40px -14px rgba(0, 0, 0, .7);
+    transition: opacity .25s ease;
+}
+
+.p-toast__note.is-going { opacity: 0; }
 
 .p-head__mark {
     display: grid;
@@ -750,6 +911,13 @@ body {
     text-decoration: none;
 }
 
+/* On the menu it opens the page, under the header's own room, and the
+   search comes straight after it: the space goes below it instead. */
+main > .p-mine:first-child { margin-top: 0; }
+.p-mine + .p-find,
+.p-mine + .p-paused,
+.p-mine + .p-empty { margin-top: 14px; }
+
 .p-mine__body { flex: 1 1 auto; min-width: 0; }
 
 .p-mine__label {
@@ -1023,7 +1191,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 7px 13px;
+    padding: 8px 14px;
     border: 1px solid var(--p-line);
     border-radius: 999px;
     background: var(--p-card);
@@ -1032,12 +1200,42 @@ body {
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease, background .15s ease,
+                color .15s ease, border-color .15s ease;
 }
 
-.p-diet button[aria-pressed="true"] {
-    border-color: var(--copper-light, #EED6B6);
-    color: var(--p-text);
+.p-diet button[data-diet="veg"] { --diet-on: rgba(28, 132, 62, .82); --diet-glow: rgba(52, 170, 88, .7); }
+.p-diet button[data-diet="nonveg"] { --diet-on: rgba(176, 52, 38, .84); --diet-glow: rgba(222, 78, 60, .7); }
+
+.p-diet__count {
+    min-width: 22px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .08);
+    font-size: 11.5px;
+    text-align: center;
 }
+
+/* The one that is on: lifted off the page, lit from above, in its own
+   colour - glass over green for veg, over red for non-veg - so there is
+   no mistaking which the menu is showing. */
+.p-diet button[aria-pressed="true"] {
+    color: #fff;
+    border-color: rgba(255, 255, 255, .38);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, .26) 0%, rgba(255, 255, 255, .06) 48%, rgba(0, 0, 0, .14) 100%),
+        var(--diet-on);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, .5),
+        inset 0 -2px 0 rgba(0, 0, 0, .2),
+        0 10px 22px -8px var(--diet-glow),
+        0 3px 0 rgba(0, 0, 0, .28);
+    transform: translateY(-2px);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+}
+
+.p-diet button[aria-pressed="true"] .p-diet__count { background: rgba(0, 0, 0, .22); }
 
 /* ---- A picture for every dish ----
    A drawing of what the dish is, on a tile in a colour that suits it: warm

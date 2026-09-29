@@ -1,4 +1,5 @@
 {% from "_brand_mark.html" import coffee_mark %}
+{% from "_p_bell.html" import order_bell %}
 {% set SAYS = {"Pending": "In the kitchen",
                "Completed": "Ready to collect",
                "Cancelled": "Cancelled"} %}
@@ -36,6 +37,7 @@
             <h1 class="p-head__name">{{ branding.cafe_name }}</h1>
             <p class="p-head__sub">Your orders today</p>
         </div>
+        {{ order_bell(token, orders) }}
     </header>
 
     <main>
