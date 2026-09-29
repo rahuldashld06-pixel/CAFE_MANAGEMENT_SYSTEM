@@ -71,7 +71,7 @@ def add_food(client, name, price="100", stock="20"):
 
 
 ROW = re.compile(
-    r"<tr>\s*(?:\{#.*?#\}\s*)?<td>(\d+)</td>.*?cell-strong\">([^<]+)<", re.S)
+    r"<tr(?:\s[^>]*)?>\s*(?:\{#.*?#\}\s*)?<td>(\d+)</td>.*?cell-strong\">([^<]+)<", re.S)
 
 
 def menu(client):
@@ -87,7 +87,7 @@ def food_ids(client):
 def id_of(client, name):
     """The real food_id of a named food, read off its own row."""
     html = client.get("/foods").get_data(as_text=True)
-    for row in re.findall(r"<tr>(.*?)</tr>", html, re.S):
+    for row in re.findall(r"<tr(?:\s[^>]*)?>(.*?)</tr>", html, re.S):
         if re.search(r'cell-strong">%s<' % re.escape(name), row):
             found = re.search(r"/foods/edit/(\d+)", row)
             if found:
@@ -112,7 +112,7 @@ headings = re.findall(r"<th>([^<]+)</th>",
 check("the table still leads with ID then Photo",
       headings[:2] == ["ID", "Photo"], "headings are %s" % headings[:3])
 
-first_row = re.search(r"<tbody>.*?<tr>(.*?)</tr>", html, re.S).group(1)
+first_row = re.search(r"<tbody>.*?<tr(?:\s[^>]*)?>(.*?)</tr>", html, re.S).group(1)
 check("and the first cell of a row is the number, not the photo",
       re.match(r"\s*(?:\{#.*?#\}\s*)?<td>\d+</td>", first_row, re.S) is not None,
       "the row starts with %r" % first_row.strip()[:70])

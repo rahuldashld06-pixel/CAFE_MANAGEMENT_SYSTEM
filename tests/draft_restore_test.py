@@ -323,7 +323,8 @@ try:
     # =================================================================
     fill(dict(DOSA, category_id=str(CATEGORY)))
     save()
-    wait("location.pathname === '/foods'", "the food list")
+    wait("location.pathname === '/foods' && document.getElementById('page-view')"
+         ".innerText.indexOf('Masala Dosa') > -1", "the server's food list, with it")
 
     check("it was saved, once", foods_named("Masala Dosa") == 1,
           "%d foods called Masala Dosa" % foods_named("Masala Dosa"))
