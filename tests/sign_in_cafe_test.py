@@ -310,6 +310,40 @@ check("a kept value that no longer opens (the key changed) is simply not shown",
       reveal(admin, ASHA)[1]["ok"] is False)
 
 
+# =====================================================================
+print("\n=== 6. An account the owner switched off ===")
+# =====================================================================
+DEACTIVATED = "deactivated by your café's owner or admin"
+db("DELETE FROM login_attempts")
+still_in, _ = sign_in("Mom's Café", "sam", "Sams-Own-Secret-5")
+admin.post("/users/%d/toggle" % SAM, data={"_csrf_token": csrf(admin)})
+check("the owner switches Sam off",
+      db("SELECT is_active FROM users WHERE user_id = ?", (SAM,)) == [(0,)])
+
+import html as _html                     # noqa: E402
+
+before = db("SELECT * FROM login_attempts")
+_, response = sign_in("Mom's Café", "sam", "Sams-Own-Secret-5")
+said = [_html.unescape(m) for m in said_on(response)]
+check("Sam, with the right café, name and password, is told the account "
+      "was switched off", any(DEACTIVATED in m for m in said), said)
+check("and is not let in", not response.headers.get("Location"))
+check("telling Sam why is not counted against Sam as a guess",
+      db("SELECT * FROM login_attempts") == before)
+for cafe, password, why in (("Mom's Café", "wrong-password", "a wrong password"),
+                            ("Dosa Point", "Sams-Own-Secret-5", "another café's name"),
+                            (None, "Sams-Own-Secret-5", "no café name at all")):
+    _, response = sign_in(cafe, "sam", password)
+    said = [_html.unescape(m) for m in said_on(response)]
+    check("with %s, only the usual message - nothing about the account" % why,
+          said and not any(DEACTIVATED in m for m in said), said)
+
+page = still_in.get("/billing", follow_redirects=True)
+check("already signed in, Sam is signed out on the next page and told why",
+      signed_in(still_in) is None
+      and DEACTIVATED in page.get_data(as_text=True).replace("&#39;", "'"))
+
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

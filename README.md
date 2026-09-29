@@ -116,6 +116,11 @@ branding, fully isolated from the others.
   username whose account there. A wrong name is refused with the same
   words as a wrong password, and counts towards the lockout the same
   way. Remember me keeps the café's name too.
+- **A switched-off account is told why.** Somebody whose account the
+  owner or an admin has deactivated is told so - but only once they have
+  given the right café name, username and password; anything less gets
+  the usual message, so nobody can list a café's staff by guessing. Signed
+  in when it happens, they are signed out on their next page and told.
 - **Forgot password is for owners and admins.** Staff are told, kindly,
   that their owner or admin sets a new one for them from User
   Management; everyone can still change their own under Change Password.
@@ -428,6 +433,8 @@ each visit, and the reading face preloaded. The picture beside the sign-in
 and register forms, which is what Largest Contentful Paint times there, is
 an `<img>` in the page with `fetchpriority="high"` rather than a CSS
 background the browser only finds late.
+The headline face is cut to what the headlines use - weights 500-700 at
+one optical size - which halves it, 67KB to 32KB.
 
 On a phone the other half was bytes. Pages, the stylesheet and the
 scripts now go out gzipped to any browser that takes it (about a fifth
@@ -750,7 +757,7 @@ python tests/menu_marks_test.py   # expect PASSED: 99   FAILED: 0
 python tests/compression_test.py  # expect PASSED: 42   FAILED: 0
 python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
 python tests/account_fields_browser_test.py # expect PASSED: 27  FAILED: 0
-python tests/sign_in_cafe_test.py # expect PASSED: 41   FAILED: 0
+python tests/sign_in_cafe_test.py # expect PASSED: 49   FAILED: 0
 python tests/table_order_test.py  # expect PASSED: 35   FAILED: 0
 python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0
 python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0

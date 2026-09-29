@@ -8936,6 +8936,19 @@ def login():
                 # Reviews opens on Billing.
                 return redirect(landing_url(user))
 
+            # Switched off by the cafe, and the person asking has proved
+            # it is them: the right cafe, the right account, the right
+            # password. They are told why, and it is not held against
+            # them as a guess.
+            if (user and not user["is_active"]
+                    and typed_cafe is not None
+                    and cafe_name_matches(cursor, user.get("cafe_id"), typed_cafe)
+                    and check_password_hash(user["password_hash"], password)):
+                flash(ACCOUNT_DEACTIVATED)
+                return render_template("login.html", remembered_login=remembered_login(),
+                                       remembered_cafe=remembered_cafe(),
+                                       typed_cafe=typed_cafe)
+
             # Counted here, on the one branch that means "that was
             # wrong" - whether the name is unknown, the account is
             # switched off, or the password simply did not match. The
@@ -9437,6 +9450,15 @@ def cafe_name_matches(cursor, cafe_id, typed):
 
 REMEMBERED_CAFE_COOKIE = "cafora_cafe"
 
+# Said to somebody whose account an owner or admin has switched off - but
+# only once they have given their cafe's name, their username and their
+# right password. Anything less gets the usual "not right" message:
+# telling a stranger that an account exists and is switched off would be
+# a way to list a cafe's staff.
+ACCOUNT_DEACTIVATED = (
+    "This account has been deactivated by your café's owner or admin. "
+    "Ask them to turn it back on if you still need it.")
+
 
 def remember_login(response, name, wanted):
     """
@@ -9721,7 +9743,10 @@ def require_login():
 
     user = get_current_user()
     if not user or not user["is_active"]:
+        switched_off = bool(user) and not user["is_active"]
         session.clear()
+        if switched_off:
+            flash(ACCOUNT_DEACTIVATED)
         return redirect(url_for("login"))
 
     if not endpoint_allowed(user, request.endpoint):
