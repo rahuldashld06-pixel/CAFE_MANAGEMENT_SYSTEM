@@ -186,6 +186,74 @@ li[data-status="Cancelled"] .p-bell__state { background: rgba(225, 97, 79, .16);
 
 .p-bell__none { margin: 0; color: var(--p-dim); font-size: 13.5px; line-height: 1.5; }
 
+/* ---------- Finding an order from another phone or browser ---------- */
+.p-refind {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--p-line);
+}
+
+.p-refind summary {
+    color: var(--copper-light, #EED6B6);
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    list-style-position: inside;
+}
+
+.p-refind__form { display: grid; gap: 10px; margin-top: 10px; }
+
+.p-refind__said {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(225, 97, 79, .14);
+    color: #F0A193;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.p-refind__row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.p-refind__field { display: grid; gap: 4px; }
+
+.p-refind__field span { color: var(--p-faint); font-size: 12px; font-weight: 700; }
+
+.p-refind__field input {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--glass-edge);
+    border-radius: 10px;
+    background: var(--glass-field), var(--p-bg);
+    box-shadow: var(--glass-field-shadow);
+    color: var(--p-text);
+    /* 16px, or iOS zooms the page when it is focused. */
+    font: inherit;
+    font-size: 16px;
+    letter-spacing: .06em;
+}
+
+.p-refind__field input:focus {
+    outline: none;
+    border-color: rgba(var(--copper-rgb), .7);
+    box-shadow: var(--glass-field-focus);
+}
+
+.p-refind__go {
+    padding: 11px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--copper-light, #EED6B6), var(--copper, #D9AE80));
+    color: #1E140E;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.p-refind__hint { margin: 0; color: var(--p-faint); font-size: 12px; }
+
 /* What the bell says aloud when an order is ready. */
 .p-toast {
     position: fixed;
@@ -550,6 +618,34 @@ li[data-status="Cancelled"] .p-bell__state { background: rgba(225, 97, 79, .16);
     font-size: 13.5px;
     color: var(--p-dim);
     margin: 0;
+}
+
+/* The code beside the number: what finds the order again elsewhere. */
+.p-done__code {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 4px;
+    padding: 5px 14px;
+    border: 1px dashed rgba(var(--copper-rgb), .55);
+    border-radius: 999px;
+    color: var(--p-dim);
+    font-size: 13px;
+}
+
+.p-done__code b {
+    color: var(--p-text);
+    font-size: 17px;
+    letter-spacing: .18em;
+    font-variant-numeric: tabular-nums;
+}
+
+.p-done__keep {
+    margin: 0 auto 10px;
+    max-width: 30ch;
+    color: var(--p-faint);
+    font-size: 12.5px;
+    line-height: 1.45;
 }
 
 /* ---------- Is it ready yet ---------- */

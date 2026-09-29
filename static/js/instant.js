@@ -1077,7 +1077,14 @@
     function warmBudget() {
         var link = navigator.connection || {};
         var kind = link.effectiveType || "";
-        if (link.saveData || /2g$/.test(kind)) return 0;
+        // "2g" alone is not enough. effectiveType comes mostly from how long
+        // answers have taken, and a server that is slow for a moment - a busy
+        // laptop, a host waking up - reads as 2g over perfectly good wifi.
+        // A real 2g line is also slow to carry anything, which downlink
+        // (Mbps) says; a slow server with a fast line is not a reason to stop
+        // warming the pages somebody is about to open.
+        var starved = typeof link.downlink !== "number" || link.downlink < 0.3;
+        if (link.saveData || (/2g$/.test(kind) && starved)) return 0;
         // A phone's screen, not a guess at the network: effectiveType is
         // Chrome's estimate from the speeds it has seen lately, and on a busy
         // laptop it will say "3g" about a local network - which cut that

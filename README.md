@@ -87,11 +87,25 @@ branding, fully isolated from the others.
   and Your orders list the references this phone holds and nothing
   else, each checked against the cafe and the day, so twenty phones at
   one table see twenty separate lists, and the kitchen twenty separate
-  orders, #1 to #20. Two people sharing one phone share its list; a
-  phone whose cookies are cleared starts a fresh one (its order is still
-  in the kitchen, under the number it was shown). qr_order_test and
-  customer_menu_browser_test both place orders from a second phone and
-  check it sees only its own.
+  orders, #1 to #20. Two people sharing one phone share its list.
+  qr_order_test and customer_menu_browser_test both place orders from a
+  second phone and check it sees only its own.
+- **An order found again on another phone or browser.** Cookies cleared,
+  or the code scanned with a different browser than the one the order
+  was sent from (a camera app's own browser, then Chrome), and the bell
+  starts empty. So every order has a four-digit code beside its number -
+  on its page and on Your orders - and under the bell, "Ordered on
+  another phone or browser?" takes the two and brings the order onto
+  this phone, straight to its page. The number alone could not do it:
+  numbers count up, so anybody could type the next table's. The code is
+  worked out from the order's random reference under the secret key
+  (`order_code()`), so nothing is stored and nothing migrates. Wrong
+  guesses are counted by the sign-in lockout's own table and rules -
+  five in fifteen minutes shuts that address out of that cafe's search
+  for fifteen more, and nobody else - against odds of one in ten
+  thousand a guess. Only this cafe's orders, only today's, only ones
+  sent from a table. Opening an order's own link on another phone still
+  adds it there too. `find_order_test.py` covers it.
 - **Glass for what is chosen, and where to type.** Every search box - the
   top bar, the lists, New Order's menu, Search, the team list, the
   customer's menu - and the page the sidebar is on are drawn the same
@@ -497,8 +511,12 @@ fonts load without holding up the first paint, dish photos load as they
 come into view, and a touch screen skips the hover effects. Measured on
 a throttled phone, the first paint came about 2.3 times sooner. And a
 phone, or a slow connection, fetches only the next couple of its pages
-ahead (none on Data Saver or 2G); the rest load the moment a link is
-touched.
+ahead (none on Data Saver or a real 2G line); the rest load the moment a
+link is touched. "Real" because Chrome's `effectiveType` is worked out
+mostly from how long answers have taken: a busy laptop, or a server slow
+for a moment, reads as 2G over good wifi - which once switched the
+warm-up off in the middle of a test run. A 2G reading only counts when
+`downlink` agrees that the line is slow to carry anything.
 
 The free hosting tier also stops the service when idle, so the first
 visitor pays start-up plus a fresh connection. Two things guard against
@@ -777,7 +795,7 @@ python tests/stock_alert_test.py  # expect PASSED: 33   FAILED: 0
 python tests/print_test.py        # expect PASSED: 56   FAILED: 0
 python tests/staff_access_test.py # expect PASSED: 33   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 44   FAILED: 0
-python tests/browser_nav_test.py  # expect PASSED: 15   FAILED: 0
+python tests/browser_nav_test.py  # expect PASSED: 18   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 31   FAILED: 0
 python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
 python tests/mobile_nav_test.py   # expect PASSED: 94   FAILED: 0
@@ -817,10 +835,11 @@ python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0
 python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0
 python tests/table_switch_browser_test.py # expect PASSED: 12  FAILED: 0
 python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
-python tests/customer_menu_browser_test.py # expect PASSED: 54  FAILED: 0
+python tests/customer_menu_browser_test.py # expect PASSED: 59  FAILED: 0
+python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
 ```
 
-All fifty-four run in memory against a SQLite stand-in — no database or
+All fifty-five run in memory against a SQLite stand-in — no database or
 network needed. The twenty-four that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 

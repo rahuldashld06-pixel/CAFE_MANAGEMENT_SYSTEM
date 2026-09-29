@@ -37,7 +37,7 @@
             <h1 class="p-head__name">{{ branding.cafe_name }}</h1>
             <p class="p-head__sub">Your orders today</p>
         </div>
-        {{ order_bell(token, orders) }}
+        {{ order_bell(token, orders, request.args.get('find')) }}
     </header>
 
     <main>
@@ -57,7 +57,7 @@
             <span class="p-past__no">#{{ order.daily_no or order.order_id }}</span>
             <span class="p-past__body">
                 <span class="p-past__state">{{ SAYS.get(order.order_status, SAYS["Pending"]) }}</span>
-                <span class="p-past__at">Sent at {{ order.when }}</span>
+                <span class="p-past__at">Sent at {{ order.when }} &middot; code {{ order.code }}</span>
             </span>
             <span class="p-past__sum">&#8377;{{ "%.2f"|format(order.total_amount|float) }}</span>
         </a>
@@ -70,7 +70,9 @@
        told that than left wondering. #}
     <p class="p-note">
         Quote a number at the counter. This list is kept on this phone, for
-        today only - it does not appear on any other phone.
+        today only - it does not appear on any other phone. To see an order
+        on another phone or browser, tap the bell there and enter its number
+        and code.
     </p>
 
     {% else %}
@@ -79,6 +81,8 @@
         <p>Nothing from this phone today.</p>
         <p>Every order you send from here is listed on this page, with the
            number to quote at the counter.</p>
+        <p>Ordered on another phone or browser? Tap the bell at the top and
+           enter the order's number and code.</p>
     </div>
 
     {% endif %}

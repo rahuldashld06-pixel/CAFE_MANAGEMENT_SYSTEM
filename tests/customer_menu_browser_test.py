@@ -515,6 +515,47 @@ try:
           "the number reads %r" % b.evaluate(
               "document.querySelector('#orderBellPanel .p-bell__no').textContent"))
 
+    # =================================================================
+    print("\n=== 13. Cookies cleared: the order found again by number and code ===")
+    # =================================================================
+    b.call("Network.clearBrowserCookies")
+    open_page(MENU)
+    check("the bell starts empty again",
+          b.evaluate("!document.querySelector('#orderBellPanel li')"),
+          "the cleared phone still lists an order")
+    b.evaluate("document.getElementById('orderBellButton').click()")
+    b.evaluate("document.querySelector('#orderFind summary').click()")
+    check("the bell offers to find an order from another phone or browser",
+          b.evaluate("document.getElementById('orderFind').open"
+                     " && document.querySelector('#orderFind [name=number]')"
+                     ".getClientRects().length > 0"),
+          "the search under the bell did not open")
+    code = application.order_code(theirs)
+    b.evaluate("""
+        (function () {
+            var form = document.querySelector('#orderFind form');
+            form.querySelector('[name=number]').value = '#2';
+            form.querySelector('[name=code]').value = %r;
+            form.querySelector('button[type=submit]').click();
+        }())
+    """ % code)
+    wait("location.pathname.indexOf('/placed/') > -1", "the found order")
+    check("it goes straight to the order",
+          b.evaluate("location.pathname.split('/').pop()") == theirs,
+          "it landed on %r" % b.evaluate("location.pathname"))
+    check("which shows the same code",
+          b.evaluate("document.getElementById('orderCode').textContent.trim()") == code,
+          "the page shows %r" % b.evaluate(
+              "(document.getElementById('orderCode') || {}).textContent"))
+    open_page(MENU)
+    listed = b.evaluate("""
+        [].map.call(document.querySelectorAll('#orderBellPanel li'), function (li) {
+            return li.getAttribute('data-ref');
+        })
+    """) or []
+    check("and the bell has it again", listed == [theirs],
+          "the bell lists %s" % listed)
+
 finally:
     try:
         b.close()

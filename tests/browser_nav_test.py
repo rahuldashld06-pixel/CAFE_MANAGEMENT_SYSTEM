@@ -319,6 +319,49 @@ try:
     check("the dashboard's 5s poll stops when you navigate away",
           len(stats) == 0, "still polling: %d hits" % len(stats))
 
+    print("\n=== 7. What counts as a slow line ===")
+    # Chrome's effectiveType is worked out mostly from how long answers
+    # have taken, so a busy laptop - or a server slow for a moment - reads
+    # as "2g" over a perfectly good line. That once switched the warm-up
+    # off in the middle of a suite run. Only a line that is also slow to
+    # carry anything (downlink), or somebody who asked to save data,
+    # should cost them the warm-up.
+    def warmed_on(line, settle):
+        """Prefetches made after a fresh load, with navigator.connection faked."""
+        added = browser.call(
+            "Page.addScriptToEvaluateOnNewDocument",
+            source="Object.defineProperty(navigator, 'connection', "
+                   "{configurable: true, get: function () { return %s; }});" % line)
+        try:
+            # The last page's warm-up may still have requests queued at the
+            # server. A blank page stops it sending more; the pause lets the
+            # queue drain, so what is counted is this load's alone.
+            browser.call("Page.navigate", url="about:blank")
+            time.sleep(1.5)
+            REQUESTS.clear()
+            browser.call("Page.navigate", url=BASE + "/foods")
+            wait_for("document.readyState === 'complete'"
+                     " && typeof window.Instant === 'object'", "the foods page")
+            deadline = time.time() + settle
+            while time.time() < deadline:
+                if any(r[2] for r in REQUESTS) and settle > 6:
+                    break
+                time.sleep(0.25)
+            return sorted({r[1] for r in REQUESTS if r[2]})
+        finally:
+            browser.call("Page.removeScriptToEvaluateOnNewDocument",
+                         identifier=added["identifier"])
+
+    busy = warmed_on("{effectiveType: '2g', downlink: 1.45, rtt: 1500, saveData: false}", 20)
+    check("a busy laptop that Chrome calls 2g still warms the sidebar",
+          len(busy) >= 1, "nothing was prefetched: %s" % busy)
+    starved = warmed_on("{effectiveType: '2g', downlink: 0.05, rtt: 1800, saveData: false}", 5)
+    check("a real 2g line - slow to carry anything too - does not",
+          starved == [], "prefetched over 2g: %s" % starved)
+    saving = warmed_on("{effectiveType: '4g', downlink: 10, rtt: 50, saveData: true}", 5)
+    check("and neither does somebody saving data, however fast the line",
+          saving == [], "prefetched with Data Saver on: %s" % saving)
+
 finally:
     try:
         browser.close()

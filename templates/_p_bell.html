@@ -10,14 +10,24 @@
 
    `orders` is table_orders() for this phone: checked against the cafe,
    today's only, newest first.
+
+   Under the list, a way to bring an order here from another phone or
+   browser - its number and the four-digit code beside it. `find` is
+   why the search sent them back, if it did (?find= on the address), and
+   opens the bell on it.
    ------------------------------------------------------------------ #}
 {% set SAY = {"Pending": "Being made", "Completed": "Ready", "Cancelled": "Cancelled"} %}
-{% macro order_bell(token, orders) %}
+{% set FIND_SAYS = {
+    "missed": "We could not find an order with that number and code today. Please check both on your order screen.",
+    "wait": "Too many tries just now. Please try again in a few minutes, or ask at the counter.",
+    "blank": "Please enter your order number and its 4-digit code."} %}
+{% macro order_bell(token, orders, find=None) %}
+{% set find = find if find in FIND_SAYS else None %}
 {% set waiting = orders | selectattr("order_status", "equalto", "Pending") | list %}
 <div class="p-bell" id="orderBell"
      data-status-url="{{ url_for('public_order_status', token=token, ref='REF') }}">
     <button type="button" class="p-bell__button" id="orderBellButton"
-            aria-haspopup="dialog" aria-expanded="false" aria-controls="orderBellPanel"
+            aria-haspopup="dialog" aria-expanded="{{ 'true' if find else 'false' }}" aria-controls="orderBellPanel"
             aria-label="Your orders today{% if waiting %}, {{ waiting|length }} being made{% endif %}">
         <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6 9a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9z"/>
@@ -26,7 +36,7 @@
         <span class="p-bell__count" id="orderBellCount" {% if not waiting %}hidden{% endif %}>{{ waiting|length }}</span>
     </button>
 
-    <div class="p-bell__panel" id="orderBellPanel" role="dialog" aria-label="Your orders today" hidden>
+    <div class="p-bell__panel" id="orderBellPanel" role="dialog" aria-label="Your orders today" {% if not find %}hidden{% endif %}>
         <p class="p-bell__title">Your orders today</p>
         {% if orders %}
         <ul class="p-bell__list">
@@ -46,6 +56,31 @@
         <p class="p-bell__none">Nothing ordered from this phone yet today. What you order shows
             here, and you are told when it is ready.</p>
         {% endif %}
+
+        <details class="p-refind" id="orderFind" {% if find %}open{% endif %}>
+            <summary>Ordered on another phone or browser?</summary>
+            <form method="POST" action="{{ url_for('public_find_order', token=token) }}"
+                  class="p-refind__form">
+                {% if find %}
+                <p class="p-refind__said" role="alert">{{ FIND_SAYS[find] }}</p>
+                {% endif %}
+                <div class="p-refind__row">
+                    <label class="p-refind__field">
+                        <span>Order number</span>
+                        <input type="text" name="number" inputmode="numeric"
+                               maxlength="6" placeholder="#12" autocomplete="off" required>
+                    </label>
+                    <label class="p-refind__field">
+                        <span>4-digit code</span>
+                        <input type="text" name="code" inputmode="numeric"
+                               maxlength="4" pattern="[0-9]{4}" placeholder="0000"
+                               autocomplete="off" required>
+                    </label>
+                </div>
+                <button type="submit" class="p-refind__go">Find my order</button>
+                <p class="p-refind__hint">Both are on your order screen, under the number.</p>
+            </form>
+        </details>
     </div>
 </div>
 <div class="p-toast" id="pToast" role="status" aria-live="polite"></div>

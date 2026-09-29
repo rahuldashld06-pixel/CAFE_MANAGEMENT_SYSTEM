@@ -9697,6 +9697,9 @@ def require_login():
         # What this phone has ordered here today, which is how somebody
         # who ordered twice says which order was theirs.
         "public_table_orders",
+        # An order of today's brought back onto this phone by its number
+        # and code, for somebody whose bell is empty in a new browser.
+        "public_find_order",
         # Stars and a comment on a finished order, from the customer's
         # own phone.
         "public_review",
@@ -11486,6 +11489,45 @@ def ordered_today(order_day):
     return str(order_day or "")[:10] == date.today().isoformat()
 
 
+# ==========================================================
+# Finding an order again on another phone or browser
+#
+# A phone knows its orders by a cookie. Clear it, or scan the
+# code again with a different browser - a camera app's own
+# browser, then Chrome - and the bell starts empty, though the
+# order is still in the kitchen. The order number alone cannot
+# bring it back: numbers count up from 1, so anybody could type
+# the next table's. So each order has a code beside its number,
+# four digits, and the two together find it.
+# ==========================================================
+
+ORDER_CODE_DIGITS = 4
+
+
+def order_code(ref):
+    """
+    The code printed beside an order's number.
+
+    Worked out from the order's own random reference under the app's
+    secret key, not stored: nothing to migrate, nothing new in the
+    database to leak, and the same four digits every time the order is
+    shown. Without the key they cannot be worked out from the number.
+    """
+    key = str(app.secret_key).encode("utf-8")
+    digest = hmac.new(key, b"order-code\x00" + str(ref).encode("utf-8"),
+                      hashlib.sha256).digest()
+    return "%0*d" % (ORDER_CODE_DIGITS,
+                     int.from_bytes(digest[:8], "big") % 10 ** ORDER_CODE_DIGITS)
+
+
+# The name wrong guesses are counted under, beside the address they
+# came from - the sign-in lockout's own table and rules: five wrong in
+# fifteen minutes shuts that address out of this cafe's search for
+# fifteen more. Four digits is ten thousand codes, so a guesser gets a
+# handful of tries an hour against odds of one in ten thousand each.
+FIND_ORDER_COUNTED_AS = "qr-find:%s"
+
+
 def table_orders(cursor, cafe, refs):
     """
     Which of those refs are orders of this cafe's today, newest first.
@@ -11513,6 +11555,7 @@ def table_orders(cursor, cafe, refs):
         # region the site happens to run in, and not the phone's.
         local = as_cafe_time(order["order_date"], cafe["cafe_id"])
         order["when"] = local.strftime("%I:%M %p") if local else ""
+        order["code"] = order_code(order["public_ref"])
     return orders
 
 
@@ -11780,6 +11823,7 @@ def public_order_placed(token, ref):
 
         order["type_label"] = ORDER_TYPE_LABELS.get(
             order_type_of(order.get("order_type")), "Dine-in")
+        order["code"] = order_code(order["public_ref"])
         # Asked only while the kitchen still has it: once it is ready, a
         # busy kitchen is nobody's concern at this table.
         busy = (order["order_status"] == "Pending"
@@ -11824,6 +11868,72 @@ def public_order_placed(token, ref):
             remember_ref(answer, token, ref)
 
         return answer
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/m/<token>/find", methods=["POST"])
+def public_find_order(token):
+    """
+    An order of today's, found by its number and code, onto this phone.
+
+    For a customer whose bell is empty though they have ordered: cookies
+    cleared, or the menu opened in a different browser from the one they
+    ordered in. The number and the code are both on the order's page.
+    Found, it is added to what this phone holds and they are taken to it;
+    not found, they are sent back to the menu with the bell open to say
+    so. Only this cafe's orders, only today's, and only ones placed from
+    a table - a counter order was never a phone's to show.
+    """
+    number = re.sub(r"\D", "", request.form.get("number") or "")[:6]
+    code = re.sub(r"\D", "", request.form.get("code") or "")[:8]
+
+    def again(why):
+        return redirect(url_for("public_menu", token=token, find=why))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cafe = cafe_for_token(cursor, token)
+        if cafe is None:
+            return render_template("public_gone.html"), 404
+
+        # A form sent half-filled is a slip, not a guess, and costs
+        # nothing against the count.
+        if not number or len(code) != ORDER_CODE_DIGITS:
+            return again("blank")
+
+        who = request_source()
+        counted_as = (FIND_ORDER_COUNTED_AS % token)[:80]
+        if login_lock_remaining(cursor, counted_as, who):
+            return again("wait")
+
+        cursor.execute(
+            "SELECT public_ref FROM orders "
+            "WHERE user_id = %s AND order_day = %s AND source = 'qr' "
+            "  AND daily_no = %s AND public_ref IS NOT NULL",
+            (cafe["owner_user_id"], date.today(), int(number)))
+        found = None
+        for row in cursor.fetchall():
+            if hmac.compare_digest(order_code(row["public_ref"]), code):
+                found = row["public_ref"]
+
+        if found is None:
+            note_login_failure(cursor, counted_as, who)
+            connection.commit()
+            return again("missed")
+
+        clear_login_failures(cursor, counted_as, who)
+        connection.commit()
+        return remember_ref(
+            redirect(url_for("public_order_placed", token=token, ref=found)),
+            token, found)
     finally:
         if cursor:
             cursor.close()

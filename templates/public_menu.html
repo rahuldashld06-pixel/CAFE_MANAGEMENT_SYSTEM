@@ -39,7 +39,7 @@
             <h1 class="p-head__name">{{ branding.cafe_name }}</h1>
             <p class="p-head__sub">Just choose what you like</p>
         </div>
-        {{ order_bell(token, mine) }}
+        {{ order_bell(token, mine, request.args.get('find')) }}
     </header>
 
     <main>

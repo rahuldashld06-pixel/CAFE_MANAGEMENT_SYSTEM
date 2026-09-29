@@ -57,6 +57,10 @@
 
         <div class="p-done__label">Your order number</div>
         <div class="p-done__number">#{{ order.daily_no or order.order_id }}</div>
+        {# With the number, what finds this order again on a phone or a
+           browser that does not have it - see the bell. #}
+        <p class="p-done__code">Order code <b id="orderCode">{{ order.code }}</b></p>
+        <p class="p-done__keep">Keep it with your number to see this order on another phone or browser.</p>
         <span class="p-kind-tag">{{ order.type_label }}{% if order.order_type == 'takeaway' %} &middot; packed to take away{% endif %}</span>
 
         {# Spoken as well as shown: the page changes under someone who may
