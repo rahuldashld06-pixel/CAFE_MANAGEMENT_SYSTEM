@@ -1,5 +1,4 @@
 {% from "_brand_mark.html" import coffee_mark %}
-{% from "_table_orders.html" import table_orders_link %}
 {% from "_diet.html" import diet_mark %}
 {% from "_p_bell.html" import order_bell %}
 {% from "_food_art.html" import food_sprite, food_art %}
@@ -54,9 +53,8 @@
     {% endwith %}
 
     {# Somebody who has already ordered today arrives back here, because
-       "Order something else" leads here. Without this the number they
-       were given is on a page they have left behind. #}
-    {{ table_orders_link(token, mine, "Your orders today") }}
+       "Order something else" leads here. Their numbers are under the
+       bell at the top, so the menu itself starts with the menu. #}
 
     {% if food_count == 0 %}
 

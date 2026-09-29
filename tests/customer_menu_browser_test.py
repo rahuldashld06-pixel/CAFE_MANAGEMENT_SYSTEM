@@ -353,6 +353,18 @@ try:
     check("and nothing is pushed off the side of a phone", box["wide"] <= 390,
           "the page is %dpx wide" % box["wide"])
 
+    field = b.evaluate("""
+        (function () {
+            var s = getComputedStyle(document.getElementById('menuSearch'));
+            return {shadow: s.boxShadow, image: s.backgroundImage};
+        }())
+    """)
+    check("the search box is glass: lit from above",
+          "gradient" in field["image"], "background-image is %r" % field["image"])
+    check("with a shine along its top edge and a shadow under it",
+          "inset" in field["shadow"] and field["shadow"].count("rgb") >= 3,
+          "box-shadow is %r" % field["shadow"])
+
     # =================================================================
     print("\n=== 8. Nothing ordered yet ===")
     # =================================================================
@@ -397,6 +409,9 @@ try:
                      " && document.getElementById('orderBellCount').textContent.trim() === '1'"),
           "the count reads %r" % b.evaluate(
               "document.getElementById('orderBellCount').textContent"))
+    check("the numbers are under the bell, not in a strip above the search",
+          b.evaluate("!document.querySelector('.p-mine')"),
+          "the menu still opens with a strip of order numbers")
     rows = b.evaluate("""
         [].map.call(document.querySelectorAll('#orderBellPanel li'), function (li) {
             return {state: li.querySelector('.p-bell__state').textContent.trim(),
@@ -464,6 +479,41 @@ try:
     check("and nothing still being made, so no number",
           b.evaluate("document.getElementById('orderBellCount').hidden"),
           "a count shows for a finished order")
+
+    # =================================================================
+    print("\n=== 12. The next phone at the same table, same QR code ===")
+    # =================================================================
+    # A phone is its cookies. Clearing them is a different phone that
+    # has scanned the very same code.
+    b.call("Network.enable")
+    b.call("Network.clearBrowserCookies")
+    open_page(MENU)
+    check("a phone that has not ordered has nothing under its bell",
+          b.evaluate("document.getElementById('orderBellCount').hidden"
+                     " && !document.querySelector('#orderBellPanel li')"),
+          "the other phone's order is under this one's bell")
+
+    first_order = orders_placed()
+    b.evaluate("document.querySelectorAll(\".p-step [data-step='1']\")[1].click()")
+    b.evaluate("document.getElementById('sendBtn').click()")
+    wait("!document.getElementById('holdWindow').hidden", "the window")
+    b.evaluate("document.getElementById('holdNow').click()")
+    wait("location.pathname.indexOf('/placed/') > -1", "the order page")
+    theirs = b.evaluate("location.pathname.split('/').pop()")
+    open_page(MENU)
+    listed = b.evaluate("""
+        [].map.call(document.querySelectorAll('#orderBellPanel li'), function (li) {
+            return li.getAttribute('data-ref');
+        })
+    """) or []
+    check("its own order, and only its own",
+          orders_placed() == first_order + 1 and listed == [theirs],
+          "this phone's bell lists %s (its order is %s)" % (listed, theirs))
+    check("which is its own number, not the first phone's #1",
+          b.evaluate("document.querySelector('#orderBellPanel .p-bell__no')"
+                     ".textContent.trim()") == "#2",
+          "the number reads %r" % b.evaluate(
+              "document.querySelector('#orderBellPanel .p-bell__no').textContent"))
 
 finally:
     try:

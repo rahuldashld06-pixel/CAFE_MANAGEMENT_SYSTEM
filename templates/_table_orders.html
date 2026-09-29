@@ -1,14 +1,14 @@
 {# ------------------------------------------------------------------
    The numbers this phone has already been given today.
 
-   Shown on the menu and again under a new order, because those are the
-   two places a customer is standing when they need the earlier one: the
-   page that carried it has been replaced by whatever they did next.
+   Shown under a new order, because that is where a customer is standing
+   when they need the earlier one: the page that carried it has been
+   replaced by this one. On the menu they are under the bell instead
+   (_p_bell.html), so the menu starts with the menu.
 
-   A link to the list rather than the list itself. On the menu a list of
-   past orders is a list between somebody and their lunch, and on the
-   page after an order the order in front of them is the one that
-   matters - the others are a number and a tap away.
+   A link to the list rather than the list itself. On the page after an
+   order the order in front of them is the one that matters - the others
+   are a number and a tap away.
    ------------------------------------------------------------------ #}
 {% macro table_orders_link(token, orders, label) %}
 {% if orders %}

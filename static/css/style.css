@@ -6467,3 +6467,53 @@ div.food-art {
 }
 
 .mini-reviews__dishes { color: var(--cream-faint) !important; }
+
+/* ==========================================================
+   Glass: search boxes and the sidebar's page
+
+   The recipe is in theme.css. Last in the file on purpose, so it
+   holds over the phone and tablet versions of the same rules
+   further up.
+   ========================================================== */
+
+/* Every search box: the top bar, the lists and New Order's menu,
+   Search itself, and the team list. */
+.menu-search__input,
+.search-again input[type="search"],
+.team-filter input[type="search"],
+.topbar-search__field,
+.topbar-search__go {
+    border-color: var(--glass-edge);
+    background: var(--glass-field), var(--espresso-850);
+    box-shadow: var(--glass-field-shadow);
+    transition: box-shadow .18s ease, border-color .18s ease, color .18s ease;
+}
+
+.menu-search__input:focus,
+.search-again input[type="search"]:focus,
+.team-filter input[type="search"]:focus,
+.topbar-search__field:focus-within {
+    outline: none;
+    border-color: rgba(var(--copper-rgb), .7);
+    box-shadow: var(--glass-field-focus);
+}
+
+.topbar-search__go:hover {
+    background: var(--glass-on), rgba(var(--copper-rgb), .22);
+    color: var(--cream);
+}
+
+/* The page the sidebar is on: lifted, in glass over the accent. */
+.nav-link.active,
+:root.guide-full .nav-link.active {
+    color: var(--cream);
+    background: var(--glass-on), rgba(var(--copper-rgb), .3);
+    box-shadow: var(--glass-on-shadow);
+    transform: translateY(-1px);
+}
+
+.nav-link.active i,
+:root.guide-full .nav-link.active i {
+    color: var(--copper-light);
+    filter: drop-shadow(0 1px 0 rgba(0, 0, 0, .35));
+}

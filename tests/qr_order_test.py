@@ -1134,10 +1134,13 @@ check("and offers the rest of them",
       "there is no way through to the whole list")
 
 _back = _phone.get("/m/%s" % _mine_token).get_data(as_text=True)
-check("the menu they go back to carries both numbers, newest first",
-      _numbers(_back) == sorted(_numbers(_back), key=int, reverse=True)
-      and len(_numbers(_back)) == 2,
-      "the menu shows %s" % _numbers(_back))
+_belled = _numbers(_back, "p-bell__no")
+check("the menu they go back to has both numbers under its bell, newest first",
+      _belled == sorted(_belled, key=int, reverse=True) and len(_belled) == 2,
+      "the bell lists %s" % _belled)
+check("and not again in a strip above the search - the bell is enough",
+      "p-mine" not in _back,
+      "the menu still opens with a strip of numbers")
 
 _list = _phone.get("/m/%s/orders" % _mine_token)
 _list_html = _list.get_data(as_text=True)

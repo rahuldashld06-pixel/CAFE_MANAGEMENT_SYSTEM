@@ -76,7 +76,28 @@ branding, fully isolated from the others.
   small query each - and when one is ready the bell rings and says so,
   so somebody reading the menu for a second round hears that the first
   is waiting. Nothing extra is fetched to draw it: the orders are the
-  ones the page already had.
+  ones the page already had. The menu itself no longer opens with a strip
+  of today's numbers - they are under the bell - so it starts with the
+  menu; the page after a new order still names the earlier ones.
+- **Twenty people, one QR code.** The code only says which cafe it is;
+  it knows nobody. Each order is given its own random reference
+  (`secrets.token_urlsafe(12)`, not the order number, which counts up),
+  and the phone that placed it keeps that reference in a cookie of its
+  own - HttpOnly, for this cafe's pages only, for today only. The bell
+  and Your orders list the references this phone holds and nothing
+  else, each checked against the cafe and the day, so twenty phones at
+  one table see twenty separate lists, and the kitchen twenty separate
+  orders, #1 to #20. Two people sharing one phone share its list; a
+  phone whose cookies are cleared starts a fresh one (its order is still
+  in the kitchen, under the number it was shown). qr_order_test and
+  customer_menu_browser_test both place orders from a second phone and
+  check it sees only its own.
+- **Glass for what is chosen, and where to type.** Every search box - the
+  top bar, the lists, New Order's menu, Search, the team list, the
+  customer's menu - and the page the sidebar is on are drawn the same
+  way: lit from above, shaded below, lifted off the page, in the cafe's
+  accent colour. The recipe is `--glass-*` in theme.css, once, so the
+  staff pages and the customer's menu cannot drift apart.
 - **A picture for every dish.** A dish without a photo gets a drawing of
   what it is, on a tile in its own colour: a latte a cup, a dosa a dosa,
   a Coca-Cola a can, a Bisleri a bottle - thirty-two of them, read from
@@ -763,7 +784,7 @@ python tests/mobile_nav_test.py   # expect PASSED: 94   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
-python tests/qr_order_test.py     # expect PASSED: 145  FAILED: 0
+python tests/qr_order_test.py     # expect PASSED: 146  FAILED: 0
 python tests/kitchen_screen_test.py # expect PASSED: 21  FAILED: 0
 python tests/password_view_test.py # expect PASSED: 29  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
@@ -796,7 +817,7 @@ python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0
 python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0
 python tests/table_switch_browser_test.py # expect PASSED: 12  FAILED: 0
 python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
-python tests/customer_menu_browser_test.py # expect PASSED: 48  FAILED: 0
+python tests/customer_menu_browser_test.py # expect PASSED: 54  FAILED: 0
 ```
 
 All fifty-four run in memory against a SQLite stand-in — no database or

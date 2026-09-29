@@ -798,19 +798,21 @@ li[data-status="Cancelled"] .p-bell__state { background: rgba(225, 97, 79, .16);
     font-family: inherit;
     padding: 12px 40px 12px 38px;
     border-radius: 999px;
-    border: 1px solid var(--p-line);
-    background: var(--p-card);
+    border: 1px solid var(--glass-edge);
+    background: var(--glass-field), var(--p-card);
+    box-shadow: var(--glass-field-shadow);
     color: var(--p-text);
     -webkit-appearance: none;
     appearance: none;
+    transition: box-shadow .18s ease, border-color .18s ease;
 }
 
 .p-find__input::placeholder { color: var(--p-faint); }
 
 .p-find__input:focus {
     outline: none;
-    border-color: var(--copper);
-    box-shadow: 0 0 0 3px rgba(var(--copper-rgb), .2);
+    border-color: rgba(var(--copper-rgb), .7);
+    box-shadow: var(--glass-field-focus);
 }
 
 .p-find__input::-webkit-search-cancel-button { display: none; }
@@ -910,13 +912,6 @@ li[data-status="Cancelled"] .p-bell__state { background: rgba(225, 97, 79, .16);
     color: var(--p-text);
     text-decoration: none;
 }
-
-/* On the menu it opens the page, under the header's own room, and the
-   search comes straight after it: the space goes below it instead. */
-main > .p-mine:first-child { margin-top: 0; }
-.p-mine + .p-find,
-.p-mine + .p-paused,
-.p-mine + .p-empty { margin-top: 14px; }
 
 .p-mine__body { flex: 1 1 auto; min-width: 0; }
 
