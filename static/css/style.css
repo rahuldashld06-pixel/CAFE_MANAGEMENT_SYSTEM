@@ -6511,9 +6511,7 @@ div.food-art {
 }
 
 .topbar-search__box:focus-within {
-    box-shadow:
-        0 0 0 3px rgba(var(--copper-rgb), .24),
-        0 14px 28px -12px rgba(var(--copper-rgb), .6);
+    box-shadow: var(--glass-field-ring);
 }
 
 .topbar-search__box:focus-within .topbar-search__field,
@@ -6552,3 +6550,15 @@ div.food-art {
     color: var(--copper-light);
     filter: drop-shadow(0 1px 0 rgba(0, 0, 0, .35));
 }
+
+/* The page the profile menu is on: the sidebar's glass over the accent,
+   edges and all, but flat to the menu - no lift and no shadow, since the
+   menu itself already floats over the page. */
+.profile-dropdown__item.is-current,
+.profile-dropdown__item.is-current:hover {
+    color: var(--cream);
+    background: var(--glass-on), rgba(var(--copper-rgb), .26);
+    box-shadow: var(--glass-on-edges);
+}
+
+.profile-dropdown__item.is-current i { color: var(--copper-light); }

@@ -469,6 +469,60 @@ try:
     check("scrolled, the header stays, as glass",
           -1 <= rect(".topbar")["top"] <= 1 and root_has("is-scrolled"))
 
+    # =================================================================
+    print("\n=== 7. The profile menu's page, and search boxes, in glass ===")
+    # =================================================================
+    size(1440, 900)
+    b.call("Emulation.setFocusEmulationEnabled", enabled=True)
+
+    def current_items():
+        return b.evaluate("""
+            [].map.call(document.querySelectorAll('#profileDropdown .is-current'),
+                function (a) { return a.getAttribute('href') + '|' +
+                                      a.getAttribute('aria-current'); })
+        """) or []
+
+    def only_inside(shadow):
+        """Every shadow drawn inside the box: glass, nothing cast outside."""
+        return bool(shadow) and shadow != "none" \
+            and shadow.count("inset") == shadow.count("rgb")
+
+    open_page("/settings/tax")
+    check("on Tax & Discount, the profile menu marks Tax & Discount",
+          current_items() == ["/settings/tax|page"], current_items())
+    look = b.evaluate("""
+        (function () {
+            var s = getComputedStyle(document.querySelector('#profileDropdown .is-current'));
+            return {image: s.backgroundImage, shadow: s.boxShadow, lift: s.transform};
+        }())
+    """)
+    check("in glass: lit from above", "gradient" in look["image"], look["image"])
+    check("with its edges lit and shaded, and no shadow cast",
+          only_inside(look["shadow"]), look["shadow"])
+    check("and not lifted", look["lift"] in ("none", ""), look["lift"])
+
+    b.evaluate("window.Instant.visit('%s/settings/packing', {})" % BASE, False)
+    wait("location.pathname === '/settings/packing'")
+    time.sleep(0.4)
+    check("the mark moves with the page, without a reload",
+          current_items() == ["/settings/packing|page"], current_items())
+    b.evaluate("window.Instant.visit('%s/dashboard', {})" % BASE, False)
+    wait("location.pathname === '/dashboard'")
+    time.sleep(0.4)
+    check("and a page the menu does not lead to marks nothing",
+          current_items() == [], current_items())
+
+    check("the top bar's search is glass with no shadow under it",
+          only_inside(style(".topbar-search__field", "boxShadow"))
+          and only_inside(style(".topbar-search__go", "boxShadow")),
+          style(".topbar-search__field", "boxShadow"))
+    b.evaluate("document.getElementById('topSearchInput').focus()")
+    time.sleep(0.4)
+    ring = style(".topbar-search__box", "boxShadow")
+    check("typing in it draws a ring round the whole bar, and no glow",
+          ring.count("rgb") == 1 and "0px 0px 0px 3px" in ring, ring)
+    b.evaluate("document.getElementById('topSearchInput').blur()")
+
 finally:
     try:
         b.close()

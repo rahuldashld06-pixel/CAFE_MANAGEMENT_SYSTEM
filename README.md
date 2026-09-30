@@ -108,10 +108,16 @@ branding, fully isolated from the others.
   adds it there too. `find_order_test.py` covers it.
 - **Glass for what is chosen, and where to type.** Every search box - the
   top bar, the lists, New Order's menu, Search, the team list, the
-  customer's menu - and the page the sidebar is on are drawn the same
-  way: lit from above, shaded below, lifted off the page, in the cafe's
-  accent colour. The recipe is `--glass-*` in theme.css, once, so the
-  staff pages and the customer's menu cannot drift apart.
+  customer's menu - is glass: lit along its top edge, shaded along its
+  foot, with no shadow cast on the page; typing in one draws a ring round
+  it (round the whole bar, button and all, in the top bar). The page the
+  sidebar is on is the same glass over the accent colour, lifted off the
+  page with its shadow; the page the profile menu is on is that glass
+  flat, with no shadow, since the menu already floats. The profile menu
+  is part of the shell, which page swaps do not redraw, so its mark
+  follows the address on every swap. The recipe is `--glass-*` in
+  theme.css, once, so the staff pages and the customer's menu cannot
+  drift apart.
 - **A picture for every dish.** A dish without a photo gets a drawing of
   what it is, on a tile in its own colour: a latte a cup, a dosa a dosa,
   a Coca-Cola a can, a Bisleri a bottle - thirty-two of them, read from
@@ -841,7 +847,7 @@ python tests/draft_restore_test.py # expect PASSED: 35  FAILED: 0
 python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
 python tests/dashboard_feed_test.py # expect PASSED: 43  FAILED: 0
 python tests/reports_test.py      # expect PASSED: 39   FAILED: 0
-python tests/shell_browser_test.py # expect PASSED: 58  FAILED: 0
+python tests/shell_browser_test.py # expect PASSED: 66  FAILED: 0
 python tests/order_type_test.py   # expect PASSED: 45   FAILED: 0
 python tests/review_test.py       # expect PASSED: 46   FAILED: 0
 python tests/menu_marks_test.py   # expect PASSED: 99   FAILED: 0

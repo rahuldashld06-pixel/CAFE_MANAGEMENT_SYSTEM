@@ -1032,6 +1032,27 @@ window.CafeShell = {
         mark();
     }());
 
+    // ---- The profile menu marks the page it is on ----------------------
+    // As the sidebar does. The sidebar is redrawn from the server's page
+    // on every swap; this menu is part of the shell and is not, so the
+    // mark follows the address instead, and moves with every page.
+    (function () {
+        const menu = document.getElementById("profileDropdown");
+        if (!menu) return;
+
+        function mark() {
+            menu.querySelectorAll("a.profile-dropdown__item[href]").forEach(function (item) {
+                const here = new URL(item.href, location.href).pathname === location.pathname;
+                item.classList.toggle("is-current", here);
+                if (here) item.setAttribute("aria-current", "page");
+                else item.removeAttribute("aria-current");
+            });
+        }
+
+        document.addEventListener("instant:load", mark);
+        mark();
+    }());
+
     // ---- Search ----
     // In the middle of the header wherever it fits. On a phone it is an
     // icon that opens the field across the whole header, with a back

@@ -361,8 +361,9 @@ try:
     """)
     check("the search box is glass: lit from above",
           "gradient" in field["image"], "background-image is %r" % field["image"])
-    check("with a shine along its top edge and a shadow under it",
-          "inset" in field["shadow"] and field["shadow"].count("rgb") >= 3,
+    check("with a shine along its top edge, and no shadow cast under it",
+          "inset" in field["shadow"]
+          and field["shadow"].count("inset") == field["shadow"].count("rgb"),
           "box-shadow is %r" % field["shadow"])
 
     # =================================================================
