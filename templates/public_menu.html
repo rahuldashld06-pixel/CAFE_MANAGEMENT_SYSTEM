@@ -174,10 +174,20 @@
         </section>
         {% endfor %}
 
-        <p class="p-none" id="menuNone" hidden>
-            Nothing on the menu matches
-            “<span id="menuNoneTerm"></span>”.
-        </p>
+        {# Two different answers. Not on the menu at all; or on it, but
+           hidden by the Veg or Non-veg the customer pressed - which is
+           said, with the way back, rather than left looking missing. #}
+        <div class="p-none" id="menuNone" hidden>
+            <p id="menuNoneSaid">
+                Nothing on the menu matches
+                “<span id="menuNoneTerm"></span>”.
+            </p>
+            <p id="menuNoneDiet" hidden>
+                “<span id="menuNoneDietTerm"></span>” is on the menu, but not as
+                <span id="menuNoneKind">veg</span>.
+                <button type="button" class="p-none__show" id="menuNoneShow">Show it</button>
+            </p>
+        </div>
 
         <div class="p-bar">
             {# Eating here or taking it away. A takeaway is packed, and
@@ -493,6 +503,11 @@
     var tabs = document.getElementById("menuTabs");
     var none = document.getElementById("menuNone");
     var noneTerm = document.getElementById("menuNoneTerm");
+    var noneSaid = document.getElementById("menuNoneSaid");
+    var noneDiet = document.getElementById("menuNoneDiet");
+    var noneDietTerm = document.getElementById("menuNoneDietTerm");
+    var noneKind = document.getElementById("menuNoneKind");
+    var noneShow = document.getElementById("menuNoneShow");
     if (!search || !tabs) return;
 
     var groups = [].slice.call(document.querySelectorAll(".p-group"));
@@ -503,6 +518,14 @@
     function show() {
         var wanted = search.value.trim().toLowerCase();
         var found = 0;
+        // Dishes whose name matches but whose Veg or Non-veg does not.
+        var otherKind = 0;
+
+        // A name typed is looked for on the whole menu, whichever section
+        // was open: somebody who knows what they want should not have to
+        // know where the cafe filed it. All lights up while they type, so
+        // the tabs say where the answers came from.
+        if (wanted) section = "all";
 
         // A section with nothing of the chosen kind loses its tab, and
         // the menu goes back to All if that was the one being looked at.
@@ -528,13 +551,14 @@
 
             [].forEach.call(group.querySelectorAll(".p-item"),
                 function (item) {
-                    var hit = inSection
-                        && (!diet || item.getAttribute("data-diet") === diet)
-                        && (!wanted
+                    var named = !wanted
                         || (item.getAttribute("data-find") || "")
-                               .indexOf(wanted) > -1);
+                               .indexOf(wanted) > -1;
+                    var kind = !diet || item.getAttribute("data-diet") === diet;
+                    var hit = inSection && kind && named;
                     item.hidden = !hit;
                     if (hit) showing++;
+                    if (wanted && named && !kind) otherKind++;
                 });
 
             // A heading over nothing is worse than no heading.
@@ -545,6 +569,20 @@
         if (clear) clear.hidden = !wanted;
         if (none) none.hidden = found !== 0;
         if (noneTerm) noneTerm.textContent = search.value.trim();
+        if (noneSaid) noneSaid.hidden = otherKind > 0;
+        if (noneDiet) noneDiet.hidden = otherKind === 0;
+        if (noneDietTerm) noneDietTerm.textContent = search.value.trim();
+        if (noneKind) noneKind.textContent = diet === "nonveg" ? "non-veg" : "veg";
+    }
+
+    // Veg, Non-veg, or neither - the buttons and the menu together.
+    function setDiet(value) {
+        diet = value;
+        if (!diets) return;
+        [].forEach.call(diets.querySelectorAll("[data-diet]"), function (each) {
+            each.setAttribute("aria-pressed",
+                each.getAttribute("data-diet") === diet ? "true" : "false");
+        });
     }
 
     search.addEventListener("input", show);
@@ -565,11 +603,15 @@
             var button = event.target.closest("[data-diet]");
             if (!button) return;
             var wanted = button.getAttribute("data-diet");
-            diet = diet === wanted ? "" : wanted;
-            [].forEach.call(diets.querySelectorAll("[data-diet]"), function (each) {
-                each.setAttribute("aria-pressed",
-                    each.getAttribute("data-diet") === diet ? "true" : "false");
-            });
+            setDiet(diet === wanted ? "" : wanted);
+            show();
+        });
+    }
+
+    // "Show it": the dish they typed is there, under the other kind.
+    if (noneShow) {
+        noneShow.addEventListener("click", function () {
+            setDiet("");
             show();
         });
     }

@@ -972,6 +972,23 @@ li[data-status="Cancelled"] .p-bell__state { background: rgba(225, 97, 79, .16);
     color: var(--p-faint);
 }
 
+.p-none p { margin: 0; line-height: 1.6; }
+
+/* The way back to a dish the Veg or Non-veg button is hiding. */
+.p-none__show {
+    margin-left: 6px;
+    padding: 5px 14px;
+    border: 1px solid var(--glass-edge);
+    border-radius: 999px;
+    background: var(--glass-on), rgba(var(--copper-rgb), .26);
+    box-shadow: var(--glass-on-edges);
+    color: var(--p-text);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
 /* A section appearing is a change of content, not a slide - somebody
    is looking for a dish, not watching an animation. This is just
    enough to say the list changed. */

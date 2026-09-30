@@ -557,6 +557,67 @@ try:
     check("and the bell has it again", listed == [theirs],
           "the bell lists %s" % listed)
 
+    # =================================================================
+    print("\n=== 14. A name typed is found wherever it is filed ===")
+    # =================================================================
+    def type_in(words):
+        b.evaluate("""
+            (function () {
+                var s = document.getElementById('menuSearch');
+                s.value = %r;
+                s.dispatchEvent(new Event('input', {bubbles: true}));
+            }())
+        """ % words)
+        time.sleep(0.15)
+
+    def says(which):
+        return b.evaluate("(function () { var n = document.getElementById(%r);"
+                          " return !!n && n.getClientRects().length > 0; }())" % which)
+
+    open_page(MENU)
+    tap_tab("Drinks")
+    check("(on the Drinks tab, only drinks)",
+          drawn() == ["Cold Coffee", "Masala Chai"], "drawn: %s" % drawn())
+    type_in("paneer")
+    check("typing a starter's name on the Drinks tab finds it",
+          drawn() == ["Paneer Tikka"], "drawn: %s" % drawn())
+    check("and All lights up, to say where it came from", on_tab() == "All",
+          "the tab on is %r" % on_tab())
+    tap_tab("Meat")
+    type_in("chai")
+    check("from the Meat tab too - a drink found there",
+          drawn() == ["Masala Chai"], "drawn: %s" % drawn())
+    type_in("wings")
+    check("a name part-typed is enough", drawn() == ["Chicken Wings"],
+          "drawn: %s" % drawn())
+    b.evaluate("document.getElementById('menuSearchClear').click()")
+    time.sleep(0.15)
+    check("cleared, the whole menu is back", drawn() == EVERY, "drawn: %s" % drawn())
+
+    type_in("pizza")
+    check("a dish that is not on the menu finds nothing, and says so plainly",
+          drawn() == [] and says("menuNoneSaid") and not says("menuNoneDiet"),
+          "drawn %s, plain %s, diet %s" % (drawn(), says("menuNoneSaid"),
+                                           says("menuNoneDiet")))
+    b.evaluate("document.getElementById('menuSearchClear').click()")
+
+    press("veg")
+    type_in("chicken")
+    told = b.evaluate("(document.getElementById('menuNoneDiet') || {}).textContent || ''")
+    check("with Veg on, a non-veg dish typed is said to be there, not missing",
+          drawn() == [] and says("menuNoneDiet") and not says("menuNoneSaid")
+          and "chicken" in told and "not as" in told and "veg" in told,
+          "the page says %r" % " ".join(told.split()))
+    b.evaluate("document.getElementById('menuNoneShow').click()")
+    time.sleep(0.3)
+    check("and Show it shows it, with Veg let go",
+          drawn() == ["Chicken Wings"]
+          and b.evaluate("document.querySelector('[data-diet=veg]')"
+                         ".getAttribute('aria-pressed')") == "false",
+          "drawn: %s" % drawn())
+    check("the order form was not sent by it", orders_placed() == first_order + 1,
+          "Show it submitted the order form")
+
 finally:
     try:
         b.close()

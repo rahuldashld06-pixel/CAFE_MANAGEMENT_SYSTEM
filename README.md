@@ -64,7 +64,10 @@ branding, fully isolated from the others.
   its own colour - green for veg, red for non-veg - so which the menu is
   showing is plain at a glance. A section with nothing of that kind
   loses its tab (and the menu goes back to All if it was the one open),
-  and the search and the filter work together. The filter once marked
+  and the search and the filter work together. A name typed is looked for
+  on the whole menu, whichever tab is open - All lights up to say so -
+  and a dish the Veg or Non-veg button is hiding is said to be there
+  ("is on the menu, but not as veg"), with Show it, rather than missing. The filter once marked
   dishes hidden and left them all on screen: a dish is a flex row, and a
   page's own `display` beats the `hidden` attribute, so public.css now
   says `[hidden] { display: none !important }` for every customer page.
@@ -860,7 +863,7 @@ python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0
 python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0
 python tests/table_switch_browser_test.py # expect PASSED: 12  FAILED: 0
 python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
-python tests/customer_menu_browser_test.py # expect PASSED: 59  FAILED: 0
+python tests/customer_menu_browser_test.py # expect PASSED: 69  FAILED: 0
 python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
 ```
 
