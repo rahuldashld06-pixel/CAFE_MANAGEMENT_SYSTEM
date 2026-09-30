@@ -446,8 +446,9 @@ which is actually in use, because a `REDIS_URL` that quietly fails to
 connect looks exactly like one that works.
 
 Only worth setting if the Redis is in the **same region** as the app. One
-that is not costs about what the database round trip it replaces costs,
-and this app's database is already half a second away.
+that is not costs about what the database round trip it replaces costs -
+about 40ms now - and what it would save is small beside the distance
+between the people using the app and the server (see A note on speed).
 
 ## Money
 
@@ -471,15 +472,33 @@ already read, so nothing reaches that gap today.
 
 ## A note on speed
 
-Measured from inside the deployed app, a single database round trip costs
-about 543ms - both opening a pooled connection and running `SELECT 1` take
-exactly that. The app and the database are half a second apart, so a page
-doing four lookups spends over two seconds travelling and no amount of
-code tuning changes it. `/healthz` reports `connect_ms` and `query_ms` so
-this can be checked rather than guessed at.
+Measured on 30 September 2026. A database round trip from inside the
+deployed app costs about 40ms, and taking a pooled connection nothing
+(`/healthz` reports `query_ms` and `connect_ms`, so this is checked rather
+than guessed at). It was about 543ms before the database moved next to
+the app, which is when a page doing four lookups spent over two seconds
+travelling. Staff pages now make one to three queries; Billing three.
 
-The largest single improvement available is to host the database in the
-same region as the app.
+What is left is the distance to the people using it. From India a
+request to the live site takes about half a second, and roughly 0.38s of
+that is the trip to the server and back - it is not in India. The
+Cloudflare in front of the host caches nothing (`cf-cache-status:
+DYNAMIC`), not even the versioned stylesheet, so a phone scanning a table
+code for the first time pays that trip for each file too; after that the
+browser keeps them for a year. Caching more data on the server would not
+touch either: a page that opens from the warm-up cache in a millisecond
+has nothing to gain, and a till must not show an old stock count or
+bill. The two changes that would are:
+
+- the app **and** the database in the region nearest the customers
+  (Singapore, for India) - about 0.3s off every request, but only if they
+  move together; the host cannot move a service, so it is a new one;
+- the site on its own domain behind Cloudflare with `/static/*` cached at
+  the edge - the first visit's files from a nearby city instead.
+
+Billing writes the bills for table orders the first time it is opened
+after they arrive. That was two round trips an order; it is two in all
+now, however many there are.
 
 The table's pages are where that shows most - every phone at every table,
 and each waiting one asking every five seconds whether the food is
@@ -830,7 +849,7 @@ python tests/compression_test.py  # expect PASSED: 42   FAILED: 0
 python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
 python tests/account_fields_browser_test.py # expect PASSED: 27  FAILED: 0
 python tests/sign_in_cafe_test.py # expect PASSED: 49   FAILED: 0
-python tests/table_order_test.py  # expect PASSED: 35   FAILED: 0
+python tests/table_order_test.py  # expect PASSED: 41   FAILED: 0
 python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0
 python tests/customer_speed_test.py # expect PASSED: 14  FAILED: 0
 python tests/table_switch_browser_test.py # expect PASSED: 12  FAILED: 0

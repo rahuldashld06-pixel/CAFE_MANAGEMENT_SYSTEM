@@ -7497,57 +7497,63 @@ def edit_bill(bill_id):
 
 
 def ensure_missing_bills_for_user(user_id):
-    """Create a basic Pending bill for any order owned by the user that has no bill."""
+    """
+    Create a basic Pending bill for any order owned by the user that has no bill.
+
+    Two trips however many there are: the orders and what their dishes
+    come to in one question, and every bill in one insert. It was two
+    trips an order - a lookup and an insert each - paid when Billing
+    opens, so twenty table orders since the last look were forty round
+    trips, well over a second, before the page could be drawn. The bills
+    are the same: the same sum of quantity times price, the same packing,
+    the same totals.
+    """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
             """
-            SELECT o.order_id, o.packing
+            SELECT o.order_id, o.packing,
+                   COALESCE(SUM(oi.quantity * oi.price), 0) AS subtotal
             FROM orders o
             LEFT JOIN bills b ON b.order_id = o.order_id
+            LEFT JOIN order_items oi ON oi.order_id = o.order_id
             WHERE o.user_id = %s
               AND b.bill_id IS NULL
+            GROUP BY o.order_id, o.packing
+            ORDER BY o.order_id
             """,
             (user_id,),
         )
         missing_orders = cursor.fetchall()
 
+        rows = []
         for order in missing_orders:
-            cursor.execute(
-                """
-                SELECT COALESCE(SUM(quantity * price), 0) AS subtotal
-                FROM order_items
-                WHERE order_id = %s
-                """,
-                (order["order_id"],),
-            )
-            row = cursor.fetchone()
             # A takeaway from the table was placed with its packing
             # charge; the bill carries the same one.
             packing = Decimal(str(order.get("packing") or 0))
-            totals = bill_totals(Decimal(str(row["subtotal"] or 0)),
+            totals = bill_totals(Decimal(str(order["subtotal"] or 0)),
                                  tax_multiplier(), discount_multiplier(),
                                  packing=packing)
-            subtotal, tax = totals["subtotal"], totals["tax"]
-            discount, total = totals["discount"], totals["total"]
+            rows.append((
+                order["order_id"],
+                totals["subtotal"],
+                totals["tax"],
+                totals["discount"],
+                totals["packing"],
+                totals["total"],
+                utc_now(),
+            ))
 
-            cursor.execute(
+        if rows:
+            cursor.executemany(
                 """
                 INSERT INTO bills
                     (order_id, subtotal, tax, discount, packing, total_amount,
                      payment_method, payment_status, bill_date)
                 VALUES (%s, %s, %s, %s, %s, %s, 'Cash', 'Pending', %s)
                 """,
-                (
-                    order["order_id"],
-                    subtotal,
-                    tax,
-                    discount,
-                    totals["packing"],
-                    total,
-                    utc_now(),
-                ),
+                rows,
             )
 
         conn.commit()

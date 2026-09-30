@@ -174,6 +174,9 @@
                         aria-label="Close search">
                     <i class="bi bi-arrow-left" aria-hidden="true"></i>
                 </button>
+                {# The field and its button are one pill, so they are one box: the
+                   outline that says "typing here" goes round both of them. #}
+                <span class="topbar-search__box">
                 <label class="topbar-search__field">
                     <i class="bi bi-search" aria-hidden="true"></i>
                     <input type="search" name="q" id="topSearchInput"
@@ -190,6 +193,7 @@
                 <button type="submit" class="topbar-search__go" aria-label="Search">
                     <i class="bi bi-search" aria-hidden="true"></i>
                 </button>
+                </span>
             </form>
 
             <div class="topbar__end">

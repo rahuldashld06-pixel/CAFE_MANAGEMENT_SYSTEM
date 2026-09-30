@@ -275,6 +275,102 @@ check("once the food is ready, a busy kitchen is not mentioned",
       RUSH not in text(guest.get(placed)))
 
 
+# =====================================================================
+print("\n=== 4. Many table orders billed at once ===")
+# =====================================================================
+# Billing writes the bills for table orders the first time it is opened
+# after they arrive. That was two round trips an order - twenty orders,
+# forty trips before the page could be drawn - and is two in all now. The
+# bills must come out exactly as they did one at a time.
+
+
+def statements_during(fn):
+    """How many statements reach the database while fn runs.
+
+    A batch counts once: the driver sends a batched INSERT as a single
+    statement, though the stand-in plays it back row by row.
+    """
+    seen = []
+    real_execute = mysql_shim._Cursor.execute
+    real_many = mysql_shim._Cursor.executemany
+
+    def execute(self, sql, params=()):
+        seen.append(sql)
+        return real_execute(self, sql, params)
+
+    def many(self, sql, rows):
+        seen.append(sql)
+        mysql_shim._Cursor.execute = real_execute
+        try:
+            return real_many(self, sql, rows)
+        finally:
+            mysql_shim._Cursor.execute = execute
+
+    mysql_shim._Cursor.execute = execute
+    mysql_shim._Cursor.executemany = many
+    try:
+        fn()
+    finally:
+        mysql_shim._Cursor.execute = real_execute
+        mysql_shim._Cursor.executemany = real_many
+    return len(seen)
+
+
+owner.get("/billing")               # everything so far billed first
+owner.post("/settings/tax", data={"tax_percent": "5", "discount_percent": "10",
+                                  "_csrf_token": csrf(owner)})
+flashes(owner)
+
+BATCH = [(1, None), (2, "takeaway"), (3, None), (1, "takeaway"), (4, "dine_in"), (2, None)]
+count_before = db("SELECT COUNT(*) FROM orders")[0][0]
+for quantity, kind in BATCH:
+    table_order(quantity, kind)
+placed_now = db("SELECT order_id, packing FROM orders ORDER BY order_id DESC LIMIT %d"
+                % len(BATCH))
+check("six table orders go in", db("SELECT COUNT(*) FROM orders")[0][0]
+      == count_before + len(BATCH))
+
+owner.get("/orders/add")            # the shell's own lookups settled first
+many_trips = statements_during(lambda: owner.get("/billing"))
+
+holes = ",".join("?" * len(placed_now))
+bills = {row[0]: row[1:] for row in db(
+    "SELECT order_id, subtotal, tax, discount, packing, total_amount, "
+    "payment_method, payment_status FROM bills WHERE order_id IN (%s)" % holes,
+    tuple(order_id for order_id, _ in placed_now))}
+
+check("every one of them has its bill", len(bills) == len(BATCH),
+      "%d bills for %d orders" % (len(bills), len(BATCH)))
+
+wrong = []
+for order_id, packing in placed_now:
+    sold = db("SELECT COALESCE(SUM(quantity * price), 0) FROM order_items "
+              "WHERE order_id = ?", (order_id,))[0][0]
+    want = application.bill_totals(Decimal(str(sold)), Decimal("0.05"),
+                                   Decimal("0.10"), packing=packing)
+    got = bills.get(order_id)
+    if not got or [Decimal(str(v)) for v in got[:5]] != [
+            want["subtotal"], want["tax"], want["discount"],
+            want["packing"], want["total"]] or tuple(got[5:]) != ("Cash", "Pending"):
+        wrong.append((order_id, got, want))
+check("each bill is what it was one order at a time: subtotal, discount, "
+      "tax, packing and total", not wrong, wrong)
+check("(and the orders really differ - takeaways carry their packing)",
+      len({Decimal(str(b[4])) for b in bills.values()}) > 1
+      and len({Decimal(str(b[0])) for b in bills.values()}) > 1, bills)
+
+table_order(1)
+owner.get("/orders/add")
+one_trips = statements_during(lambda: owner.get("/billing"))
+check("billing six new orders takes no more trips than billing one",
+      many_trips == one_trips, "six: %d statements, one: %d" % (many_trips, one_trips))
+
+owner.get("/orders/add")
+none_trips = statements_during(lambda: owner.get("/billing"))
+check("and one more than a Billing with nothing new to bill - the one insert",
+      one_trips == none_trips + 1, "one new: %d, none: %d" % (one_trips, none_trips))
+
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

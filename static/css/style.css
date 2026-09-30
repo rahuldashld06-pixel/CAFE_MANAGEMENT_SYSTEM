@@ -6491,16 +6491,51 @@ div.food-art {
 
 .menu-search__input:focus,
 .search-again input[type="search"]:focus,
-.team-filter input[type="search"]:focus,
-.topbar-search__field:focus-within {
+.team-filter input[type="search"]:focus {
     outline: none;
     border-color: rgba(var(--copper-rgb), .7);
     box-shadow: var(--glass-field-focus);
 }
 
+/* The top bar's field and button are one pill in two parts. A ring on
+   the field alone stopped where the button began, and looked broken; so
+   the ring is drawn on the box round both, and each part only lights its
+   edge. */
+.topbar-search__box {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    border-radius: 999px;
+    transition: box-shadow .18s ease;
+}
+
+.topbar-search__box:focus-within {
+    box-shadow:
+        0 0 0 3px rgba(var(--copper-rgb), .24),
+        0 14px 28px -12px rgba(var(--copper-rgb), .6);
+}
+
+.topbar-search__box:focus-within .topbar-search__field,
+.topbar-search__box:focus-within .topbar-search__go {
+    border-color: rgba(var(--copper-rgb), .7);
+    box-shadow: var(--glass-field-shadow);
+}
+
 .topbar-search__go:hover {
     background: var(--glass-on), rgba(var(--copper-rgb), .22);
     color: var(--cream);
+}
+
+/* The sidebar's links scroll, and a scroll box cuts off whatever reaches
+   past its edge. The page it is on is lifted a pixel and lit along its
+   top, so with the list starting flush at the edge the first link lost
+   its lit edge - Dashboard, nearly always. A little room round the list
+   keeps it whole, in the rail and in the full guide alike. */
+.sidebar-nav {
+    padding-top: 6px;
+    padding-left: 3px;
+    padding-right: 3px;
 }
 
 /* The page the sidebar is on: lifted, in glass over the accent. */
