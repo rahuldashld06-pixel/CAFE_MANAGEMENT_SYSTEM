@@ -636,6 +636,41 @@ tests/cdp.py         Minimal DevTools-protocol client used by that suite
 
 What is in place, and what each part is actually for.
 
+**Who can change the code.** Only someone who can push to this
+repository's `main` branch: the host deploys whatever is pushed there,
+and nothing else. The website itself has no way in to its own code -
+no page writes a file, nothing a visitor sends is run, uploads are
+images only (checked by their bytes, not their name, kept in the
+database and served with `nosniff`), and the debugger that would run
+code from an error page is never on in production. What a browser
+receives - the HTML, the stylesheets, the scripts - anybody can read
+and edit in their own browser's tools, as on every website; that
+changes their own screen and nothing on the server or anybody else's.
+The repository is public, so its code can be read and copied, but not
+changed: keep it that way by giving nobody else write access, turning
+on two-factor sign-in for GitHub and for the host, and protecting
+`main` against force-pushes and deletion. Making the repository private
+also stops it being read; the host can still deploy from it once its
+GitHub app is allowed the private repository. No secrets are in it -
+`.env` has never been committed, and `.env.example` holds placeholders.
+
+**When something goes wrong.** Every error is one page
+(`templates/error.html`): the status number as big as a 404 page's
+always is, a sentence in plain words, and a way out - back into the
+app, to the sign-in, or for a customer back to that cafe's menu. Never
+what broke: no traceback, no SQL, no file or table names - those go to
+the log, for the developer, and only there. Each error keeps its own
+status code (404, 403, 400 for a form left open too long, 405, 429,
+500, 503), because a 500 answered as a 404 tells search engines and the
+host's health check the wrong thing. The page is drawn without the
+database, so it still appears when the database is what failed, and a
+few lines of plain HTML stand in if even it cannot be drawn. A save sent
+from the page by script is told in a notice and stays on its form; the
+API answers in JSON; a missing picture, icon or background warm-up gets
+a short 404 rather than a page drawn for nobody. An address that is no
+page at all is a 404 signed in or out - a customer who mistypes one is
+no longer shown the staff's sign-in.
+
 **Getting in.** Passwords are hashed by Werkzeug (PBKDF2). An admin with
 a mobile number on file is challenged for a one-time code, which expires
 and gives up after five wrong answers. The password path is rate
@@ -812,7 +847,7 @@ that were already right.
 ```bash
 python tests/smoke_test.py        # expect PASSED: 43   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
-python tests/instant_nav_test.py  # expect PASSED: 25   FAILED: 0
+python tests/instant_nav_test.py  # expect PASSED: 26   FAILED: 0
 python tests/instant_post_test.py # expect PASSED: 16   FAILED: 0
 python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
@@ -825,7 +860,7 @@ python tests/staff_access_test.py # expect PASSED: 33   FAILED: 0
 python tests/billing_paid_test.py # expect PASSED: 44   FAILED: 0
 python tests/browser_nav_test.py  # expect PASSED: 18   FAILED: 0
 python tests/menu_search_test.py  # expect PASSED: 31   FAILED: 0
-python tests/stale_banner_test.py # expect PASSED: 10   FAILED: 0
+python tests/stale_banner_test.py # expect PASSED: 11   FAILED: 0
 python tests/mobile_nav_test.py   # expect PASSED: 94   FAILED: 0
 python tests/theme_test.py        # expect PASSED: 33   FAILED: 0
 python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
@@ -846,7 +881,7 @@ python tests/identity_test.py     # expect PASSED: 97   FAILED: 0
 python tests/security_test.py     # expect PASSED: 146  FAILED: 0
 python tests/page_head_test.py    # expect PASSED: 101   FAILED: 0
 python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
-python tests/draft_restore_test.py # expect PASSED: 35  FAILED: 0
+python tests/draft_restore_test.py # expect PASSED: 36  FAILED: 0
 python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
 python tests/dashboard_feed_test.py # expect PASSED: 43  FAILED: 0
 python tests/reports_test.py      # expect PASSED: 39   FAILED: 0
@@ -865,9 +900,10 @@ python tests/table_switch_browser_test.py # expect PASSED: 12  FAILED: 0
 python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
 python tests/customer_menu_browser_test.py # expect PASSED: 69  FAILED: 0
 python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
+python tests/error_pages_test.py  # expect PASSED: 36  FAILED: 0
 ```
 
-All fifty-five run in memory against a SQLite stand-in — no database or
+All fifty-six run in memory against a SQLite stand-in — no database or
 network needed. The twenty-four that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 

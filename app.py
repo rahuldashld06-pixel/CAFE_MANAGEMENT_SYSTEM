@@ -16,7 +16,7 @@ from flask import (
     send_from_directory, Response, after_this_request
 )
 from flask.sessions import SecureCookieSessionInterface
-from markupsafe import Markup
+from markupsafe import Markup, escape
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -4678,8 +4678,10 @@ def home():
         )
 
     except mysql.connector.Error as error:
-        flash(database_error(error, "loading the dashboard"))
-        return "Dashboard database error", 500
+        # Logged for the developer by database_error(); the visitor gets
+        # the error page, which says what they need and nothing more.
+        database_error(error, "loading the dashboard")
+        return error_page(500)
 
     finally:
         if cursor:
@@ -5565,7 +5567,7 @@ def update_stock(food_id):
 
     if item is None:
 
-        return "Inventory item not found", 404
+        return error_page(404)
 
 
     return render_template(
@@ -8798,9 +8800,11 @@ def login():
         ensure_auth_schema()
         ensure_payment_schema()
     except mysql.connector.Error as error:
-        return database_error(error, "preparing the database"), 500
+        database_error(error, "preparing the database")
+        return error_page(500)
     except RuntimeError as error:
-        return database_error(error, "starting up"), 500
+        database_error(error, "starting up")
+        return error_page(500)
 
     if session.get("user_id"):
         return redirect(url_for("home"))
@@ -9207,7 +9211,8 @@ def register():
     """Public SaaS signup: one new cafe plus its first admin owner."""
     try: ensure_auth_schema()
     except mysql.connector.Error as error:
-        return database_error(error, "preparing the database"), 500
+        database_error(error, "preparing the database")
+        return error_page(500)
     if session.get('user_id'): return redirect(url_for('home'))
     if request.method=='POST':
         cafe_name=request.form.get('cafe_name','').strip(); full_name=request.form.get('full_name','').strip()
@@ -9267,7 +9272,8 @@ def forgot_password():
     try:
         ensure_auth_schema()
     except mysql.connector.Error as error:
-        return database_error(error, "preparing the database"), 500
+        database_error(error, "preparing the database")
+        return error_page(500)
 
     if session.get("user_id"):
         return redirect(url_for("home"))
@@ -9680,6 +9686,14 @@ def sign_in_is_stale():
 
 @app.before_request
 def require_login():
+    # An address that is no page at all - or a page asked the wrong way -
+    # is answered by the error page, signed in or not. Sent to the sign-in
+    # screen instead, a customer who mistyped an address on a cafe's
+    # table was shown the staff's login. Nothing here is behind it: the
+    # request matched no route, so there is nothing to protect.
+    if request.routing_exception is not None:
+        return
+
     # Initialize/migrate authentication schema before protected requests.
     # Login/forgot-password/static remain publicly reachable.
     if request.endpoint in {
@@ -9723,7 +9737,8 @@ def require_login():
     try:
         ensure_auth_schema()
     except mysql.connector.Error as error:
-        return database_error(error, "preparing the database"), 500
+        database_error(error, "preparing the database")
+        return error_page(500)
 
     # Run out, whatever the cookie still says for itself.
     if session.get("user_id") and sign_in_is_stale():
@@ -9749,7 +9764,7 @@ def require_login():
             expected = secrets.token_urlsafe(32)
             session["_csrf_token"] = expected
         if not csrf_matches(token, expected):
-            return "Invalid CSRF token. Please refresh the page and try again.", 400
+            return error_page(400, "expired")
 
     if "_csrf_token" not in session:
         session["_csrf_token"] = secrets.token_urlsafe(32)
@@ -12655,25 +12670,165 @@ def favicon():
         mimetype="image/x-icon", max_age=24 * 60 * 60)
 
 
+# ==========================================================
+# When something goes wrong
+#
+# Every error is one page (templates/error.html): the number, as
+# big as a 404 page's always is, a sentence in plain words, and a
+# way out. Never what broke - no stack trace, no SQL, no file
+# names. That goes to the log, for the developer, and only there.
+#
+# Each keeps its own status code. A 500 answered as a 404 would
+# tell a search engine the page is gone and the host's health
+# check that all is well; the look is the same, the number is not.
+# ==========================================================
+
+from werkzeug.exceptions import HTTPException  # noqa: E402
+
+# What a person is told. `said` is the one line a save sent by script
+# shows in a notice (instant.js reads it from the page's hidden alert).
+ERROR_WORDS = {
+    400: {"title": "Request not understood",
+          "heading": "Something was not quite right",
+          "words": "That request could not be understood. Please go back "
+                   "and try again.",
+          "said": "That could not be saved. Please try again."},
+    "expired": {"title": "Page expired",
+                "heading": "This page had been open a while",
+                "words": "For your safety, a form stops working after a "
+                         "time. Go back, refresh the page, and try again - "
+                         "nothing has been changed.",
+                "said": "This page had been open too long to save from. "
+                        "Refresh it and try again."},
+    403: {"title": "Not available",
+          "heading": "That page is not open to you",
+          "words": "Your account does not include it. If you need it, ask "
+                   "the owner or an admin of the cafe.",
+          "said": "That is not something your account can do."},
+    404: {"title": "Page not found",
+          "heading": "We could not find that page",
+          "words": "The link may be old, or the page may have moved. "
+                   "Nothing has been lost.",
+          "said": "That is no longer there."},
+    405: {"title": "Not allowed here",
+          "heading": "That cannot be done from here",
+          "words": "Please go back and use the page's own buttons.",
+          "said": "That cannot be done from here."},
+    429: {"title": "Too many requests",
+          "heading": "A little too quick",
+          "words": "There have been a lot of requests in a short time. "
+                   "Please wait a moment and try again.",
+          "said": "Too many tries just now. Please wait a moment."},
+    500: {"title": "Something went wrong",
+          "heading": "Something went wrong on our side",
+          "words": "It was not anything you did, and it has been noted for "
+                   "the developer. Please try again in a moment.",
+          "said": "Something went wrong on our side and that was not "
+                  "saved. Please try again."},
+    503: {"title": "Briefly unavailable",
+          "heading": "We are briefly unavailable",
+          "words": "Please try again in a minute.",
+          "said": "That could not be saved just now. Please try again in "
+                  "a minute."},
+}
+
+# A customer's pages are /m/<token>/...; the token's shape, and nothing
+# else, before it is put back into a link.
+_MENU_TOKEN_SHAPE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+
+
+def _error_way_out():
+    """Where an error page's main button leads, and what it says."""
+    parts = request.path.split("/")
+    if len(parts) > 2 and parts[1] == "m" and _MENU_TOKEN_SHAPE.match(parts[2]):
+        return url_for("public_menu", token=parts[2]), "Back to the menu"
+    try:
+        signed_in = bool(session.get("user_id"))
+    except Exception:
+        signed_in = False
+    if signed_in:
+        return url_for("home"), "Back to the app"
+    return url_for("login"), "Go to sign in"
+
+
+def error_page(status, kind=None):
+    """
+    The error page, at its own status.
+
+    Drawn straight from the template, without the context processors
+    render_template() runs: those read the cafe and the user from the
+    database, and when the database is what failed they would fail
+    again here. If even this cannot be drawn, a few lines of plain HTML
+    say the same thing.
+    """
+    words = (ERROR_WORDS.get(kind) or ERROR_WORDS.get(status)
+             or ERROR_WORDS[500 if status >= 500 else 400])
+
+    if wants_json_response() or request.path.startswith("/api/"):
+        return jsonify({"error": words["said"]}), status
+
+    try:
+        home, home_label = _error_way_out()
+    except Exception:
+        home, home_label = "/", "Home"
+
+    try:
+        html = app.jinja_env.get_template("error.html").render(
+            status=status,
+            title=words["title"],
+            heading=words["heading"],
+            words=words["words"],
+            said=words["said"],
+            home=home,
+            home_label=home_label,
+            theme=normalize_theme(g.get("cafe_theme")),
+            platform_name=DEFAULT_BRAND_NAME,
+            asset_url=asset_url,
+        )
+    except Exception:
+        app.logger.exception("the error page itself could not be drawn")
+        html = (
+            '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<meta name="robots" content="noindex"><title>%s</title></head>'
+            '<body><main><h1>%s</h1><p>%s</p><p><a href="%s">%s</a></p>'
+            '</main></body></html>'
+        ) % tuple(escape(part) for part in (
+            words["title"], words["heading"], words["words"], home, home_label))
+
+    return app.response_class(html, status=status, mimetype="text/html")
+
+
 @app.errorhandler(404)
 def handle_not_found(error):
     if wants_json_response() or request.path.startswith("/api/"):
         return jsonify({"error": "Not found"}), 404
 
-    # Media is fetched by <img>, not navigated to. Redirecting it to the
-    # dashboard would hand an image tag a page of HTML and hide the real
-    # answer, which is simply that there is no such picture.
+    # Media is fetched by <img>, not navigated to. A page of HTML handed
+    # to an image tag would hide the real answer, which is simply that
+    # there is no such picture.
     if request.path.startswith("/media/"):
         return "Not found", 404
 
-    # Only a real page navigation earns a message. A missing subresource -
-    # an icon, a stylesheet, a background warm-up - must not leave a banner
-    # sitting in the queue for whatever page the user opens next.
-    if _is_page_request():
-        flash("That page could not be found.")
+    # Only a person opening a page is shown one. A missing icon or
+    # stylesheet, or a background warm-up, gets a short answer: a page
+    # drawn for nobody is work for nothing, and a warm-up must not cache
+    # one onto a screen somebody opens later.
+    if not _is_page_request():
+        return "Not found", 404
 
-    return redirect(url_for("home") if session.get("user_id")
-                    else url_for("login")), 302
+    return error_page(404)
+
+
+@app.errorhandler(HTTPException)
+def handle_http_error(error):
+    """Every other HTTP error - 400, 403, 405, 429 and so on - as the same page."""
+    code = error.code or 500
+    if code < 400:
+        return error
+    if request.path.startswith("/media/"):
+        return error.name, code
+    return error_page(code)
 
 
 @app.errorhandler(500)
@@ -12682,11 +12837,10 @@ def handle_unexpected_error(error):
     """
     Catch-all so an unexpected exception never shows a stack trace.
 
-    Werkzeug HTTP exceptions keep their own status codes and messages.
+    The trace goes to the log; the visitor gets the error page.
     """
-    from werkzeug.exceptions import HTTPException
     if isinstance(error, HTTPException):
-        return error
+        return handle_http_error(error)
 
     app.logger.exception("Unhandled application error")
     note_failed_save()
@@ -12694,9 +12848,7 @@ def handle_unexpected_error(error):
     if wants_json_response() or request.path.startswith("/api/"):
         return jsonify({"error": "Something went wrong."}), 500
 
-    flash("Something went wrong. The error has been logged.")
-    target = url_for("home") if session.get("user_id") else url_for("login")
-    return redirect(target), 302
+    return error_page(500)
 
 
 if __name__ == "__main__":

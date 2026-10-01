@@ -843,7 +843,10 @@
             putRowBack(item);
             flipBack(item);
             if (item.kind === "then" && stillHere(item)) {
-                if (landed && landed.pathname === item.fromPath) {
+                // An error page (a 4xx or 5xx) is never put in place of the
+                // app: it has no page region to swap, and its address is
+                // the one posted to. Its own sentence is told instead.
+                if (result.ok && landed && landed.pathname === item.fromPath) {
                     // Refused: the form again, with what the server said;
                     // drafts.js puts back what was typed.
                     apply(result.html, result.url, { scroll: 0 });
@@ -853,7 +856,7 @@
                     tell(said.length ? said : ["That was not saved."], "off");
                     visit(item.from, {});
                 }
-            } else if (item.kind === "wait" && stillHere(item) && landed
+            } else if (item.kind === "wait" && result.ok && stillHere(item) && landed
                        && safePath(landed.pathname)) {
                 // As it always was: the page the server answered with.
                 apply(result.html, result.url, { scroll: window.scrollY });

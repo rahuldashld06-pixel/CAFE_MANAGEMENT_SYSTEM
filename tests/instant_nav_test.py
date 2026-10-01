@@ -184,16 +184,22 @@ with client.session_transaction() as sess:
     check("a missing subresource queues no message either",
           not sess.get("_flashes"), "queued: %r" % sess.get("_flashes"))
 
-client.get("/definitely-missing", headers={"Sec-Fetch-Dest": "document"})
+missing = client.get("/definitely-missing", headers={"Sec-Fetch-Dest": "document"})
+missing_html = missing.get_data(as_text=True)
+check("a person opening a missing page is told, on a 404 page of its own",
+      missing.status_code == 404 and 'data-error-page="404"' in missing_html
+      and "We could not find that page" in missing_html,
+      "status=%d" % missing.status_code)
 with client.session_transaction() as sess:
-    check("a person opening a missing page is still told",
-          bool(sess.get("_flashes")), "the real 404 message was suppressed")
+    check("which leaves no message queued for the page after it",
+          not sess.get("_flashes"), "queued: %r" % sess.get("_flashes"))
 
-warm404 = client.get("/inventory", headers={"X-Instant-Prefetch": "1"})
-check("and that message is not baked into a warmed page",
-      "That page could not be found." not in warm404.get_data(as_text=True))
-check("it reaches the next real page instead",
-      "That page could not be found." in client.get("/inventory").get_data(as_text=True))
+warm404 = client.get("/definitely-missing", headers={"X-Instant-Prefetch": "1"})
+check("a warm-up of a missing page gets a short answer, not a page to cache",
+      warm404.status_code == 404
+      and "data-error-page" not in warm404.get_data(as_text=True))
+check("and the next real page carries no word of it",
+      "could not find" not in client.get("/inventory").get_data(as_text=True))
 
 
 print("\n=== 3. Caching headers ===")

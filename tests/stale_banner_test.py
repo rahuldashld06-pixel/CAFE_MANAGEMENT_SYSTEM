@@ -197,10 +197,18 @@ try:
           b.evaluate("performance.getEntriesByType('navigation').length") == 1)
 
     print("\n=== A genuinely missing page still tells the user ===")
+    # On a 404 page of its own now, rather than a banner on the page the
+    # user is sent to - so there is no banner left to go stale at all.
     b.call("Page.navigate", url=BASE + "/no-such-page")
-    wait("!!document.getElementById('page-view')", "redirect target")
-    check("opening a bad URL still shows the message",
-          banner_on_page(), "the real 404 message was suppressed")
+    wait("!!document.querySelector('[data-error-page=\"404\"]')", "the 404 page")
+    check("opening a bad URL shows the 404 page, saying so",
+          "could not find that page" in b.evaluate("document.body.innerText"),
+          "the 404 page does not say what happened")
+    b.evaluate("document.querySelector('.err__home').click()")
+    wait("!!document.getElementById('page-view')", "back in the app")
+    time.sleep(0.6)
+    check("and the app it leads back to carries no stale message",
+          not banner_on_page(), "a 'could not be found' banner followed them")
 
 finally:
     try:

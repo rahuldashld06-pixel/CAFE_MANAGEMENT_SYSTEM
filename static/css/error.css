@@ -1,0 +1,157 @@
+/* ==========================================================
+   The error page (templates/error.html)
+
+   Its own small sheet rather than the app's: it is shown when
+   something has gone wrong, to staff and to customers alike, and
+   should depend on as little as possible. The accent comes from
+   theme.css, so it is in the cafe's own colour when that is known.
+   ========================================================== */
+
+:root {
+    --e-bg: #2A1C14;
+    --e-card: #3A281D;
+    --e-line: rgba(255, 255, 255, .09);
+    --e-text: #FBF4EA;
+    --e-dim: #E3D0B9;
+    --e-faint: #C2A88E;
+    color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body { min-height: 100%; }
+
+body {
+    margin: 0;
+    background:
+        radial-gradient(900px 520px at 50% -10%, rgba(var(--copper-rgb), .16), transparent 70%),
+        var(--e-bg);
+    color: var(--e-text);
+    font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+.err {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 32px 16px;
+    text-align: center;
+}
+
+.err__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--copper-light, #EED6B6);
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 20px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.err__brand svg { width: 30px; height: 30px; }
+
+.err__card {
+    width: min(520px, 100%);
+    padding: 34px 28px 30px;
+    border: 1px solid var(--e-line);
+    border-radius: 22px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, 0) 40%),
+        var(--e-card);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+/* The number, as big as a 404 page's always is: the one thing anybody
+   recognises at a glance. */
+.err__code {
+    margin: 0;
+    font-family: "Fraunces", Georgia, serif;
+    font-size: clamp(76px, 22vw, 128px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -.02em;
+    background: linear-gradient(180deg, var(--copper-light, #EED6B6), var(--copper, #D9AE80) 60%, var(--copper-dark, #B8875A));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.err__title {
+    margin: 14px 0 8px;
+    font-family: "Fraunces", Georgia, serif;
+    font-size: clamp(22px, 5.4vw, 28px);
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.err__words {
+    margin: 0 auto;
+    max-width: 38ch;
+    color: var(--e-dim);
+    font-size: 15.5px;
+    line-height: 1.6;
+}
+
+.err__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 26px;
+}
+
+.err__home,
+.err__back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 46px;
+    padding: 0 22px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* The way out: the app's glass over the accent. */
+.err__home {
+    border: 1px solid rgba(255, 255, 255, .3);
+    background: var(--glass-on), rgba(var(--copper-rgb), .55);
+    box-shadow: var(--glass-on-edges);
+    color: #fff;
+}
+
+.err__back {
+    border: 1px solid var(--glass-edge, rgba(255, 255, 255, .13));
+    background: var(--glass-field), var(--e-bg);
+    box-shadow: var(--glass-field-shadow);
+    color: var(--e-text);
+}
+
+.err__home:focus-visible,
+.err__back:focus-visible {
+    outline: none;
+    box-shadow: var(--glass-field-ring), var(--glass-on-edges);
+}
+
+.err__foot {
+    margin: 0;
+    color: var(--e-faint);
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+@media (max-width: 420px) {
+    .err__card { padding: 28px 18px 24px; }
+    .err__actions { flex-direction: column; }
+    .err__home, .err__back { width: 100%; }
+}

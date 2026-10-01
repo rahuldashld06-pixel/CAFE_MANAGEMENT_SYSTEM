@@ -369,8 +369,10 @@ try:
     # =================================================================
     print("\n=== 6. A save the server falls over on ===")
     # =================================================================
-    # An unexpected error ends on the dashboard, with a message - which,
-    # from the browser, looks like any successful save moving on.
+    # An unexpected error is answered by the error page (a 500). A save
+    # sent from the page never shows that page in place of the form: the
+    # person is told in a notice and stays where they were, with what
+    # they typed.
     real_view = app.view_functions["add_food"]
 
     def falls_over(*args, **kwargs):
@@ -385,10 +387,22 @@ try:
         fill({"food_name": "Pesarattu", "price": "110", "quantity": "4",
               "category_id": str(CATEGORY)})
         save()
-        wait("location.pathname !== '/foods/add'", "the error page")
+        # The answer has come when the copy is marked one way or the other.
+        settled = time.time() + 20
+        while time.time() < settled:
+            held = draft_for("/foods/add")
+            if held and held[0].get("how"):
+                break
+            time.sleep(0.12)
+        wait("document.readyState === 'complete'", "the page settled")
         time.sleep(0.4)
     finally:
         app.view_functions["add_food"] = real_view
+
+    check("the person stays on the form, not on an error page",
+          b.evaluate("location.pathname") in ("/foods/add", "/foods")
+          and not b.evaluate("!!document.querySelector('[data-error-page]')"),
+          "they were left at %r" % b.evaluate("location.pathname"))
 
     kept = draft_for("/foods/add")
     check("the copy survives a save that failed on the server",

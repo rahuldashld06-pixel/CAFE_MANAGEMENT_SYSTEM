@@ -1,0 +1,71 @@
+{# ------------------------------------------------------------------
+   What anybody sees when something goes wrong: a page not found, a page
+   not theirs, a form that had been open too long, or a fault of ours.
+
+   One page for all of them, in the app's own colours, saying in plain
+   words what happened and where to go - and never what broke inside.
+   The details go to the log, for the developer; the visitor gets the
+   number, a sentence and a way out.
+
+   Drawn without the database on purpose (see error_page() in app.py):
+   when the database is what failed, this still has to appear.
+
+   The hidden flash-stack is for a save sent by script (instant.js's
+   queue): it reads its message from there and tells the person in a
+   notice, instead of showing this page in place of the one they are on.
+   ------------------------------------------------------------------ #}
+{% from "_brand_mark.html" import coffee_mark %}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{{ title }} · {{ platform_name }}</title>
+    {% include "_favicon.html" %}
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#2A1C14">
+    <meta name="description" content="{{ words }}">
+    {% include "_fonts.html" %}
+    <link rel="stylesheet" href="{{ asset_url('css/theme.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/error.css') }}">
+</head>
+<body>
+
+<main class="err" data-error-page="{{ status }}">
+    <a class="err__brand" href="{{ home }}">
+        {{ coffee_mark() }}<span>{{ platform_name }}</span>
+    </a>
+
+    <div class="err__card">
+        <p class="err__code" aria-hidden="true">{{ status }}</p>
+        <h1 class="err__title">{{ heading }}</h1>
+        <p class="err__words">{{ words }}</p>
+
+        <div class="err__actions">
+            <a class="err__home" href="{{ home }}">{{ home_label }}</a>
+            <button type="button" class="err__back" id="errBack"
+                    data-fallback="{{ home }}">Go back</button>
+        </div>
+    </div>
+
+    <p class="err__foot">Error {{ status }}</p>
+
+    <div class="flash-stack" hidden><div class="alert">{{ said }}</div></div>
+</main>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    "use strict";
+    var back = document.getElementById("errBack");
+    if (!back) return;
+    back.addEventListener("click", function () {
+        // Back where they came from, if this tab has anywhere to go back
+        // to; otherwise the same place as the main button.
+        if (window.history.length > 1) window.history.back();
+        else window.location.href = back.getAttribute("data-fallback");
+    });
+}());
+</script>
+
+</body>
+</html>
