@@ -29,7 +29,7 @@ services:
       - key: DB_NAME
         sync: false
       - key: CAFE_NAME
-        value: Cafora
+        value: Refero
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

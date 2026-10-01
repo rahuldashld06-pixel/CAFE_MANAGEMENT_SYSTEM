@@ -1,5 +1,5 @@
 /*
- * Instant navigation for Cafora.
+ * Instant navigation for Refero.
  *
  * The app is server rendered, so every sidebar click used to throw away the
  * whole document and rebuild it: re-parse style.css, re-fetch the icon font,

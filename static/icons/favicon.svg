@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Cafora. Built from templates/_brand_mark.html; edit that, not this. -->
+  <!-- Refero. Built from templates/_brand_mark.html; edit that, not this. -->
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#E9A059"/>
@@ -9,11 +9,10 @@
   <rect width="32" height="32" rx="7.5" fill="url(#tile)"/>
   <g transform="translate(2.9 2.9) scale(0.82)" fill="none" stroke="#FFF8EE"
      stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M23.8 8.2A11 11 0 1 0 23.8 23.8" stroke-width="3.1"/>
-    <path d="M13.9 8.1c-.95 1.1-.95 2.1 0 3.2s.95 2.1 0 3.2" opacity=".95"/>
-    <path d="M18.4 8.1c-.95 1.1-.95 2.1 0 3.2s.95 2.1 0 3.2" opacity=".75"/>
-    <path d="M11.4 16.1h9.8v1.5a4.9 4.9 0 0 1-9.8 0z"/>
-    <path d="M21.2 17.2h1.1a2.2 2.2 0 0 1 0 4.4h-.5"/>
-    <path d="M11.5 23.9h9.6" opacity="1"/>
+    <path d="M10.4 24.2V8.2h5.9a4.6 4.6 0 0 1 0 9.2h-5.9" stroke-width="3.2"/>
+    <path d="M15.6 17.4l6.3 6.8" stroke-width="3.2"/>
+    <path d="M21.6 3.6c-.9 1.05-.9 2 0 3.05s.9 2 0 3.05" opacity=".95"/>
+    <path d="M25.1 5.2c-.75.9-.75 1.7 0 2.6s.75 1.7 0 2.6" opacity=".75"/>
+    <path d="M7.4 27.6h17.2" opacity="1"/>
   </g>
 </svg>

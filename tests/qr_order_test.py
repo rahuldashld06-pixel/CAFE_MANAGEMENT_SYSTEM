@@ -912,7 +912,7 @@ for where, html in credit_pages.items():
           "Served by" in html,
           "the cafe is not named on it")
     check("and %s carries the system's name under it" % where,
-          re.search(r'class="p-foot".*?class="p-by".*?Cafora',
+          re.search(r'class="p-foot".*?class="p-by".*?Refero',
                     html, re.S) is not None,
           "the credit is missing, or sits somewhere other than under it")
     check("with the drawn mark rather than a typed emoji on %s" % where,
@@ -1008,7 +1008,7 @@ check("the printed receipt carries it too",
       "the receipt still names the cafe as it was on the first day")
 
 # Clearing the field means "use the product default in the sidebar". It
-# must not rename somebody's business to "Cafora".
+# must not rename somebody's business to "Refero".
 renamer.post("/settings/branding",
              data={"brand_name": "", "brand_tagline": "",
                    "_csrf_token": csrf(renamer)},

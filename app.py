@@ -109,8 +109,8 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 # The name on the sign-in, register and reset screens, which belong to
-# no cafe yet. Cafora is the product; a deployment can still set its own.
-app.config["CAFE_NAME"] = os.environ.get("CAFE_NAME", "Cafora")
+# no cafe yet. Refero is the product; a deployment can still set its own.
+app.config["CAFE_NAME"] = os.environ.get("CAFE_NAME", "Refero")
 app.config["CAFE_LOGO"] = os.environ.get("CAFE_LOGO", "")
 
 # "production" everywhere except your own machine. Controls the fail-fast
@@ -3327,7 +3327,7 @@ def send_login_otp_email(address, code):
     sender = (os.environ.get("SMTP_FROM", "").strip() or user)
     port = int(os.environ.get("SMTP_PORT", "587"))
 
-    cafe_name = os.environ.get("CAFE_OTP_SENDER_NAME", "Cafora")
+    cafe_name = os.environ.get("CAFE_OTP_SENDER_NAME", "Refero")
     minutes = OTP_EXPIRY_SECONDS // 60
 
     if host and sender and address:
@@ -3413,7 +3413,7 @@ def send_login_otp_sms(phone_number, code):
     fell back to the development-mode console log (no gateway configured,
     or the gateway request failed).
     """
-    cafe_name = os.environ.get("CAFE_OTP_SENDER_NAME", "Cafora")
+    cafe_name = os.environ.get("CAFE_OTP_SENDER_NAME", "Refero")
     message = (
         f"Your {cafe_name} login code is {code}. "
         f"It expires in {OTP_EXPIRY_SECONDS // 60} minutes."
@@ -10413,7 +10413,7 @@ def delete_user(user_id):
 # What the sidebar reads when a café has not chosen its own: the name
 # of the software, as opposed to the name of anybody's café. A café
 # that has set its own name never sees it.
-DEFAULT_BRAND_NAME = "Cafora"
+DEFAULT_BRAND_NAME = "Refero"
 
 
 @app.context_processor
@@ -10427,7 +10427,7 @@ def inject_platform_name():
     of them having it typed in by hand.
     """
     return {"platform_name": DEFAULT_BRAND_NAME}
-DEFAULT_BRAND_TAGLINE = "Food & Service Admin"
+DEFAULT_BRAND_TAGLINE = "Calm service, beautifully run"
 
 
 # A line for the foot of a customer's bill. Plain sayings rather than
@@ -10485,8 +10485,10 @@ def get_cafe_branding(cafe_id):
             and g.get("cafe_branding_id") == cafe_id):
         return g.cafe_branding
 
+    # With no cafe - signed out, a new tab - the page speaks for the
+    # product, whatever a deployment's CAFE_NAME still says from before.
     defaults = {
-        "cafe_name": app.config["CAFE_NAME"],
+        "cafe_name": DEFAULT_BRAND_NAME,
         "brand_name": DEFAULT_BRAND_NAME,
         "brand_tagline": DEFAULT_BRAND_TAGLINE,
         "logo": "",
@@ -10560,7 +10562,7 @@ def branding():
     page, so it is a decision about the business rather than a personal
     preference.
 
-    Left alone it reads "Cafora / Food & Service Admin", which is the
+    Left alone it reads "Refero / Calm service, beautifully run", which is the
     software's own name rather than anybody's cafe. Clearing a field
     puts that default back rather than leaving a blank corner.
     """
@@ -10610,7 +10612,7 @@ def branding():
             # COALESCE rather than a plain assignment: clearing the
             # field means "use the product's default in the sidebar",
             # and it should not also rename somebody's business to
-            # "Cafora".
+            # "Refero".
             if data is not None:
                 cursor.execute("""
                     UPDATE cafes
@@ -12048,7 +12050,7 @@ def web_manifest():
     that reason - a manifest is fetched without cookies otherwise.
     """
     branding = get_cafe_branding(session.get("cafe_id"))
-    name = branding["cafe_name"] or app.config["CAFE_NAME"]
+    name = branding["cafe_name"] or DEFAULT_BRAND_NAME
 
     # A home screen gives a name about twelve characters before it
     # ellipsises, so the short one stops at a word rather than mid-syllable:
@@ -12549,9 +12551,9 @@ def llms_txt():
     """
     base = public_root()
     body = "\n".join([
-        "# Cafora",
+        "# Refero",
         "",
-        "> Cafora runs a café or restaurant: orders at the counter and "
+        "> Refero runs a café or restaurant: orders at the counter and "
         "from a QR code on the table, a kitchen screen, stock, billing, "
         "customer reviews and reports - for each café on its own.",
         "",
@@ -12571,7 +12573,7 @@ def llms_txt():
         "## Optional",
         "",
         "- [robots.txt](%s/robots.txt): what may be crawled" % base,
-        "- [Web app manifest](%s/manifest.webmanifest): installing Cafora "
+        "- [Web app manifest](%s/manifest.webmanifest): installing Refero "
         "as an app" % base,
         "",
     ])
@@ -12585,14 +12587,14 @@ def ai_catalog():
     The Agentic Resource Discovery manifest (ARD, ai-catalog.json).
 
     It lists the MCP servers, agents and APIs a site offers to AI agents.
-    Cafora offers none - everything here is a person's till behind a
+    Refero offers none - everything here is a person's till behind a
     sign-in - so the honest catalog is a valid one with no entries. Asked
     for signed out it used to redirect to the sign-in page, and a checker
     tried to read that HTML as JSON.
     """
     return jsonify({
         "specVersion": "1.0",
-        "host": {"displayName": app.config["CAFE_NAME"]},
+        "host": {"displayName": DEFAULT_BRAND_NAME},
         "entries": [],
     })
 
@@ -12665,7 +12667,7 @@ def handle_too_large(error):
 @app.route("/favicon.ico")
 def favicon():
     """
-    The Cafora mark, for a browser that asks for it unprompted.
+    The Refero mark, for a browser that asks for it unprompted.
 
     Every page names its icon in its own head, and that stamped address
     is the one a browser caches for a year. This one is for everything

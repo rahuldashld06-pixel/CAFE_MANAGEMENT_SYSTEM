@@ -1,5 +1,5 @@
 {# ------------------------------------------------------------------
-   The Cafora mark: a cup of coffee inside the C it is named for.
+   The Refero mark: an R whose bowl is a cup, steaming, on its saucer.
 
    Drawn rather than typed or loaded. An emoji renders in whatever a
    device's font decides, which is a different picture on a phone, a Mac
@@ -12,7 +12,11 @@
    sidebar, the phone's top bar, the preview on the settings page, the
    mark and button on each of the sign-in and register screens, and the
    credit at the foot of a customer's pages. It also stands in for a
-   cafe that has not uploaded a symbol of its own.
+   cafe that has not uploaded a symbol of its own. The tab icon and the
+   home-screen icons are drawn from these same paths.
+
+   The macro keeps its old name, coffee_mark: every template calls it,
+   and what it draws is still a cup of coffee.
    ------------------------------------------------------------------ #}
 {% macro coffee_mark(classes="") %}
 <svg class="brand-glyph {{ classes }}"
@@ -24,23 +28,18 @@
      stroke-linejoin="round"
      aria-hidden="true"
      focusable="false">
-    {# The C, open on the right, with the cup sitting in the opening.
-       Heavier than everything inside it: at the size this is drawn in a
-       sidebar, a letter at the same weight as the steam reads as a
-       circle. #}
-    <path d="M23.8 8.2A11 11 0 1 0 23.8 23.8" stroke-width="2.2"/>
+    {# The R: its stem, and its bowl - the cup. Heavier than the steam: at
+       the size this is drawn in a sidebar, a letter at the steam's weight
+       reads as a scribble. #}
+    <path d="M10.4 24.2V8.2h5.9a4.6 4.6 0 0 1 0 9.2h-5.9" stroke-width="2.3"/>
+    {# Its leg, kicking out. #}
+    <path d="M15.6 17.4l6.3 6.8" stroke-width="2.3"/>
 
-    {# Steam, fading as it rises. #}
-    <path d="M13.9 8.1c-.95 1.1-.95 2.1 0 3.2s.95 2.1 0 3.2" opacity=".7"/>
-    <path d="M18.4 8.1c-.95 1.1-.95 2.1 0 3.2s.95 2.1 0 3.2" opacity=".42"/>
+    {# Steam off the cup, fading as it rises. #}
+    <path d="M21.6 3.6c-.9 1.05-.9 2 0 3.05s.9 2 0 3.05" opacity=".72"/>
+    <path d="M25.1 5.2c-.75.9-.75 1.7 0 2.6s.75 1.7 0 2.6" opacity=".45"/>
 
-    {# The cup: a flat rim, a rounded bowl, a handle and the saucer under
-       it. #}
-    <path d="M11.4 16.1h9.8v1.5a4.9 4.9 0 0 1-9.8 0z"/>
-    <path d="M21.2 17.2h1.1a2.2 2.2 0 0 1 0 4.4h-.5"/>
-    {# Short, and kept clear of the C. Drawn the width of the cup it
-       holds, it met the letter at both ends and the two read as one
-       smudged line at the size this is used in a sidebar. #}
-    <path d="M11.5 23.9h9.6" opacity=".85"/>
+    {# The saucer it all stands on. #}
+    <path d="M7.4 27.6h17.2" opacity=".85"/>
 </svg>
 {% endmacro %}

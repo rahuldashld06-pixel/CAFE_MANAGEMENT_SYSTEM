@@ -263,7 +263,7 @@ check("the bill says who served it",
       "Served by" in bill_html and "Bean Scene" in bill_html,
       "the cafe is not named as the server")
 check("and what it was run on",
-      "Cafora" in bill_html,
+      "Refero" in bill_html,
       "the system is not credited")
 check("it carries the time it was printed",
       'class="receipt__printed"' in bill_html,

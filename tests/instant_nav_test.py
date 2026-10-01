@@ -161,7 +161,7 @@ print("\n=== 2b. A 404 only speaks up for a page a person opened ===")
 client.get("/foods")                       # drain the queue first
 
 icon = client.get("/favicon.ico")
-# Answered with the Cafora icon now, where it used to be "no content".
+# Answered with the Refero icon now, where it used to be "no content".
 check("/favicon.ico is answered, not sent to the 404 handler",
       icon.status_code == 200 and icon.mimetype == "image/x-icon",
       "status=%d, type %r" % (icon.status_code, icon.mimetype))

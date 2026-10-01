@@ -264,7 +264,7 @@ if token:
 
 
 # ==========================================
-# 4. The tab: the Cafora mark and name
+# 4. The tab: the Refero mark and name
 # ==========================================
 print("\n=== 4. What the browser's tab shows ===")
 # There was no icon at all. /favicon.ico answered "no content" and no
@@ -295,13 +295,13 @@ for client, path, what in pages:
 check("every page names the icon for its tab", not missing,
       "no icon on: %s" % ", ".join(missing))
 
-check("the pages inside the app say Cafora on the tab",
-      all(titles[what].endswith("· Cafora") for _p, what in SIGNED_IN),
+check("the pages inside the app say Refero on the tab",
+      all(titles[what].endswith("· Refero") for _p, what in SIGNED_IN),
       "; ".join("%s: %r" % (what, titles[what]) for _p, what in SIGNED_IN
-                if not titles[what].endswith("· Cafora")))
+                if not titles[what].endswith("· Refero")))
 
 check("so do the ones before anybody has signed in",
-      all("Cafora" in titles[what] for _p, what in SIGNED_OUT),
+      all("Refero" in titles[what] for _p, what in SIGNED_OUT),
       "; ".join("%s: %r" % (what, titles[what]) for _p, what in SIGNED_OUT))
 
 check("and each tab still says which page it is",
@@ -363,7 +363,7 @@ _text = _llms.get_data(as_text=True)
 check("llms.txt is answered signed out, as plain Markdown",
       _llms.status_code == 200 and _llms.mimetype == "text/plain"
       and "Location" not in _llms.headers, (_llms.status_code, _llms.mimetype))
-check("with an H1 title", _text.startswith("# Cafora\n"), _text[:40])
+check("with an H1 title", _text.startswith("# Refero\n"), _text[:40])
 check("and links to follow, as the visitor's https addresses",
       "[Sign in](https://localhost/login)" in _text
       and "(https://localhost/robots.txt)" in _text, _text)
@@ -375,7 +375,7 @@ for _path in ("/.well-known/ai-catalog.json", "/ai-catalog.json"):
     _json = _cat.get_json(silent=True)
     check("%s is a valid, empty agent catalog, not a sign-in page" % _path,
           _cat.status_code == 200 and _cat.mimetype == "application/json"
-          and _json == {"specVersion": "1.0", "host": {"displayName": "Cafora"},
+          and _json == {"specVersion": "1.0", "host": {"displayName": "Refero"},
                         "entries": []}, (_cat.status_code, _json))
 
 for _path in ("/login", "/register", "/forgot-password"):

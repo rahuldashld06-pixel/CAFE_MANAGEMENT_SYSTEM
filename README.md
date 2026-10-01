@@ -1,6 +1,8 @@
-# Cafe Management — multi-tenant SaaS
+# Refero — calm service, beautifully run
 
-Flask + MySQL cafe management application. Any number of cafes sign up
+A multi-tenant café and restaurant system: Flask + MySQL. Its mark is an
+R whose bowl is a cup, steaming on its saucer (`templates/_brand_mark.html`;
+the tab and home-screen icons are drawn from the same paths). Any number of cafes sign up
 through `/register`; each gets its own menu, staff, orders, billing and
 branding, fully isolated from the others.
 
@@ -248,7 +250,7 @@ branding, fully isolated from the others.
 - **Whose name is on it.** A café brands its own sidebar, its own
   printed receipt and the page its customers hold — their name, their
   symbol, their colour. Behind every page inside the app sits one mark
-  that is not theirs to change: the Cafora mark and the product's own
+  that is not theirs to change: the Refero mark and the product's own
   name, faint, fixed, and ignoring both the uploaded symbol and the name
   they chose for their sidebar. Nothing appears on the sign-in, register
   or one-time-code screens, which stand outside the app shell entirely.
@@ -347,8 +349,8 @@ branding, fully isolated from the others.
   are restricted to ordering, food, inventory and billing.
 - **Admin OTP login.** Admins with a mobile number on file confirm a
   6-digit code after their password.
-- **Cafora on the tab.** Every page shows the Cafora mark as its browser
-  icon and ends its title with the name - "Kitchen · Cafora" - the way
+- **Refero on the tab.** Every page shows the Refero mark as its browser
+  icon and ends its title with the name - "Kitchen · Refero" - the way
   any site reads in a tab. The icon is built from the same shapes as
   the mark in the sidebar, drawn heavier for sixteen pixels, and
   /favicon.ico answers with it for bookmarks and history lists.
@@ -379,7 +381,7 @@ branding, fully isolated from the others.
   week.
 - **Name and symbol in the top corner.** An admin sets the name, the
   tagline and the symbol the sidebar shows, under Profile -> Name & Symbol.
-  Left alone it reads "Cafora / Food & Service Admin" beside the Cafora
+  Left alone it reads "Refero / Calm service, beautifully run" beside the Refero
   mark - a cup of coffee inside the C it is named for - and clearing a
   field puts that default back rather than leaving a blank corner. The same name is in the bar that stays at the top on a
   phone.

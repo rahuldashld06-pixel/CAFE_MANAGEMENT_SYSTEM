@@ -183,7 +183,7 @@ check("Demoting or switching off the admin does not happen - it stays the admin"
 
 print("\n=== 7. The shell is the product; the cafe name is still per-cafe ===")
 # Branding used to be a single JSON file at the project root, so one cafe
-# renaming itself renamed every cafe. The shell now reads "Cafora"
+# renaming itself renamed every cafe. The shell now reads "Refero"
 # for everyone, and each cafe's own name reaches only its own pages.
 shell_a = a.get("/orders/add").get_data(as_text=True)
 shell_b = b.get("/orders/add").get_data(as_text=True)
@@ -197,8 +197,8 @@ def installed_name(html):
 
 
 check("both cafes see the same product name in the shell",
-      "Food &amp; Service Admin" in shell_a
-      and "Food &amp; Service Admin" in shell_b,
+      "Calm service, beautifully run" in shell_a
+      and "Calm service, beautifully run" in shell_b,
       shell_a[:300])
 
 # Where the name is still per-cafe, it must not cross over.

@@ -279,10 +279,10 @@ def corner(client):
 
 
 name, tagline, logo = corner(a)
-check("a cafe that has chosen nothing reads Cafora",
-      name == "Cafora", "it reads %r" % name)
+check("a cafe that has chosen nothing reads Refero",
+      name == "Refero", "it reads %r" % name)
 check("with the line that has always gone under it",
-      tagline == "Food &amp; Service Admin", "it reads %r" % tagline)
+      tagline == "Calm service, beautifully run", "it reads %r" % tagline)
 check("and no uploaded symbol beside it", logo is None,
       "a symbol is drawn where none was set")
 check("the drawn coffee cup stands in until one is uploaded",
@@ -290,7 +290,7 @@ check("the drawn coffee cup stands in until one is uploaded",
       "nothing is drawn in the symbol's place")
 
 missing = [path for path in SHELL_PAGES
-           if "Food &amp; Service Admin" not in a.get(path).get_data(as_text=True)]
+           if "Calm service, beautifully run" not in a.get(path).get_data(as_text=True)]
 check("it is on every page", not missing, "missing from: %s" % missing)
 check("no cup icon is drawn either",
       "bi-cup-hot-fill" not in a.get("/orders/add").get_data(as_text=True),
@@ -356,8 +356,8 @@ a.post("/settings/branding", data={
     "brand_name": "", "brand_tagline": "", "_csrf_token": csrf(a)},
     content_type="multipart/form-data", follow_redirects=True)
 name, tagline, _ = corner(a)
-check("the name falls back", name == "Cafora", "it reads %r" % name)
-check("and so does the tagline", tagline == "Food &amp; Service Admin",
+check("the name falls back", name == "Refero", "it reads %r" % name)
+check("and so does the tagline", tagline == "Calm service, beautifully run",
       "it reads %r" % tagline)
 
 # Put it back for the checks below.
@@ -402,7 +402,7 @@ check("the endpoint is not on the staff allowlist",
 print("\n=== 14. One cafe's corner is not another's ===")
 sign_in(b, "beta")
 check("cafe B is still on the default",
-      corner(b)[0] == "Cafora",
+      corner(b)[0] == "Refero",
       "cafe B reads %r" % corner(b)[0])
 check("and cafe A keeps its own", corner(a)[0] == "Spice Garden",
       "cafe A reads %r" % corner(a)[0])

@@ -193,7 +193,7 @@ try:
                                     style(".topbar", "boxShadow")))
     check("the name and the mark lead it",
           rect(".topbar-brand")["left"] < rect(".topbar-search")["left"]
-          and "Cafora" in b.evaluate(
+          and "Refero" in b.evaluate(
               "document.querySelector('.topbar-brand').textContent"))
     check("the search box sits in the middle",
           abs((rect(".topbar-search")["left"] + rect(".topbar-search")["right"]) / 2

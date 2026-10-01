@@ -8,10 +8,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     {# The page's own name, then the product's, the way every site
-       reads in a tab: "Kitchen · Cafora". The brand is added here
+       reads in a tab: "Kitchen · Refero". The brand is added here
        and not in each page, so no page can leave it off - three had -
        and a rename is one constant, not two dozen templates. A page
-       with no title of its own is simply "Cafora". #}
+       with no title of its own is simply "Refero". #}
     <title>{% block title %}{% endblock %}{{ " · " if self.title()|trim }}{{ platform_name }}</title>
 
     {# The line under the link when this address is shared. Pages inside
