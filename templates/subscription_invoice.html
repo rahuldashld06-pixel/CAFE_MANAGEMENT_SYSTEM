@@ -3,7 +3,7 @@
    PDF from the print dialog ("Save as PDF"). A page of its own, white
    and plain, so it prints as a document and not as the app.
    ------------------------------------------------------------------ #}
-{% from "_brand_mark.html" import coffee_mark %}
+{% from "_brand_mark.html" import coffee_mark, refero_emblem %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,6 +32,7 @@
         }
         .inv__top { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
         .inv__brand { display: flex; align-items: center; gap: 12px; color: #B8875A; }
+        .inv__emblem { display: block; width: 150px; height: auto; border-radius: 12px; }
         .inv__brand svg { width: 40px; height: 40px; }
         .inv__brand strong { display: block; color: #2A1C14; font-family: "Fraunces", Georgia, serif; font-size: 24px; }
         .inv__brand small { color: #8A6D58; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
@@ -85,10 +86,7 @@
 
 <main class="inv">
     <div class="inv__top">
-        <div class="inv__brand">
-            {{ coffee_mark() }}
-            <div><strong>{{ platform_name }}</strong><small>Calm service, beautifully run</small></div>
-        </div>
+        <div class="inv__brand">{{ refero_emblem("inv__emblem") }}</div>
         <div>
             <h1>Invoice</h1>
             <p class="inv__no">{{ invoice.invoice_no }} · {{ issued }}</p>

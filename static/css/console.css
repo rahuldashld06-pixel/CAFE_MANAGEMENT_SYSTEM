@@ -280,3 +280,7 @@ code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
     .con-top, .con-tabs, .con-main { padding-left: 16px; padding-right: 16px; }
     .con-section { padding: 16px 14px; }
 }
+
+.con-brand .brand-glyph { border-radius: 8px; }
+.con-emblem { display: block; width: 150px; height: auto; border-radius: 18px;
+              box-shadow: 0 16px 40px -18px rgba(0, 0, 0, .8); }

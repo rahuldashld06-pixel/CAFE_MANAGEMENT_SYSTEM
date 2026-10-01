@@ -1,4 +1,4 @@
-{% from "_brand_mark.html" import coffee_mark %}
+{% from "_brand_mark.html" import coffee_mark, coffee_glyph, refero_emblem %}
 {% from "_auth_photo.html" import auth_photo %}
 <!DOCTYPE html>
 <html lang="en">
@@ -40,19 +40,21 @@
     <section class="auth-visual">
         {{ auth_photo(cafe_branding.login_photo) }}
 
+        {# The brand, large: the Refero emblem - unless the cafe has a
+           symbol of its own, which is theirs to show. #}
+        {% if cafe_branding.logo %}
         <div class="brand">
             <span class="brand-mark">
-                {% if cafe_branding.logo %}
                 <img src="{{ cafe_branding.logo }}" alt="">
-                {% else %}
-                {{ coffee_mark() }}
-                {% endif %}
             </span>
             <span class="brand-name">
                 <strong>{{ cafe_branding.cafe_name }}</strong>
                 <span>{{ cafe_branding.brand_tagline }}</span>
             </span>
         </div>
+        {% else %}
+        <div class="brand brand--emblem">{{ refero_emblem() }}</div>
+        {% endif %}
 
         <div class="brand-copy">
             <h1>Everything your café runs on, in one place.</h1>
@@ -147,7 +149,7 @@
             </div>
 
             <button type="submit" class="auth-button">
-                {{ coffee_mark('brand-glyph--btn') }}
+                {{ coffee_glyph('brand-glyph--btn') }}
                 <span>Create your café</span>
             </button>
 

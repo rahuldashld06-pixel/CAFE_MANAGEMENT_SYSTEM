@@ -6628,3 +6628,22 @@ div.food-art {
     .plan-notice { flex-wrap: wrap; }
     .plan-notice__go { margin-left: 30px; }
 }
+
+/* ==========================================================
+   The Refero monogram in a logo tile (templates/_brand_mark.html).
+   It brings its own cream ground, so wherever a tile holds it -
+   the sidebar, the top bar, the branding preview - it fills the
+   tile like an uploaded logo would, rather than sitting inside
+   the tile's own colour.
+   ========================================================== */
+.brand-mark .brand-glyph--tile,
+.topbar-brand__mark .brand-glyph--tile,
+.brand-preview .brand-glyph--tile {
+    width: 100%;
+    height: 100%;
+}
+
+.brand-mark:has(> .brand-glyph--tile),
+.topbar-brand__mark:has(> .brand-glyph--tile) {
+    background: #F4EDE2;
+}

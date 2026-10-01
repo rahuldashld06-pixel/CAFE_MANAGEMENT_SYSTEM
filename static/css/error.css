@@ -54,7 +54,7 @@ body {
     text-decoration: none;
 }
 
-.err__brand svg { width: 30px; height: 30px; }
+.err__brand svg { width: 30px; height: 30px; border-radius: 8px; }
 
 .err__card {
     width: min(520px, 100%);

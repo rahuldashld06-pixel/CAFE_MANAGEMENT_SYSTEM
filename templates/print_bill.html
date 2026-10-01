@@ -1,4 +1,4 @@
-{% from "_brand_mark.html" import coffee_mark %}
+{% from "_brand_mark.html" import coffee_mark, coffee_glyph %}
 <!DOCTYPE html>
 {# The accent only. print.css paints the paper itself in black
    on white and uses none of the surface colours, so a cafe's
@@ -34,7 +34,7 @@
         {% if branding.logo %}
         <img src="{{ branding.logo }}" alt="">
         {% else %}
-        {{ coffee_mark() }}
+        {{ coffee_glyph() }}
         {% endif %}
     </div>
 

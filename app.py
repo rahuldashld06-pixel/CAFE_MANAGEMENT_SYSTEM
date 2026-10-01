@@ -767,6 +767,8 @@ def csp_nonce():
 
 
 app.jinja_env.globals["csp_nonce"] = csp_nonce
+# For macros imported without context - the brand mark loads the emblem.
+app.jinja_env.globals["asset_url"] = asset_url
 
 
 _BASE_POLICY = _policy(_BASE_CSP)

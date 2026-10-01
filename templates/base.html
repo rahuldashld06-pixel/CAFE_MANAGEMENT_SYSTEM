@@ -1,4 +1,4 @@
-{% from "_brand_mark.html" import coffee_mark %}
+{% from "_brand_mark.html" import coffee_mark, coffee_glyph %}
 {% from "_food_art.html" import food_sprite %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ cafe_theme }}"{% if cafe_colour_style %} style="{{ cafe_colour_style }}"{% endif %}>
@@ -133,7 +133,7 @@
            click: it is decoration, and nothing on it can be read aloud
            or pressed. #}
         <div class="app-watermark" aria-hidden="true">
-            {{ coffee_mark() }}
+            {{ coffee_glyph() }}
             <span class="app-watermark__name">{{ platform_name }}</span>
             <span class="app-watermark__tagline">Food Management System</span>
         </div>

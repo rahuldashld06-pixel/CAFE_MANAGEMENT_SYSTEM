@@ -340,6 +340,18 @@
         box-shadow: 0 0 0 4px rgba(217, 171, 120, .35);
     }
 
+    /* The Refero emblem, where the brand is shown large. Its own cream
+       ground, so it sits on the photo as a card. */
+    .brand--emblem { display: block; }
+    .brand-emblem {
+        display: block;
+        width: 190px;
+        height: auto;
+        border-radius: 22px;
+        box-shadow: 0 18px 44px -18px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .08);
+    }
+    .brand--emblem-small .brand-emblem { width: 150px; }
+
     .brand-glyph--btn {
         display: block;
         width: 19px;
@@ -462,6 +474,8 @@
         .perks { display: none; }
 
         .brand-copy h1 { margin: 0; font-size: 26px; }
+
+        .brand-emblem { width: 132px; border-radius: 18px; }
 
         .auth-panel { padding: 28px 22px 32px; }
 
