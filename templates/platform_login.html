@@ -1,0 +1,29 @@
+{% from "_brand_mark.html" import coffee_mark %}
+<!DOCTYPE html>
+<html lang="en" data-theme="copper">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Console · {{ platform_name }}</title>
+    {% include "_favicon.html" %}
+    <meta name="robots" content="noindex, nofollow">
+    {% include "_fonts.html" %}
+    <link rel="stylesheet" href="{{ asset_url('css/theme.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/console.css') }}">
+</head>
+<body class="con-login">
+<main class="con-login__card">
+    <div class="con-brand">{{ coffee_mark() }}<span>{{ platform_name }} <small>Console</small></span></div>
+    <h1>The developer's console</h1>
+    <p>The site's health, its alerts, every café and its subscription.</p>
+    {% if said %}<p class="con-said" role="alert">{{ said }}</p>{% endif %}
+    <form method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+        <label>Password
+            <input type="password" name="password" autocomplete="current-password" required autofocus>
+        </label>
+        <button type="submit" class="con-btn con-btn--main">Open the console</button>
+    </form>
+</main>
+</body>
+</html>

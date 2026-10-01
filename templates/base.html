@@ -297,6 +297,14 @@
                             <i class="bi bi-shield-lock"></i><span>Change Password</span>
                         </a>
 
+                        {# The admin's plan: what it is, and paying for it. #}
+                        {% if session.get('role') == 'admin' %}
+                        <a href="{{ url_for('subscription') }}" class="profile-dropdown__item">
+                            <i class="bi bi-gem"></i><span>Subscription</span>
+                            {% if plan_badge %}<span class="plan-chip plan-chip--{{ plan_badge.tone }}">{{ plan_badge.text }}</span>{% endif %}
+                        </a>
+                        {% endif %}
+
                         {# Anybody on shift can pause ordering from the table
                            QR - the kitchen that is swamped, the cashier who
                            is closing up. Customers then see a kind note to
@@ -362,6 +370,11 @@
                                 id="tourReplay">
                             <i class="bi bi-question-circle"></i><span>How this works</span>
                         </button>
+
+                        {# Straight to the Refero team, with the page it was on. #}
+                        <a href="{{ url_for('report_problem') }}" class="profile-dropdown__item">
+                            <i class="bi bi-life-preserver"></i><span>Report a problem</span>
+                        </a>
 
                         <div class="profile-dropdown__divider"></div>
 
@@ -526,6 +539,19 @@
                     </div>
                     {% endif %}
                 {% endwith %}
+
+                {# When the plan wants attention: a trial or a plan about to
+                   end, ended, or a payment being checked. Inside the page
+                   region, so it moves with every page. #}
+                {% if plan_notice %}
+                <div class="plan-notice plan-notice--{{ plan_notice.tone }}" role="status">
+                    <i class="bi {{ plan_notice.icon }}" aria-hidden="true"></i>
+                    <p>{{ plan_notice.text }}</p>
+                    {% if plan_notice.action %}
+                    <a class="plan-notice__go" href="{{ plan_notice.action }}">{{ plan_notice.action_label }}</a>
+                    {% endif %}
+                </div>
+                {% endif %}
 
                 {% block content %}{% endblock %}
 
@@ -1030,6 +1056,45 @@ window.CafeShell = {
 
         document.addEventListener("instant:load", mark);
         mark();
+    }());
+
+    // ---- A fault in the page, told to the developer ----------------------
+    // An error nobody sees is an error nobody fixes. A few per page at
+    // most, only the site's own scripts (not an extension's), and never
+    // in the way of anything: sent and forgotten.
+    (function () {
+        let sent = 0;
+        function tell(message, source, line) {
+            if (sent >= 3 || !message) return;
+            if (source && String(source).indexOf(location.origin) !== 0) return;
+            if (/ResizeObserver|Script error/.test(String(message))) return;
+            sent += 1;
+            try {
+                fetch("{{ url_for('client_error') }}", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    keepalive: true,
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-Requested-With": "XMLHttpRequest",
+                        "X-CSRFToken": window.CafeShell.csrfToken
+                    },
+                    body: JSON.stringify({
+                        message: String(message).slice(0, 300),
+                        source: String(source || "").slice(0, 300),
+                        line: line || 0,
+                        page: location.pathname
+                    })
+                }).catch(function () {});
+            } catch (error) { /* nothing to be done */ }
+        }
+        window.addEventListener("error", function (event) {
+            tell(event.message, event.filename, event.lineno);
+        });
+        window.addEventListener("unhandledrejection", function (event) {
+            const reason = event.reason || {};
+            tell(reason.message || String(reason), location.origin + "/(promise)", 0);
+        });
     }());
 
     // ---- The profile menu marks the page it is on ----------------------

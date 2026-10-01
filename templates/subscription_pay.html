@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Pay for {{ product }}{% endblock %}
+
+{% block content %}
+<style>
+    .pay-wrap { display: grid; gap: 18px; max-width: 760px; }
+
+    .pay-card {
+        padding: 22px 24px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-lg);
+        background: var(--espresso-850);
+    }
+
+    .pay-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .pay-sum div { padding: 12px 14px; border-radius: var(--radius-md); background: var(--espresso-900); }
+    .pay-sum dt { color: var(--cream-faint); font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .pay-sum dd { margin: 4px 0 0; color: var(--cream); font-size: 16px; font-weight: 800; word-break: break-all; }
+    .pay-sum dd.pay-amount { font-family: "Fraunces", Georgia, serif; font-size: 26px; }
+
+    .pay-step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+    .pay-step + .pay-step { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--espresso-700); }
+    .pay-step__no {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: var(--glass-on), rgba(var(--copper-rgb), .3);
+        box-shadow: var(--glass-on-edges);
+        color: #fff;
+        font-weight: 800;
+    }
+    .pay-step h2 { margin: 4px 0 6px; font-size: 17px; }
+    .pay-step p { margin: 0 0 12px; color: var(--cream-dim); font-size: 14px; line-height: 1.55; }
+
+    .pay-ways { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; }
+    .pay-app { display: grid; gap: 8px; justify-items: start; }
+    .pay-app .btn { font-size: 15px; }
+    .pay-app small { color: var(--cream-faint); font-size: 12.5px; }
+
+    .pay-qr {
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+        padding: 12px;
+        border-radius: var(--radius-md);
+        background: #fff;
+    }
+    .pay-qr svg { width: 168px; height: 168px; display: block; }
+    .pay-qr small { color: #3A281D; font-size: 11.5px; font-weight: 700; }
+
+    .pay-utr { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .pay-utr label { display: grid; gap: 6px; flex: 1 1 240px; color: var(--cream); font-size: 13.5px; font-weight: 700; }
+    .pay-utr input {
+        width: 100%;
+        min-height: 46px;
+        padding: 10px 14px;
+        border: 1px solid var(--glass-edge);
+        border-radius: var(--radius-md);
+        background: var(--glass-field), var(--espresso-900);
+        box-shadow: var(--glass-field-shadow);
+        color: var(--cream);
+        font: inherit;
+        font-size: 17px;
+        letter-spacing: .14em;
+    }
+    .pay-utr input::placeholder { color: var(--cream-faint); letter-spacing: .06em; }
+    .pay-utr input:focus {
+        outline: none;
+        border-color: rgba(var(--copper-rgb), .7);
+        box-shadow: var(--glass-field-focus);
+    }
+
+    .pay-help { margin: 10px 0 0; color: var(--cream-faint); font-size: 12.5px; line-height: 1.5; }
+
+    @media (max-width: 640px) {
+        .pay-sum { grid-template-columns: minmax(0, 1fr); }
+        .pay-ways { grid-template-columns: minmax(0, 1fr); }
+        .pay-qr { justify-self: start; }
+    }
+</style>
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Subscription</div>
+        <h1><i class="bi bi-phone"></i> Pay for {{ product }} · {{ plan.name }}</h1>
+        <p>Two steps: pay in your UPI app, then tell us its reference.</p>
+    </div>
+    <a href="{{ url_for('subscription') }}" class="btn btn--ghost" data-back>
+        <i class="bi bi-arrow-left"></i> Subscription
+    </a>
+</div>
+
+<div class="pay-wrap">
+
+    <section class="pay-card" aria-label="What you are paying">
+        <dl class="pay-sum">
+            <div><dt>Amount</dt><dd class="pay-amount">{{ price }}</dd></div>
+            <div><dt>Paid to</dt><dd>{{ payee }}</dd></div>
+            <div><dt>Reference</dt><dd>{{ payment.reference }}</dd></div>
+        </dl>
+    </section>
+
+    <section class="pay-card">
+        <div class="pay-step">
+            <span class="pay-step__no" aria-hidden="true">1</span>
+            <div>
+                <h2>Pay {{ price }} by UPI</h2>
+                <p>The amount, <strong>{{ payee }}</strong> and our reference are already filled in -
+                    you only confirm with your UPI PIN. Check that the name your app shows is
+                    {{ payee }} before you pay.</p>
+                <div class="pay-ways">
+                    <div class="pay-app">
+                        <a class="btn btn--primary" href="{{ upi_link }}" id="payInApp">
+                            <i class="bi bi-phone"></i> Open my UPI app
+                        </a>
+                        <small>On this phone: opens Google Pay, PhonePe, Paytm or BHIM.<br>
+                            UPI ID: {{ upi_id }}</small>
+                    </div>
+                    <figure class="pay-qr" aria-label="Scan to pay {{ price }} to {{ payee }}">
+                        {{ qr|safe }}
+                        <small>On a computer? Scan with any UPI app</small>
+                    </figure>
+                </div>
+            </div>
+        </div>
+
+        <div class="pay-step">
+            <span class="pay-step__no" aria-hidden="true">2</span>
+            <div>
+                <h2>Tell us the UPI reference</h2>
+                <p>After paying, open the payment's receipt in your UPI app and copy the 12-digit
+                    number - called <strong>UTR</strong>, <strong>UPI Ref No.</strong> or
+                    <strong>UPI transaction ID</strong>.</p>
+                <form method="POST" class="pay-utr">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                    <label>
+                        UPI reference (12 digits)
+                        <input type="text" name="utr" inputmode="numeric" autocomplete="off"
+                               maxlength="16" pattern="[0-9 \-]{12,16}" placeholder="e.g. 427812345678" required>
+                    </label>
+                    <button type="submit" class="btn btn--primary">
+                        <i class="bi bi-check2-circle"></i> I have paid
+                    </button>
+                </form>
+                <p class="pay-help">We confirm it against the payment received, usually within a few
+                    hours, and your plan starts then - on from the day your current one ends. Your
+                    café keeps working while we check.</p>
+            </div>
+        </div>
+    </section>
+
+</div>
+{% endblock %}

@@ -64,3 +64,13 @@ services:
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
+      # The subscription is paid by UPI into the developer's own account:
+      # the UPI ID, and the name on that account as UPI apps show it.
+      - key: PLATFORM_UPI_ID
+        sync: false
+      - key: PLATFORM_UPI_NAME
+        sync: false
+      # The developer's console at /platform. Long and random; unset,
+      # the console does not exist.
+      - key: PLATFORM_PASSWORD
+        sync: false

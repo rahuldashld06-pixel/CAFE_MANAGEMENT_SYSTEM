@@ -1,0 +1,300 @@
+{# ------------------------------------------------------------------
+   The developer's console. One page: how the site is, what has gone
+   wrong, who has paid, and every cafe with its plan. Behind its own
+   password; nothing here is reachable from a cafe's sign-in.
+   ------------------------------------------------------------------ #}
+{% from "_brand_mark.html" import coffee_mark %}
+<!DOCTYPE html>
+<html lang="en" data-theme="copper">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% if errors_open %}({{ errors_open }}) {% endif %}Console · {{ platform_name }}</title>
+    {% include "_favicon.html" %}
+    <meta name="robots" content="noindex, nofollow">
+    {% include "_fonts.html" %}
+    <link rel="stylesheet" href="{{ asset_url('css/theme.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/console.css') }}">
+</head>
+<body>
+
+<header class="con-top">
+    <div class="con-brand">{{ coffee_mark() }}<span>{{ platform_name }} <small>Console</small></span></div>
+    <span class="con-pill con-pill--{{ status[0] }}" id="siteStatus">
+        <i aria-hidden="true"></i>{{ status[1] }}
+    </span>
+    <a class="con-out" href="{{ url_for('platform_logout') }}">Sign out</a>
+</header>
+
+<nav class="con-tabs" aria-label="Console sections">
+    <a href="#overview">Overview</a>
+    <a href="#alerts">Alerts{% if view.events %} <b>{{ view.events|length }}</b>{% endif %}</a>
+    <a href="#payments">Payments{% if view.pending %} <b>{{ view.pending|length }}</b>{% endif %}</a>
+    <a href="#cafes">Cafés <b class="con-tabs__quiet">{{ counts.cafes }}</b></a>
+</nav>
+
+<main class="con-main">
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}<div class="con-flash" role="status">{% for m in messages %}<p>{{ m }}</p>{% endfor %}</div>{% endif %}
+    {% endwith %}
+
+    {% if not upi_ready %}
+    <div class="con-warn" role="alert"><b>Payments are not set up.</b> Set PLATFORM_UPI_ID (your UPI ID)
+        and PLATFORM_UPI_NAME (the name on that account) on the host - until then, no café can pay.</div>
+    {% endif %}
+
+    {# =========================== Overview =========================== #}
+    <section id="overview" class="con-section" aria-labelledby="overviewTitle">
+        <h2 id="overviewTitle">Overview</h2>
+
+        <div class="con-tiles">
+            <div class="con-tile con-tile--{{ status[0] }}">
+                <span>Site</span>
+                <strong>{{ {'ok': 'Healthy', 'degraded': 'Degraded', 'down': 'Database down'}[status[0]] }}</strong>
+                <small>{{ status[1] }}</small>
+            </div>
+            <div class="con-tile{% if not view.db_ok %} con-tile--down{% elif view.db_ms and view.db_ms > 300 %} con-tile--degraded{% endif %}">
+                <span>Database</span>
+                <strong>{% if view.db_ok %}{{ view.db_ms }} ms{% else %}No answer{% endif %}</strong>
+                <small>{% if view.db_ok %}one round trip, just now{% else %}{{ view.db_error }}{% endif %}</small>
+            </div>
+            <div class="con-tile">
+                <span>Requests, last hour</span>
+                <strong>{{ view.hour.requests }}</strong>
+                <small>{{ view.hour.errors }} failed{% if view.hour.requests %} · {{ '%.1f'|format(100.0 * view.hour.errors / view.hour.requests) }}%{% endif %}</small>
+            </div>
+            <div class="con-tile{% if view.hour.avg_ms > 1500 %} con-tile--degraded{% endif %}">
+                <span>Response, last hour</span>
+                <strong>{{ view.hour.avg_ms }} ms</strong>
+                <small>average · slowest {{ view.hour.max_ms }} ms</small>
+            </div>
+            <div class="con-tile">
+                <span>This server</span>
+                <strong>{{ uptime or "just started" }}</strong>
+                <small>up · {{ worker }}{% if memory_mb %} · {{ memory_mb }} MB{% endif %}</small>
+            </div>
+            <div class="con-tile">
+                <span>Cafés</span>
+                <strong>{{ counts.cafes }}</strong>
+                <small>{{ counts.paying }} paying · {{ counts.trial }} on trial · {{ counts.lifetime }} lifetime{% if counts.attention %} · <em>{{ counts.attention }} to renew</em>{% endif %}</small>
+            </div>
+            <div class="con-tile">
+                <span>Received</span>
+                <strong>{{ counts.revenue }}</strong>
+                <small>confirmed, in the last 60 payments</small>
+            </div>
+        </div>
+
+        <div class="con-range" role="group" aria-label="Chart period">
+            {% for key in ranges %}
+            <a href="?range={{ key }}#overview"{% if key == range_key %} aria-current="true"{% endif %}>{{ key }}</a>
+            {% endfor %}
+            <small>{{ range_label }}, all servers together</small>
+        </div>
+
+        <div class="con-charts">
+            {% for chart, title, unit, tone in [(req_chart, 'Requests', '', 'a'), (ms_chart, 'Average response', ' ms', 'b'), (err_chart, 'Errors', '', 'c')] %}
+            <figure class="con-chart con-chart--{{ tone }}">
+                <figcaption><span>{{ title }}</span><b>peak {{ chart.top }}{{ unit }}</b></figcaption>
+                <svg viewBox="0 0 640 150" preserveAspectRatio="none" role="img" aria-label="{{ title }} over {{ range_label }}">
+                    <line x1="0" y1="149" x2="640" y2="149" class="con-chart__base"/>
+                    {% if chart.area %}<path d="{{ chart.area }}" class="con-chart__area"/>
+                    <path d="{{ chart.line }}" class="con-chart__line"/>{% endif %}
+                </svg>
+                <div class="con-chart__axis"><span>{{ chart_first }}</span><span>now</span></div>
+            </figure>
+            {% endfor %}
+        </div>
+    </section>
+
+    {# =========================== Alerts =========================== #}
+    <section id="alerts" class="con-section" aria-labelledby="alertsTitle">
+        <div class="con-section__head">
+            <h2 id="alertsTitle">Alerts and reports</h2>
+            {% if view.events %}
+            <form method="POST" action="{{ url_for('platform_resolve', target='all') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                <button type="submit" class="con-btn">Mark all dealt with</button>
+            </form>
+            {% endif %}
+        </div>
+        {% if view.events %}
+        <ul class="con-alerts">
+            {% for e in view.events %}
+            <li class="con-alert con-alert--{{ e.level }}">
+                <div class="con-alert__head">
+                    <span class="con-chip con-chip--{{ e.kind }}">{{ {'crash': 'Crash', 'database': 'Database', 'health': 'Health', 'slow': 'Slow', 'report': 'Reported', 'browser': 'Browser', 'security': 'Security'}.get(e.kind, e.kind) }}</span>
+                    <strong>{{ e.title }}</strong>
+                    {% if e.hits > 1 %}<span class="con-hits">×{{ e.hits }}</span>{% endif %}
+                </div>
+                <p class="con-alert__meta">
+                    {{ e.seen }}{% if e.hits > 1 %} · first {{ e.since }}{% endif %}
+                    {% if e.cafe_name %} · {{ e.cafe_name }}{% endif %}
+                    {% if e.path %} · <code>{{ e.path }}</code>{% endif %}
+                </p>
+                {% if e.detail %}
+                <details><summary>Details</summary><pre>{{ e.detail }}</pre></details>
+                {% endif %}
+                {% if e.event_id %}
+                <form method="POST" action="{{ url_for('platform_resolve', target=e.event_id) }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                    <button type="submit" class="con-btn con-btn--small">Dealt with</button>
+                </form>
+                {% else %}
+                <p class="con-alert__meta"><em>Not yet written to the database - this server is holding it.</em></p>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="con-empty">Nothing to look at. Crashes, database errors, slow pages, problems cafés
+            report and errors in their browsers all land here.</p>
+        {% endif %}
+    </section>
+
+    {# =========================== Payments =========================== #}
+    <section id="payments" class="con-section" aria-labelledby="paymentsTitle">
+        <h2 id="paymentsTitle">Payments to check</h2>
+        <p class="con-hint">Find a credit for the amount with this UPI reference (UTR) in your bank or UPI
+            app, then approve it. The plan runs on from the day the café's current one ends.
+            Paid to: <b>{{ payee }}</b>.</p>
+        {% if view.pending %}
+        <div class="con-table-wrap">
+        <table class="con-table">
+            <thead><tr><th>Café</th><th>Plan</th><th>UPI reference</th><th>Sent</th><th></th></tr></thead>
+            <tbody>
+                {% for p in view.pending %}
+                <tr>
+                    <td><b>{{ p.cafe_name }}</b><small>{{ p.full_name or "" }}{% if p.phone_number %} · {{ p.phone_number }}{% endif %}{% if p.email %} · {{ p.email }}{% endif %}</small></td>
+                    <td>{{ p.plan_name }}<small>{{ p.total }}</small></td>
+                    <td><code class="con-utr">{{ p.utr }}</code><small>note: {{ p.reference }}</small></td>
+                    <td>{{ p.when }}</td>
+                    <td class="con-actions">
+                        <form method="POST" action="{{ url_for('platform_decide', payment_id=p.payment_id, action='approve') }}">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                            <button type="submit" class="con-btn con-btn--main">Approve</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('platform_decide', payment_id=p.payment_id, action='reject') }}" class="con-reject">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                            <input type="text" name="note" maxlength="200" placeholder="Why, for the café (optional)">
+                            <button type="submit" class="con-btn">Not found</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p class="con-empty">No payments waiting.</p>
+        {% endif %}
+
+        {% if view.decided %}
+        <details class="con-history">
+            <summary>Decided ({{ view.decided|length }})</summary>
+            <table class="con-table">
+                <tbody>
+                {% for p in view.decided %}
+                <tr>
+                    <td><b>{{ p.cafe_name }}</b><small>{{ p.when }}</small></td>
+                    <td>{{ p.plan_name }}<small>{{ p.total }}</small></td>
+                    <td><code>{{ p.utr }}</code></td>
+                    <td>{% if p.status == 'paid' %}<span class="con-chip con-chip--ok">Paid · {{ p.invoice_no }}</span>
+                        {% else %}<span class="con-chip con-chip--crash">Not found</span><small>{{ p.note }}</small>{% endif %}</td>
+                    <td class="con-actions">
+                        {% if p.status == 'rejected' %}
+                        <form method="POST" action="{{ url_for('platform_decide', payment_id=p.payment_id, action='approve') }}">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                            <button type="submit" class="con-btn con-btn--small">Approve after all</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        {% endif %}
+    </section>
+
+    {# =========================== Cafés =========================== #}
+    <section id="cafes" class="con-section" aria-labelledby="cafesTitle">
+        <div class="con-section__head">
+            <h2 id="cafesTitle">Cafés and their plans</h2>
+            <input type="search" id="cafeFind" placeholder="Find a café or admin" aria-label="Find a café">
+        </div>
+        <div class="con-table-wrap">
+        <table class="con-table" id="cafeTable">
+            <thead><tr><th>Café</th><th>Admin</th><th>Plan</th><th>Ends</th><th>Paid</th><th>Give</th></tr></thead>
+            <tbody>
+                {% for c in view.cafes %}
+                {% set st = c.state.status %}
+                <tr data-find="{{ (c.cafe_name ~ ' ' ~ (c.full_name or '') ~ ' ' ~ (c.username or '') ~ ' ' ~ (c.email or '') ~ ' ' ~ (c.phone_number or ''))|lower }}">
+                    <td><b>{{ c.cafe_name }}</b><small>#{{ c.cafe_id }} · {{ c.team }} on the team</small></td>
+                    <td>{{ c.full_name or "-" }}<small>@{{ c.username or "-" }}{% if c.phone_number %} · {{ c.phone_number }}{% endif %}</small></td>
+                    <td><span class="con-chip con-chip--{{ st }}">{{ {'trial': 'Trial', 'active': c.state.label, 'lifetime': 'Lifetime', 'grace': 'Ended · grace', 'checking': 'Being checked', 'paused': 'Paused', 'open': 'No plan'}.get(st, st) }}</span></td>
+                    <td>{% if st == 'lifetime' %}never{% else %}{{ c.until_day }}{% if c.state.days_left %}<small>{{ c.state.days_left }} days left</small>{% endif %}{% endif %}</td>
+                    <td>{{ c.paid_text }}</td>
+                    <td class="con-actions">
+                        {% if st == 'lifetime' %}
+                        <form method="POST" action="{{ url_for('platform_cafe', cafe_id=c.cafe_id) }}" data-confirm="End {{ c.cafe_name }}'s lifetime plan? It gets a week to choose a plan.">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                            <input type="hidden" name="action" value="end_lifetime">
+                            <button type="submit" class="con-btn con-btn--small">End lifetime</button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('platform_cafe', cafe_id=c.cafe_id) }}" data-confirm="Give {{ c.cafe_name }} Refero free for life?">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                            <input type="hidden" name="action" value="lifetime">
+                            <button type="submit" class="con-btn con-btn--gift con-btn--small">Lifetime free</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('platform_cafe', cafe_id=c.cafe_id) }}" class="con-extend">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                            <input type="hidden" name="action" value="extend">
+                            <input type="number" name="days" min="1" max="3650" value="30" aria-label="Days to add">
+                            <button type="submit" class="con-btn con-btn--small">+ days</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+
+</main>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    "use strict";
+    // Ask before the actions that change a cafe's plan for good.
+    document.addEventListener("submit", function (event) {
+        var form = event.target;
+        var ask = form.getAttribute && form.getAttribute("data-confirm");
+        if (ask && !window.confirm(ask)) event.preventDefault();
+    }, true);
+
+    // Find a cafe as it is typed.
+    var find = document.getElementById("cafeFind");
+    if (find) {
+        find.addEventListener("input", function () {
+            var wanted = find.value.trim().toLowerCase();
+            [].forEach.call(document.querySelectorAll("#cafeTable tbody tr"), function (row) {
+                row.hidden = wanted && (row.getAttribute("data-find") || "").indexOf(wanted) === -1;
+            });
+        });
+    }
+
+    // Fresh every minute while nobody is in the middle of something here.
+    setInterval(function () {
+        if (document.hidden) return;
+        var busy = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+        if (busy || document.querySelector("details[open]")) return;
+        window.location.reload();
+    }, 60000);
+}());
+</script>
+</body>
+</html>

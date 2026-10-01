@@ -8,6 +8,11 @@ import hashlib
 import hmac
 import threading
 import time
+import calendar
+import math
+import socket
+import traceback
+from collections import deque
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 from flask import (
@@ -23,6 +28,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import io
 import os
 import re
+from urllib.parse import quote
 import mysql.connector
 import unicodedata
 import countries
@@ -99,6 +105,16 @@ if os.environ.get("DB_SSL_DISABLED", "0") == "1":
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", _FILE_RAZORPAY_KEY_ID)
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", _FILE_RAZORPAY_KEY_SECRET)
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", _FILE_RAZORPAY_WEBHOOK_SECRET)
+
+# The subscription is paid by UPI straight into the developer's own
+# account. The UPI ID, and the name on that account that a UPI app shows
+# before anybody pays, are set on the host - never in this public code.
+PLATFORM_UPI_ID = os.environ.get("PLATFORM_UPI_ID", "").strip()
+PLATFORM_UPI_NAME = os.environ.get("PLATFORM_UPI_NAME", "").strip()
+
+# The developer's console: payments confirmed, cafes looked after, the
+# site watched. Without a password set, the console does not exist.
+PLATFORM_PASSWORD = os.environ.get("PLATFORM_PASSWORD", "")
 # -----------------------------------------------------------------------
 
 app = Flask(__name__)
@@ -1644,6 +1660,10 @@ TABLE_ORDERING_PAUSED = (
 
 
 def table_ordering_open(cafe):
+    # A cafe whose plan has ended takes no orders from the table either:
+    # customers get the same kind word to order at the counter.
+    if cafe and plan_state(cafe)["paused"]:
+        return False
     value = (cafe or {}).get("qr_ordering")
     return True if value is None else bool(value)
 
@@ -1714,7 +1734,7 @@ def cafe_for_token(cursor, token, fresh=False):
     if row is None:
         cursor.execute("""
             SELECT cafe_id, cafe_name, owner_user_id, is_active, timezone,
-                   qr_ordering, public_token
+                   qr_ordering, public_token, plan, plan_until, plan_pending_at
             FROM cafes
             WHERE public_token = %s
         """, (token,))
@@ -2228,6 +2248,76 @@ _CORE_TABLES = [
                 ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """),
+    ("plan_payments", """
+        CREATE TABLE IF NOT EXISTS plan_payments (
+            payment_id INT AUTO_INCREMENT PRIMARY KEY,
+            cafe_id INT NOT NULL,
+            -- 'monthly' or 'yearly', and what it cost when it was chosen.
+            plan VARCHAR(10) NOT NULL,
+            amount DECIMAL(10,2) NOT NULL,
+            -- Ours, in the UPI note, so the payment can be matched in
+            -- the bank's statement.
+            reference VARCHAR(20) NOT NULL,
+            -- The UPI reference (UTR) the admin typed after paying. Used
+            -- once only, so one payment cannot be claimed twice.
+            utr VARCHAR(20) NULL,
+            -- awaiting (chosen, not yet paid), pending (paid, being
+            -- checked), paid, rejected.
+            status VARCHAR(12) NOT NULL DEFAULT 'awaiting',
+            created_by INT NULL,
+            created_at DATETIME NOT NULL,
+            submitted_at DATETIME NULL,
+            decided_at DATETIME NULL,
+            period_start DATETIME NULL,
+            period_end DATETIME NULL,
+            invoice_no VARCHAR(24) NULL,
+            -- Why it was turned down, in words the admin reads.
+            note VARCHAR(255) NULL,
+            UNIQUE KEY uq_plan_payment_ref (reference),
+            UNIQUE KEY uq_plan_payment_utr (utr),
+            INDEX idx_plan_payment_cafe (cafe_id, created_at),
+            INDEX idx_plan_payment_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """),
+    ("monitor_minutes", """
+        CREATE TABLE IF NOT EXISTS monitor_minutes (
+            row_id INT AUTO_INCREMENT PRIMARY KEY,
+            -- One row per server process per minute: how many requests it
+            -- answered, how many failed or crawled, and how long they took.
+            minute DATETIME NOT NULL,
+            worker VARCHAR(40) NOT NULL,
+            requests INT NOT NULL DEFAULT 0,
+            errors INT NOT NULL DEFAULT 0,
+            slow INT NOT NULL DEFAULT 0,
+            total_ms BIGINT NOT NULL DEFAULT 0,
+            max_ms INT NOT NULL DEFAULT 0,
+            INDEX idx_monitor_minute (minute)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """),
+    ("monitor_events", """
+        CREATE TABLE IF NOT EXISTS monitor_events (
+            event_id INT AUTO_INCREMENT PRIMARY KEY,
+            -- crash, database, health, slow, report or browser.
+            kind VARCHAR(16) NOT NULL,
+            level VARCHAR(8) NOT NULL,
+            title VARCHAR(200) NOT NULL,
+            -- The traceback, or what the person wrote. For the developer:
+            -- never shown anywhere but the console.
+            detail TEXT NULL,
+            path VARCHAR(255) NULL,
+            cafe_id INT NULL,
+            user_id INT NULL,
+            -- The same fault again, while it is open, counts here rather
+            -- than adding a row: an outage is one alert, not a thousand.
+            fingerprint VARCHAR(64) NOT NULL,
+            hits INT NOT NULL DEFAULT 1,
+            first_at DATETIME NOT NULL,
+            last_at DATETIME NOT NULL,
+            resolved_at DATETIME NULL,
+            INDEX idx_monitor_events_open (resolved_at, last_at),
+            INDEX idx_monitor_events_fp (fingerprint)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """),
 ]
 
 # Columns added after the first release. Existing installations get them via
@@ -2356,6 +2446,14 @@ _COLUMN_MIGRATIONS = [
     ("bills", "payment_reference", "VARCHAR(150) NULL"),
     ("bills", "gateway_signature", "VARCHAR(255) NULL"),
     ("login_otp_codes", "purpose", "VARCHAR(20) NOT NULL DEFAULT 'login'"),
+    # The cafe's plan - 'trial', 'monthly', 'yearly' or 'lifetime' - and
+    # when it runs to. Every cafe from before plans is given a month's
+    # trial from the day this arrives (_start_plans).
+    ("cafes", "plan", "VARCHAR(10) NULL"),
+    ("cafes", "plan_until", "DATETIME NULL"),
+    # When a payment was last sent to be checked. While one is, a cafe
+    # past its grace keeps working: it has paid, and is waiting on us.
+    ("cafes", "plan_pending_at", "DATETIME NULL"),
 ]
 
 _INDEX_MIGRATIONS = [
@@ -2625,6 +2723,7 @@ def ensure_auth_schema():
         _backfill_food_numbers(cursor)
         _backfill_order_item_names(cursor)
         _settle_one_admin(cursor)
+        _start_plans(cursor)
 
         connection.commit()
         AUTH_SCHEMA_READY = True
@@ -2659,6 +2758,18 @@ def next_food_no(cursor, owner_id):
     while candidate in taken:
         candidate += 1
     return candidate
+
+
+def _start_plans(cursor):
+    """
+    Every cafe from before plans starts a month's free trial today.
+
+    Once: after the first pass no cafe is left without a plan, so later
+    boots run one update that finds nothing.
+    """
+    cursor.execute(
+        "UPDATE cafes SET plan = 'trial', plan_until = %s WHERE plan IS NULL",
+        (add_months(utc_now(), PLAN_TRIAL_MONTHS),))
 
 
 def _settle_one_admin(cursor):
@@ -3152,6 +3263,8 @@ def database_error(error, doing):
     for anybody holding the page and trying things.
     """
     app.logger.exception("database error while %s", doing)
+    record_event("database", "error", "Database error while %s" % doing,
+                 detail="%s\n\n%s" % (error, traceback.format_exc()))
     note_failed_save()
     return ("Something went wrong on our side and that was not saved. "
             "Please try again.")
@@ -3737,6 +3850,7 @@ def get_current_user():
                    c.tax_percent, c.discount_percent,
                    c.cafe_name, c.branding_version,
                    c.brand_name, c.brand_tagline, c.qr_ordering,
+                   c.plan, c.plan_until, c.plan_pending_at,
                    (c.logo_blob IS NOT NULL) AS has_logo,
                    (c.login_photo_blob IS NOT NULL) AS has_login_photo
             FROM users u
@@ -3773,7 +3887,8 @@ def _shape_current_user(row, cafe_id):
                      "tax_percent", "discount_percent",
                      "cafe_name", "branding_version",
                      "brand_name", "brand_tagline",
-                     "has_logo", "has_login_photo", "qr_ordering")
+                     "has_logo", "has_login_photo", "qr_ordering",
+                     "plan", "plan_until", "plan_pending_at")
 
     user = None
     if row:
@@ -3792,6 +3907,10 @@ def _shape_current_user(row, cafe_id):
                 "accent": parse_colour(row["accent_hex"]),
                 "surface": parse_colour(row["surface_hex"]),
             }
+
+            # Where the cafe's plan stands: worked out afresh on every
+            # request from the row, since "ends tomorrow" moves by itself.
+            g.cafe_plan = plan_state(row)
 
             # And the café's own name and logo, which the sidebar and the
             # mobile top bar show on every page. Reading them here rather
@@ -3891,6 +4010,8 @@ EVERYONE_ENDPOINTS = {
     "order_status_feed", "change_password", "logout", "tutorial_seen",
     "timezone_guess", "account_photo", "user_media", "search",
     "table_ordering_switch", "food_image",
+    # Telling the developer something is wrong, by hand or by the page.
+    "report_problem", "client_error",
 }
 
 
@@ -9272,7 +9393,10 @@ def register():
             cur.execute('INSERT INTO cafes(cafe_name) VALUES(%s)',(cafe_name,)); cid=cur.lastrowid
             cur.execute("""INSERT INTO users(username,password_hash,full_name,role,is_active,phone_number,email,cafe_id)
                          VALUES(%s,%s,%s,'admin',1,%s,%s,%s)""",(username,generate_password_hash(password),full_name,phone or None,email or None,cid))
-            uid=cur.lastrowid; cur.execute('UPDATE cafes SET owner_user_id=%s WHERE cafe_id=%s',(uid,cid)); c.commit()
+            uid=cur.lastrowid
+            # Its admin, and a month free to see whether it suits them.
+            cur.execute('UPDATE cafes SET owner_user_id=%s, plan=%s, plan_until=%s WHERE cafe_id=%s',
+                        (uid, 'trial', add_months(utc_now(), PLAN_TRIAL_MONTHS), cid)); c.commit()
             session.clear(); session.permanent=True; session['user_id']=uid; session['username']=username; session['role']='admin'; session['cafe_id']=cid
             # Signing up is not a sign-in anybody asked to be remembered:
             # it gets the same shift-long window a plain sign-in gets.
@@ -9766,6 +9890,10 @@ def require_login():
         "public_review",
         # Whether a username is free, asked while somebody registers.
         "username_check",
+        # The developer's console, behind its own password - not a cafe's
+        # sign-in. Each of these checks platform_signed_in() itself.
+        "platform_login", "platform_home", "platform_logout",
+        "platform_decide", "platform_cafe", "platform_resolve",
         # The browser asks for the icon on the sign-in screen too. Without
         # this it is redirected to /login, and the browser then renders the
         # whole login page again - a wasted database round-trip on every
@@ -9833,6 +9961,17 @@ def require_login():
         if wants_json_response() or request.path.startswith("/api/"):
             return jsonify({"error": "Not one of your pages."}), 403
         return redirect(landing_url(user))
+
+    # The plan has ended and its grace run out: the cafe rests. Its admin
+    # is taken to Subscription, where renewing brings everything back at
+    # once; everybody else is told, kindly, who can. Nothing is deleted.
+    plan = g.get("cafe_plan")
+    if plan and plan["paused"] and request.endpoint not in PLAN_OPEN_ENDPOINTS:
+        if wants_json_response() or request.path.startswith("/api/"):
+            return jsonify({"error": ERROR_WORDS["paused"]["said"]}), 402
+        if user.get("role") == "admin":
+            return redirect(url_for("subscription"))
+        return error_page(402, "paused")
 
     return None
 
@@ -12599,6 +12738,1204 @@ def ai_catalog():
     })
 
 
+# ==========================================================
+# The subscription
+#
+# A new cafe has a month free. After it, Refero Pro is Monthly
+# (Rs 650) or Yearly (Rs 6,000 - Rs 500 a month), paid by UPI
+# straight into the developer's own account: the amount, the
+# payee's name and our reference are filled in for the admin,
+# who pays in any UPI app and gives us the UPI reference from
+# its receipt. The developer confirms it against the money
+# received, in the console, and the plan runs on from the day
+# the last one ends - a payment made early loses nothing.
+#
+# Prepaid: nothing is taken again by itself. Reminders from a
+# week before the end; three days' grace after it; then the
+# cafe rests - staff are told to ask the admin, the table QR
+# sends customers to the counter, and the admin can still sign
+# in and renew. Nothing is deleted, and paying brings it all
+# back at once. A payment being checked keeps a cafe working
+# for three days meanwhile.
+# ==========================================================
+
+PLAN_TRIAL_MONTHS = 1
+PLAN_GRACE_DAYS = 3
+PLAN_REMIND_DAYS = 7
+PLAN_PRODUCT = "Refero Pro"
+
+PLANS = {
+    "monthly": {"name": "Monthly", "months": 1, "amount": Decimal("650.00"),
+                "per": "month", "per_month": Decimal("650")},
+    "yearly": {"name": "Yearly", "months": 12, "amount": Decimal("6000.00"),
+               "per": "year", "per_month": Decimal("500")},
+}
+PLAN_LABELS = {"trial": "Free trial", "monthly": "Monthly", "yearly": "Yearly",
+               "lifetime": "Lifetime"}
+
+# What a UPI receipt calls the UTR, "UPI Ref No." or "UPI transaction
+# ID": twelve digits.
+UTR_SHAPE = re.compile(r"^\d{12}$")
+
+# What a paused cafe's people can still open: the way to pay, their own
+# account, and signing out.
+PLAN_OPEN_ENDPOINTS = {
+    "subscription", "subscription_choose", "subscription_pay",
+    "subscription_invoice", "logout", "change_password", "account_photo",
+    "user_media", "order_status_feed", "tutorial_seen", "timezone_guess",
+    "report_problem", "client_error",
+}
+
+PLAN_NOT_READY = ("Paying online is being set up. Please try again a "
+                  "little later.")
+
+
+def add_months(moment, months):
+    """The same day `months` on - or that month's last, if it is shorter."""
+    index = moment.month - 1 + months
+    year, month = moment.year + index // 12, index % 12 + 1
+    return moment.replace(year=year, month=month,
+                          day=min(moment.day, calendar.monthrange(year, month)[1]))
+
+
+def _moment(value):
+    """A stored time as a datetime, whatever the driver handed back."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    try:
+        return datetime.fromisoformat(str(value)[:26])
+    except ValueError:
+        return None
+
+
+def plan_state(row, now=None):
+    """
+    Where a cafe's plan stands, from its plan, plan_until and
+    plan_pending_at.
+
+    status is one of trial, active, lifetime, grace (ended, still
+    working), checking (past grace but a payment is being checked),
+    paused - or open, for a cafe from before plans that has not yet been
+    given its trial, which works as it always did.
+    """
+    now = now or utc_now()
+    row = row or {}
+    plan = (row.get("plan") or "").strip()
+    until = _moment(row.get("plan_until"))
+    pending_at = _moment(row.get("plan_pending_at"))
+
+    state = {"plan": plan or None, "label": PLAN_LABELS.get(plan, plan),
+             "until": until, "pause_at": None, "days_left": None,
+             "pending": pending_at is not None, "paused": False,
+             "remind": False}
+
+    if plan == "lifetime":
+        state["status"] = "lifetime"
+        return state
+    if not plan or until is None:
+        state["status"] = "open"
+        return state
+
+    pause_at = until + timedelta(days=PLAN_GRACE_DAYS)
+    checking = (pending_at is not None
+                and now < pending_at + timedelta(days=PLAN_GRACE_DAYS))
+    if now < until:
+        status = "trial" if plan == "trial" else "active"
+    elif now < pause_at:
+        status = "grace"
+    elif checking:
+        status = "checking"
+    else:
+        status = "paused"
+
+    days_left = (max(1, math.ceil((until - now).total_seconds() / 86400))
+                 if now < until else 0)
+    state.update({
+        "status": status, "pause_at": pause_at, "days_left": days_left,
+        "paused": status == "paused",
+        "remind": (status in ("grace", "checking")
+                   or (status in ("trial", "active")
+                       and days_left <= PLAN_REMIND_DAYS)),
+    })
+    return state
+
+
+def plan_day(moment, cafe_id=None):
+    """A plan's date as people read it - 1 Nov 2026 - on the cafe's clock."""
+    if moment is None:
+        return ""
+    local = as_cafe_time(moment, cafe_id) or moment
+    return "%d %s %d" % (local.day, local.strftime("%b"), local.year)
+
+
+def days_word(count):
+    return "1 day" if count == 1 else "%d days" % count
+
+
+def rupees(amount):
+    """Rs 650 or Rs 6,000 - whole rupees, grouped the way they are read."""
+    value = Decimal(str(amount or 0))
+    whole = value == value.to_integral_value()
+    return "\u20b9" + ("{:,.0f}".format(value) if whole else "{:,.2f}".format(value))
+
+
+def upi_link(amount, note):
+    """
+    upi://pay with the developer's UPI ID, the name on the account, the
+    amount and our note - what every UPI app opens, filled in.
+
+    No tr or mc: those mark a merchant, and some apps refuse a payment
+    to a person's own UPI ID that carries them.
+    """
+    parts = [("pa", PLATFORM_UPI_ID),
+             ("pn", PLATFORM_UPI_NAME or DEFAULT_BRAND_NAME),
+             ("am", "%.2f" % Decimal(str(amount))),
+             ("cu", "INR"),
+             ("tn", note)]
+    return "upi://pay?" + "&".join(
+        "%s=%s" % (key, quote(str(value), safe="@.-_")) for key, value in parts)
+
+
+def _refresh_pending(cursor, cafe_id):
+    """Whether this cafe still has a payment being checked, on its row."""
+    cursor.execute(
+        "SELECT MAX(submitted_at) AS at FROM plan_payments "
+        "WHERE cafe_id = %s AND status = 'pending'", (cafe_id,))
+    row = cursor.fetchone() or {}
+    cursor.execute("UPDATE cafes SET plan_pending_at = %s WHERE cafe_id = %s",
+                   (row.get("at"), cafe_id))
+
+
+def approve_plan_payment(cursor, payment_id, now=None):
+    """
+    A payment confirmed: its period runs on from the day the cafe's
+    current plan (or trial) ends, or from today if that has passed. The
+    invoice is numbered. Returns the new end, or None if there was
+    nothing to approve.
+    """
+    now = now or utc_now()
+    cursor.execute(
+        "SELECT payment_id, cafe_id, plan, status FROM plan_payments "
+        "WHERE payment_id = %s FOR UPDATE", (payment_id,))
+    payment = cursor.fetchone()
+    if not payment or payment["status"] not in ("pending", "rejected") \
+            or payment["plan"] not in PLANS:
+        return None
+
+    cursor.execute("SELECT plan, plan_until FROM cafes WHERE cafe_id = %s FOR UPDATE",
+                   (payment["cafe_id"],))
+    cafe = cursor.fetchone() or {}
+    until = _moment(cafe.get("plan_until"))
+    start = until if (until and until > now and cafe.get("plan") != "lifetime") else now
+    end = add_months(start, PLANS[payment["plan"]]["months"])
+
+    cursor.execute("""
+        UPDATE plan_payments
+        SET status = 'paid', decided_at = %s, period_start = %s,
+            period_end = %s, invoice_no = %s, note = NULL
+        WHERE payment_id = %s
+    """, (now, start, end, "RF-%d-%05d" % (now.year, payment_id), payment_id))
+    if cafe.get("plan") != "lifetime":
+        cursor.execute("UPDATE cafes SET plan = %s, plan_until = %s WHERE cafe_id = %s",
+                       (payment["plan"], end, payment["cafe_id"]))
+    _refresh_pending(cursor, payment["cafe_id"])
+    return end
+
+
+def reject_plan_payment(cursor, payment_id, note, now=None):
+    """A payment that could not be found in the account, with why."""
+    cursor.execute(
+        "SELECT payment_id, cafe_id, status FROM plan_payments "
+        "WHERE payment_id = %s FOR UPDATE", (payment_id,))
+    payment = cursor.fetchone()
+    if not payment or payment["status"] != "pending":
+        return False
+    cursor.execute("""
+        UPDATE plan_payments SET status = 'rejected', decided_at = %s, note = %s
+        WHERE payment_id = %s
+    """, (now or utc_now(), note, payment_id))
+    _refresh_pending(cursor, payment["cafe_id"])
+    return True
+
+
+@app.context_processor
+def inject_plan():
+    """
+    The line at the top of the page when the plan wants attention, and
+    the word beside Subscription in the profile menu.
+    """
+    state = g.get("cafe_plan") if has_request_context() else None
+    if not state or not session.get("user_id"):
+        return {"plan_notice": None, "plan_badge": None}
+
+    admin = session.get("role") == "admin"
+    cafe_id = session.get("cafe_id")
+    status = state["status"]
+    end = plan_day(state["until"], cafe_id)
+    notice = None
+
+    if status == "trial" and state["remind"] and admin:
+        notice = {"tone": "info", "icon": "bi-gift",
+                  "text": "Your free trial ends in %s, on %s. Choose a plan "
+                          "to keep everything running." % (days_word(state["days_left"]), end),
+                  "action": url_for("subscription"), "action_label": "See plans"}
+    elif status == "active" and state["remind"] and admin:
+        notice = {"tone": "info", "icon": "bi-calendar-event",
+                  "text": "Your plan ends in %s, on %s. Renew to keep going "
+                          "without a break." % (days_word(state["days_left"]), end),
+                  "action": url_for("subscription"), "action_label": "Renew"}
+    elif status == "grace":
+        if admin:
+            notice = {"tone": "warn", "icon": "bi-exclamation-circle",
+                      "text": "Your plan ended on %s. Everything keeps working "
+                              "until %s - renew before then." % (
+                                  end, plan_day(state["pause_at"], cafe_id)),
+                      "action": url_for("subscription"), "action_label": "Renew now"}
+        else:
+            notice = {"tone": "warn", "icon": "bi-exclamation-circle",
+                      "text": "This café's plan needs renewing - please let "
+                              "your admin know.", "action": None}
+    elif status == "checking" and admin:
+        notice = {"tone": "info", "icon": "bi-hourglass-split",
+                  "text": "Your payment is being checked. Everything stays on "
+                          "while it is.", "action": None}
+
+    # Not on the page that is all about the plan already.
+    if (request.endpoint or "").startswith("subscription"):
+        notice = None
+
+    badge = None
+    if admin:
+        if status == "lifetime":
+            badge = {"text": "Lifetime", "tone": "good"}
+        elif status == "trial":
+            badge = {"text": "Trial · %s left" % days_word(state["days_left"]),
+                     "tone": "warn" if state["remind"] else "info"}
+        elif status == "active":
+            badge = {"text": "%s · to %s" % (state["label"], end),
+                     "tone": "warn" if state["remind"] else "good"}
+        elif status in ("grace", "checking"):
+            badge = {"text": "Renew", "tone": "warn"}
+        elif status == "paused":
+            badge = {"text": "Paused", "tone": "bad"}
+    return {"plan_notice": notice, "plan_badge": badge}
+
+
+def _subscription_payments(cursor, cafe_id):
+    """Every payment sent for this cafe, newest first, ready to show."""
+    cursor.execute("""
+        SELECT payment_id, plan, amount, reference, utr, status, created_at,
+               submitted_at, decided_at, period_start, period_end,
+               invoice_no, note
+        FROM plan_payments
+        WHERE cafe_id = %s AND status <> 'awaiting'
+        ORDER BY payment_id DESC
+    """, (cafe_id,))
+    rows = cursor.fetchall()
+    for row in rows:
+        row["day"] = plan_day(_moment(row["submitted_at"] or row["created_at"]), cafe_id)
+        row["plan_name"] = PLANS.get(row["plan"], {}).get("name", row["plan"])
+        row["total"] = rupees(row["amount"])
+        row["period"] = ("%s - %s" % (plan_day(_moment(row["period_start"]), cafe_id),
+                                      plan_day(_moment(row["period_end"]), cafe_id))
+                         if row["period_start"] else "")
+    return rows
+
+
+@app.route("/subscription")
+def subscription():
+    """
+    The admin's plan, how it is paid, and every invoice - the page a
+    reminder leads to, and the one a paused cafe's admin is brought to.
+    """
+    denied = require_role("admin")
+    if denied:
+        return denied
+    cafe_id = require_cafe_session()
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT cafe_name, plan, plan_until, plan_pending_at FROM cafes "
+            "WHERE cafe_id = %s", (cafe_id,))
+        cafe = cursor.fetchone() or {}
+        payments = _subscription_payments(cursor, cafe_id)
+        cursor.execute(
+            "SELECT reference, plan FROM plan_payments "
+            "WHERE cafe_id = %s AND status = 'awaiting' "
+            "ORDER BY payment_id DESC LIMIT 1", (cafe_id,))
+        awaiting = cursor.fetchone()
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+    state = plan_state(cafe)
+    return render_template(
+        "subscription.html",
+        state=state,
+        cafe_name=cafe.get("cafe_name") or "",
+        until_day=plan_day(state["until"], cafe_id),
+        pause_day=plan_day(state["pause_at"], cafe_id),
+        plans=[dict(PLANS[key], key=key, price=rupees(PLANS[key]["amount"]),
+                    per_month_text=rupees(PLANS[key]["per_month"]))
+               for key in ("monthly", "yearly")],
+        yearly_saves=rupees(PLANS["monthly"]["amount"] * 12 - PLANS["yearly"]["amount"]),
+        payments=payments,
+        awaiting=awaiting,
+        payee=PLATFORM_UPI_NAME or DEFAULT_BRAND_NAME,
+        upi_ready=bool(PLATFORM_UPI_ID),
+        product=PLAN_PRODUCT,
+        grace_days=PLAN_GRACE_DAYS,
+    )
+
+
+@app.route("/subscription/choose", methods=["POST"])
+def subscription_choose():
+    """A plan chosen: its payment is made ready, and the admin taken to pay."""
+    denied = require_role("admin")
+    if denied:
+        return denied
+    cafe_id = require_cafe_session()
+    plan = request.form.get("plan", "")
+    if plan not in PLANS:
+        flash("Choose Monthly or Yearly.")
+        return redirect(url_for("subscription"))
+    if not PLATFORM_UPI_ID:
+        flash(PLAN_NOT_READY)
+        return redirect(url_for("subscription"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        # The same plan chosen again picks up where it was left, rather
+        # than piling up references nobody paid.
+        cursor.execute(
+            "SELECT reference FROM plan_payments WHERE cafe_id = %s "
+            "AND plan = %s AND status = 'awaiting' ORDER BY payment_id DESC LIMIT 1",
+            (cafe_id, plan))
+        found = cursor.fetchone()
+        if found:
+            return redirect(url_for("subscription_pay", reference=found["reference"]))
+
+        for _ in range(5):
+            reference = "RF" + secrets.token_hex(4).upper()
+            try:
+                cursor.execute("""
+                    INSERT INTO plan_payments
+                        (cafe_id, plan, amount, reference, status, created_by, created_at)
+                    VALUES (%s, %s, %s, %s, 'awaiting', %s, %s)
+                """, (cafe_id, plan, PLANS[plan]["amount"], reference,
+                      session.get("user_id"), utc_now()))
+                connection.commit()
+                return redirect(url_for("subscription_pay", reference=reference))
+            except mysql.connector.IntegrityError:
+                connection.rollback()
+        flash(PLAN_NOT_READY)
+        return redirect(url_for("subscription"))
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.route("/subscription/pay/<reference>", methods=["GET", "POST"])
+def subscription_pay(reference):
+    """
+    Paying: the UPI app opened with everything filled in (or its code
+    scanned from a computer), then the UPI reference from the receipt,
+    so the payment can be found in the account and confirmed.
+    """
+    denied = require_role("admin")
+    if denied:
+        return denied
+    cafe_id = require_cafe_session()
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT payment_id, plan, amount, reference, status FROM plan_payments "
+            "WHERE reference = %s AND cafe_id = %s", (reference, cafe_id))
+        payment = cursor.fetchone()
+        if payment is None:
+            return error_page(404)
+        if payment["status"] != "awaiting":
+            return redirect(url_for("subscription"))
+
+        if request.method == "POST":
+            utr = re.sub(r"[\s-]+", "", request.form.get("utr") or "")
+            if not UTR_SHAPE.match(utr):
+                flash("That is not a UPI reference. It is the 12-digit number on "
+                      "the payment's receipt in your UPI app - called UTR, UPI "
+                      "Ref No. or UPI transaction ID.")
+                return redirect(url_for("subscription_pay", reference=reference))
+            now = utc_now()
+            try:
+                cursor.execute("""
+                    UPDATE plan_payments
+                    SET utr = %s, status = 'pending', submitted_at = %s
+                    WHERE payment_id = %s AND status = 'awaiting'
+                """, (utr, now, payment["payment_id"]))
+            except mysql.connector.IntegrityError:
+                connection.rollback()
+                flash("That UPI reference has already been used for a payment. "
+                      "Please check the number on this payment's receipt.")
+                return redirect(url_for("subscription_pay", reference=reference))
+            cursor.execute("UPDATE cafes SET plan_pending_at = %s WHERE cafe_id = %s",
+                           (now, cafe_id))
+            connection.commit()
+            cache_drop_cafe(cafe_id)
+            flash("Thank you! Your payment is being checked - usually within a "
+                  "few hours. Everything keeps working meanwhile.")
+            return redirect(url_for("subscription"))
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+    if not PLATFORM_UPI_ID:
+        flash(PLAN_NOT_READY)
+        return redirect(url_for("subscription"))
+
+    plan = PLANS[payment["plan"]]
+    note = "%s %s %s" % (PLAN_PRODUCT, plan["name"], payment["reference"])
+    link = upi_link(payment["amount"], note)
+    return render_template(
+        "subscription_pay.html",
+        payment=payment,
+        plan=plan,
+        price=rupees(payment["amount"]),
+        payee=PLATFORM_UPI_NAME or DEFAULT_BRAND_NAME,
+        upi_id=PLATFORM_UPI_ID,
+        upi_link=link,
+        qr=qr_svg(link, box=8, border=2),
+        product=PLAN_PRODUCT,
+    )
+
+
+@app.route("/subscription/invoice/<int:payment_id>")
+def subscription_invoice(payment_id):
+    """A paid invoice, to keep, print or save as a PDF."""
+    denied = require_role("admin")
+    if denied:
+        return denied
+    cafe_id = require_cafe_session()
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT p.payment_id, p.plan, p.amount, p.reference, p.utr,
+                   p.decided_at, p.period_start, p.period_end, p.invoice_no,
+                   c.cafe_name, u.full_name, u.email, u.phone_number
+            FROM plan_payments p
+            JOIN cafes c ON c.cafe_id = p.cafe_id
+            LEFT JOIN users u ON u.user_id = c.owner_user_id
+            WHERE p.payment_id = %s AND p.cafe_id = %s AND p.status = 'paid'
+        """, (payment_id, cafe_id))
+        invoice = cursor.fetchone()
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+    if invoice is None:
+        return error_page(404)
+    return render_template(
+        "subscription_invoice.html",
+        invoice=invoice,
+        plan=PLANS.get(invoice["plan"], {"name": invoice["plan"]}),
+        product=PLAN_PRODUCT,
+        total=rupees(invoice["amount"]),
+        issued=plan_day(_moment(invoice["decided_at"]), cafe_id),
+        period="%s - %s" % (plan_day(_moment(invoice["period_start"]), cafe_id),
+                            plan_day(_moment(invoice["period_end"]), cafe_id)),
+        payee=PLATFORM_UPI_NAME or DEFAULT_BRAND_NAME,
+        platform_name=DEFAULT_BRAND_NAME,
+    )
+
+
+# ==========================================================
+# Watching the site
+#
+# Every server process counts what it answers, minute by minute:
+# requests, failures, slow ones, and how long they took. Faults
+# are recorded as they happen - a crash with its traceback, a
+# database that refused, a health check that failed, a page
+# that crawled, a problem a cafe reported, an error in a
+# browser. None of it costs a request a database trip: it is
+# kept in memory and written by a background thread a moment
+# later. The same fault again counts on its open alert rather
+# than adding one, so an outage is one alert with a number on
+# it, not a thousand rows.
+#
+# Honest about its limit: when the whole server is down, nothing
+# here runs to say so. That needs a watcher outside - see the
+# README (an uptime monitor on /healthz).
+# ==========================================================
+
+MONITOR_SLOW_MS = int(os.environ.get("MONITOR_SLOW_MS", "3000"))
+MONITOR_KEEP_DAYS = 14
+_MONITOR_WORKER = ("%s-%d" % (socket.gethostname(), os.getpid()))[-40:]
+_MONITOR_STARTED = None
+_MONITOR_LOCK = threading.Lock()
+_MONITOR_MINUTES = {}
+_MONITOR_EVENTS = deque(maxlen=500)
+_MONITOR_LAST_FLUSH = [0.0]
+_MONITOR_FLUSHING = [False]
+_MONITOR_PRUNED = [0.0]
+
+
+def _minute(moment):
+    return moment.replace(second=0, microsecond=0)
+
+
+def record_event(kind, level, title, detail=None, path=None, cafe_id=None,
+                 user_id=None):
+    """
+    Note a fault for the console. Never raises, never waits on the
+    database: queued here, written by the flusher a moment later.
+    """
+    try:
+        if has_request_context():
+            path = path or request.path
+            cafe_id = cafe_id or session.get("cafe_id")
+            user_id = user_id or session.get("user_id")
+        # Numbers in a path make every order its own fault; without them
+        # the same fault on any order is one.
+        place = re.sub(r"\d+", "#", path or "")
+        fingerprint = hashlib.sha1(
+            ("%s|%s|%s" % (kind, title, place)).encode("utf-8")).hexdigest()[:40]
+        with _MONITOR_LOCK:
+            _MONITOR_EVENTS.append({
+                "kind": kind, "level": level, "title": str(title)[:200],
+                "detail": (detail or "")[:20000], "path": (path or "")[:255],
+                "cafe_id": cafe_id, "user_id": user_id,
+                "fingerprint": fingerprint, "at": utc_now(),
+            })
+        _kick_flusher()
+    except Exception:
+        app.logger.exception("could not record a monitoring event")
+
+
+def monitor_flush(include_current=False):
+    """
+    Write what this process has counted and noted. Run by the background
+    flusher; the tests and the console call it directly.
+    """
+    now_minute = _minute(utc_now())
+    with _MONITOR_LOCK:
+        minutes = [(minute, counts) for minute, counts in _MONITOR_MINUTES.items()
+                   if include_current or minute < now_minute]
+        for minute, _ in minutes:
+            del _MONITOR_MINUTES[minute]
+        events = list(_MONITOR_EVENTS)
+        _MONITOR_EVENTS.clear()
+    if not minutes and not events:
+        return
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        if minutes:
+            cursor.executemany("""
+                INSERT INTO monitor_minutes
+                    (minute, worker, requests, errors, slow, total_ms, max_ms)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, [(minute, _MONITOR_WORKER, c["requests"], c["errors"], c["slow"],
+                   c["total_ms"], c["max_ms"]) for minute, c in minutes])
+        for event in events:
+            cursor.execute(
+                "SELECT event_id FROM monitor_events "
+                "WHERE fingerprint = %s AND resolved_at IS NULL "
+                "ORDER BY event_id DESC LIMIT 1", (event["fingerprint"],))
+            open_one = cursor.fetchone()
+            if open_one:
+                cursor.execute("""
+                    UPDATE monitor_events
+                    SET hits = hits + 1, last_at = %s, detail = %s,
+                        cafe_id = COALESCE(%s, cafe_id), user_id = COALESCE(%s, user_id)
+                    WHERE event_id = %s
+                """, (event["at"], event["detail"], event["cafe_id"],
+                      event["user_id"], open_one["event_id"]))
+            else:
+                cursor.execute("""
+                    INSERT INTO monitor_events
+                        (kind, level, title, detail, path, cafe_id, user_id,
+                         fingerprint, hits, first_at, last_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, %s, %s)
+                """, (event["kind"], event["level"], event["title"], event["detail"],
+                      event["path"], event["cafe_id"], event["user_id"],
+                      event["fingerprint"], event["at"], event["at"]))
+
+        # Two weeks is plenty to see a trend; older minutes go, once a day.
+        if time.time() - _MONITOR_PRUNED[0] > 24 * 3600:
+            _MONITOR_PRUNED[0] = time.time()
+            cursor.execute("DELETE FROM monitor_minutes WHERE minute < %s",
+                           (utc_now() - timedelta(days=MONITOR_KEEP_DAYS),))
+        connection.commit()
+    except Exception:
+        # The database is what is wrong, most likely. Put it all back to
+        # try again, and carry on serving.
+        with _MONITOR_LOCK:
+            for minute, counts in minutes:
+                held = _MONITOR_MINUTES.setdefault(minute, counts)
+                if held is not counts:
+                    for key in ("requests", "errors", "slow", "total_ms"):
+                        held[key] += counts[key]
+                    held["max_ms"] = max(held["max_ms"], counts["max_ms"])
+            for event in events:
+                _MONITOR_EVENTS.appendleft(event)
+        if connection:
+            try:
+                connection.rollback()
+            except Exception:
+                pass
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+def _flush_soon():
+    try:
+        time.sleep(2)
+        monitor_flush()
+    finally:
+        _MONITOR_LAST_FLUSH[0] = time.time()
+        _MONITOR_FLUSHING[0] = False
+
+
+def _kick_flusher():
+    """Start the background writer, unless it is already on its way."""
+    if app.config.get("MONITOR_SYNC") or os.environ.get("MONITOR_BACKGROUND") == "0":
+        return
+    with _MONITOR_LOCK:
+        if _MONITOR_FLUSHING[0]:
+            return
+        _MONITOR_FLUSHING[0] = True
+    threading.Thread(target=_flush_soon, daemon=True).start()
+
+
+def _monitor_start():
+    global _MONITOR_STARTED
+    if _MONITOR_STARTED is None:
+        _MONITOR_STARTED = utc_now()
+    g._monitor_t0 = time.perf_counter()
+
+
+# First of all the before-request hooks, so the clock starts before the
+# sign-in check can answer - a request turned away there is traffic too.
+app.before_request_funcs.setdefault(None, []).insert(0, _monitor_start)
+
+
+@app.after_request
+def _monitor_count(response):
+    """Count this answer into its minute. Static files are not traffic."""
+    try:
+        started = g.pop("_monitor_t0", None)
+        if started is None or request.endpoint in ("static", "favicon"):
+            return response
+        took = int((time.perf_counter() - started) * 1000)
+        failed = response.status_code >= 500
+        slow = took >= MONITOR_SLOW_MS
+        minute = _minute(utc_now())
+        with _MONITOR_LOCK:
+            counts = _MONITOR_MINUTES.setdefault(minute, {
+                "requests": 0, "errors": 0, "slow": 0, "total_ms": 0, "max_ms": 0})
+            counts["requests"] += 1
+            counts["errors"] += 1 if failed else 0
+            counts["slow"] += 1 if slow else 0
+            counts["total_ms"] += took
+            counts["max_ms"] = max(counts["max_ms"], took)
+            due = (len(_MONITOR_MINUTES) > 1
+                   and time.time() - _MONITOR_LAST_FLUSH[0] > 60)
+        if slow and request.endpoint not in ("healthz",):
+            record_event("slow", "warning",
+                         "Slow page: %s" % (request.endpoint or request.path),
+                         detail="Took %d ms (slow is %d ms and over)." % (took, MONITOR_SLOW_MS))
+        elif due:
+            _kick_flusher()
+    except Exception:
+        pass
+    return response
+
+
+# ---- Problems people raise themselves -----------------------------------------
+
+@app.route("/report-problem", methods=["GET", "POST"])
+def report_problem():
+    """Anybody on a team telling the developer something is wrong."""
+    if request.method == "POST":
+        what = (request.form.get("what") or "").strip()[:3000]
+        where = (request.form.get("where") or "").strip()[:255]
+        if len(what) < 5:
+            flash("Please say a little about what went wrong.")
+            return redirect(url_for("report_problem", where=where))
+        user = get_current_user() or {}
+        record_event(
+            "report", "warning",
+            "Problem reported by %s" % (user.get("full_name") or user.get("username") or "a teammate"),
+            detail="%s\n\nPage: %s\nBrowser: %s" % (
+                what, where or "-", request.headers.get("User-Agent", "-")[:300]),
+            path=where or None)
+        if app.config.get("MONITOR_SYNC"):
+            monitor_flush()
+        flash("Thank you - the problem has been sent to the Refero team.")
+        return redirect(landing_url(user))
+    return render_template(
+        "report_problem.html",
+        where=(request.args.get("where") or request.referrer or "")[:255])
+
+
+@app.route("/api/client-error", methods=["POST"])
+def client_error():
+    """An error in somebody's browser, sent by the page itself. A few at most."""
+    told = session.get("client_errors", 0)
+    if told >= 5:
+        return jsonify({"ok": True})
+    session["client_errors"] = told + 1
+    data = request.get_json(silent=True) or {}
+    message = str(data.get("message") or "")[:300]
+    if not message:
+        return jsonify({"ok": True})
+    record_event("browser", "warning", "Browser error: %s" % message[:150],
+                 detail="%s\n\nSource: %s line %s\nPage: %s\nBrowser: %s" % (
+                     message, str(data.get("source") or "-")[:300],
+                     str(data.get("line") or "-")[:10],
+                     str(data.get("page") or "-")[:255],
+                     request.headers.get("User-Agent", "-")[:300]),
+                 path=str(data.get("page") or "")[:255] or None)
+    return jsonify({"ok": True})
+
+
+# ---- The console ----------------------------------------------------------------
+
+PLATFORM_SESSION_SECONDS = 2 * 60 * 60
+PLATFORM_LIFETIME_UNTIL = datetime(2099, 12, 31)
+PLATFORM_COUNTED_AS = "platform-console"
+CONSOLE_RANGES = {
+    # span, bucket, the label under the chart
+    "1h": (timedelta(hours=1), 1, "the last hour, by the minute"),
+    "24h": (timedelta(hours=24), 15, "the last 24 hours, by the quarter hour"),
+    "7d": (timedelta(days=7), 120, "the last 7 days, by two hours"),
+}
+
+
+def platform_enabled():
+    return bool(PLATFORM_PASSWORD)
+
+
+def platform_signed_in():
+    started = session.get("platform_at") if has_request_context() else None
+    return (platform_enabled() and bool(started)
+            and time.time() - started < PLATFORM_SESSION_SECONDS)
+
+
+def _platform_guard():
+    """None to go ahead; otherwise the answer for a stranger."""
+    if not platform_enabled():
+        return error_page(404)
+    if not platform_signed_in():
+        session.pop("platform_at", None)
+        return redirect(url_for("platform_login"))
+    return None
+
+
+def _platform_form_ok():
+    return csrf_matches(request.form.get("_csrf_token"), session.get("_csrf_token"))
+
+
+@app.route("/platform/login", methods=["GET", "POST"])
+def platform_login():
+    if not platform_enabled():
+        return error_page(404)
+    if "_csrf_token" not in session:
+        session["_csrf_token"] = secrets.token_urlsafe(32)
+
+    said = None
+    if request.method == "POST":
+        if not _platform_form_ok():
+            return error_page(400, "expired")
+        who = request_source()
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        try:
+            wait = login_lock_remaining(cursor, PLATFORM_COUNTED_AS, who)
+            if wait:
+                said = "Too many wrong tries. Try again in %s." % describe_lockout(wait)
+            elif hmac.compare_digest(
+                    (request.form.get("password") or "").encode("utf-8"),
+                    PLATFORM_PASSWORD.encode("utf-8")):
+                clear_login_failures(cursor, PLATFORM_COUNTED_AS, who)
+                connection.commit()
+                session["platform_at"] = int(time.time())
+                return redirect(url_for("platform_home"))
+            else:
+                note_login_failure(cursor, PLATFORM_COUNTED_AS, who)
+                connection.commit()
+                record_event("security", "warning", "Wrong password at the console",
+                             detail="From %s" % who)
+                said = "That is not the console's password."
+        finally:
+            cursor.close()
+            connection.close()
+    return render_template("platform_login.html", said=said,
+                           platform_name=DEFAULT_BRAND_NAME)
+
+
+@app.route("/platform/logout")
+def platform_logout():
+    session.pop("platform_at", None)
+    return redirect(url_for("platform_login") if platform_enabled() else "/")
+
+
+def _chart(points, key, width=640, height=150):
+    """An SVG path for one series: the line, and the area under it."""
+    values = [p[key] or 0 for p in points]
+    if not values:
+        return {"line": "", "area": "", "top": 0}
+    top = max(values) or 1
+    step = width / max(1, len(values) - 1)
+    coords = [(round(i * step, 1), round(height - (v / top) * (height - 8) - 4, 1))
+              for i, v in enumerate(values)]
+    line = "M" + " L".join("%s %s" % xy for xy in coords)
+    area = "%s L%s %s L0 %s Z" % (line, coords[-1][0], height, height)
+    return {"line": line, "area": area, "top": max(values)}
+
+
+def _console_series(cursor, span, bucket_minutes):
+    """Requests, errors and times, summed across processes, per bucket."""
+    now = utc_now()
+    since = _minute(now - span)
+    cursor.execute("""
+        SELECT minute, SUM(requests) AS requests, SUM(errors) AS errors,
+               SUM(slow) AS slow, SUM(total_ms) AS total_ms, MAX(max_ms) AS max_ms
+        FROM monitor_minutes WHERE minute >= %s GROUP BY minute
+    """, (since,))
+    rows = cursor.fetchall()
+    # And what this process has not written yet.
+    with _MONITOR_LOCK:
+        live = [dict(c, minute=m) for m, c in _MONITOR_MINUTES.items() if m >= since]
+    buckets = {}
+    for row in list(rows) + live:
+        moment = _moment(row["minute"])
+        index = int((moment - since).total_seconds() // (bucket_minutes * 60))
+        slot = buckets.setdefault(index, {"requests": 0, "errors": 0, "slow": 0,
+                                          "total_ms": 0, "max_ms": 0})
+        for key in ("requests", "errors", "slow", "total_ms"):
+            slot[key] += int(row[key] or 0)
+        slot["max_ms"] = max(slot["max_ms"], int(row["max_ms"] or 0))
+    count = int(span.total_seconds() // (bucket_minutes * 60))
+    points = []
+    for index in range(count + 1):
+        slot = buckets.get(index, {"requests": 0, "errors": 0, "slow": 0,
+                                   "total_ms": 0, "max_ms": 0})
+        slot["avg_ms"] = (slot["total_ms"] // slot["requests"]) if slot["requests"] else 0
+        slot["at"] = since + timedelta(minutes=index * bucket_minutes)
+        points.append(slot)
+    return points
+
+
+def _ago(moment):
+    if moment is None:
+        return ""
+    seconds = max(0, int((utc_now() - moment).total_seconds()))
+    for size, name in ((86400, "day"), (3600, "hour"), (60, "minute")):
+        if seconds >= size:
+            n = seconds // size
+            return "%d %s%s ago" % (n, name, "" if n == 1 else "s")
+    return "just now"
+
+
+@app.route("/platform")
+def platform_home():
+    """Everything at once: how the site is, what went wrong, who has paid."""
+    stop = _platform_guard()
+    if stop:
+        return stop
+
+    monitor_flush(include_current=False)
+    range_key = request.args.get("range", "24h")
+    if range_key not in CONSOLE_RANGES:
+        range_key = "24h"
+    span, bucket, range_label = CONSOLE_RANGES[range_key]
+
+    view = {"db_ok": True, "db_ms": None, "db_error": "", "points": [],
+            "events": [], "pending": [], "decided": [], "cafes": [],
+            "hour": {"requests": 0, "errors": 0, "avg_ms": 0, "max_ms": 0}}
+    connection = None
+    cursor = None
+    try:
+        started = time.perf_counter()
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("SELECT 1 AS ok")
+        cursor.fetchone()
+        view["db_ms"] = round((time.perf_counter() - started) * 1000, 1)
+
+        view["points"] = _console_series(cursor, span, bucket)
+        hour = _console_series(cursor, timedelta(hours=1), 60)
+        totals = {"requests": 0, "errors": 0, "total_ms": 0, "max_ms": 0}
+        for point in hour:
+            for key in ("requests", "errors", "total_ms"):
+                totals[key] += point[key]
+            totals["max_ms"] = max(totals["max_ms"], point["max_ms"])
+        view["hour"] = {"requests": totals["requests"], "errors": totals["errors"],
+                        "avg_ms": (totals["total_ms"] // totals["requests"]) if totals["requests"] else 0,
+                        "max_ms": totals["max_ms"]}
+
+        cursor.execute("""
+            SELECT e.event_id, e.kind, e.level, e.title, e.detail, e.path,
+                   e.hits, e.first_at, e.last_at, c.cafe_name
+            FROM monitor_events e
+            LEFT JOIN cafes c ON c.cafe_id = e.cafe_id
+            WHERE e.resolved_at IS NULL
+            ORDER BY e.last_at DESC LIMIT 100
+        """)
+        view["events"] = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT p.payment_id, p.plan, p.amount, p.reference, p.utr, p.status,
+                   p.submitted_at, p.decided_at, p.note, p.invoice_no,
+                   c.cafe_name, u.full_name, u.phone_number, u.email
+            FROM plan_payments p
+            JOIN cafes c ON c.cafe_id = p.cafe_id
+            LEFT JOIN users u ON u.user_id = c.owner_user_id
+            WHERE p.status <> 'awaiting'
+            ORDER BY p.payment_id DESC LIMIT 60
+        """)
+        for row in cursor.fetchall():
+            row["total"] = rupees(row["amount"])
+            row["plan_name"] = PLANS.get(row["plan"], {}).get("name", row["plan"])
+            row["when"] = _ago(_moment(row["submitted_at"]))
+            (view["pending"] if row["status"] == "pending" else view["decided"]).append(row)
+
+        cursor.execute("""
+            SELECT c.cafe_id, c.cafe_name, c.is_active, c.plan, c.plan_until,
+                   c.plan_pending_at, u.full_name, u.username, u.phone_number, u.email,
+                   (SELECT COUNT(*) FROM users t WHERE t.cafe_id = c.cafe_id) AS team,
+                   (SELECT COALESCE(SUM(p.amount), 0) FROM plan_payments p
+                    WHERE p.cafe_id = c.cafe_id AND p.status = 'paid') AS paid
+            FROM cafes c
+            LEFT JOIN users u ON u.user_id = c.owner_user_id
+            ORDER BY c.cafe_id DESC
+        """)
+        for row in cursor.fetchall():
+            row["state"] = plan_state(row)
+            row["until_day"] = plan_day(row["state"]["until"])
+            row["paid_text"] = rupees(row["paid"] or 0)
+            view["cafes"].append(row)
+    except Exception as error:
+        view["db_ok"] = False
+        view["db_error"] = str(error)[:300]
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+    # Faults this process has noted but could not write - the database
+    # being the fault, most likely - are shown all the same.
+    with _MONITOR_LOCK:
+        unwritten = list(_MONITOR_EVENTS)
+    for event in unwritten:
+        view["events"].insert(0, {
+            "event_id": None, "kind": event["kind"], "level": event["level"],
+            "title": event["title"], "detail": event["detail"], "path": event["path"],
+            "hits": 1, "first_at": event["at"], "last_at": event["at"], "cafe_name": None})
+    for event in view["events"]:
+        event["seen"] = _ago(_moment(event["last_at"]))
+        event["since"] = _ago(_moment(event["first_at"]))
+
+    errors_open = sum(1 for e in view["events"] if e["level"] == "error")
+    recent_errors = sum(p["errors"] for p in view["points"][-4:]) if view["points"] else 0
+    if not view["db_ok"]:
+        status = ("down", "The database is not answering")
+    elif recent_errors or errors_open:
+        status = ("degraded", "Working, with faults to look at")
+    else:
+        status = ("ok", "Everything is working")
+
+    states = [c["state"]["status"] for c in view["cafes"]]
+    revenue = sum((r["amount"] for r in view["decided"] if r["status"] == "paid"), Decimal("0"))
+    memory = None
+    try:
+        import resource  # Linux and macOS only
+        memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024
+    except Exception:
+        pass
+
+    return render_template(
+        "platform.html",
+        view=view,
+        status=status,
+        range_key=range_key,
+        range_label=range_label,
+        ranges=list(CONSOLE_RANGES),
+        req_chart=_chart(view["points"], "requests"),
+        ms_chart=_chart(view["points"], "avg_ms"),
+        err_chart=_chart(view["points"], "errors"),
+        chart_first=view["points"][0]["at"].strftime("%d %b %H:%M") if view["points"] else "",
+        counts={
+            "cafes": len(view["cafes"]),
+            "trial": states.count("trial"),
+            "paying": states.count("active"),
+            "lifetime": states.count("lifetime"),
+            "attention": sum(states.count(k) for k in ("grace", "checking", "paused")),
+            "revenue": rupees(revenue),
+        },
+        errors_open=errors_open,
+        uptime=_ago(_MONITOR_STARTED).replace(" ago", "") if _MONITOR_STARTED else "",
+        worker=_MONITOR_WORKER,
+        memory_mb=memory,
+        upi_ready=bool(PLATFORM_UPI_ID),
+        payee=PLATFORM_UPI_NAME or "(PLATFORM_UPI_NAME not set)",
+        platform_name=DEFAULT_BRAND_NAME,
+    )
+
+
+@app.route("/platform/payments/<int:payment_id>/<action>", methods=["POST"])
+def platform_decide(payment_id, action):
+    """A payment found in the account - or not."""
+    stop = _platform_guard()
+    if stop:
+        return stop
+    if not _platform_form_ok():
+        return error_page(400, "expired")
+    if action not in ("approve", "reject"):
+        return error_page(404)
+
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT cafe_id FROM plan_payments WHERE payment_id = %s",
+                       (payment_id,))
+        row = cursor.fetchone()
+        if not row:
+            return error_page(404)
+        if action == "approve":
+            done = approve_plan_payment(cursor, payment_id)
+            said = ("Approved - the plan now runs to %s." % plan_day(done)
+                    if done else "That payment was already decided.")
+        else:
+            note = ((request.form.get("note") or "").strip()[:200]
+                    or "We could not find this payment in our account. Please "
+                       "check the UPI reference and send it again.")
+            done = reject_plan_payment(cursor, payment_id, note)
+            said = "Turned down." if done else "That payment was already decided."
+        connection.commit()
+        cache_drop_cafe(row["cafe_id"])
+    finally:
+        cursor.close()
+        connection.close()
+    flash(said)
+    return redirect(url_for("platform_home") + "#payments")
+
+
+@app.route("/platform/cafes/<int:cafe_id>", methods=["POST"])
+def platform_cafe(cafe_id):
+    """
+    The developer's say over a cafe's plan: free for life (or not any
+    more), or more days on it.
+    """
+    stop = _platform_guard()
+    if stop:
+        return stop
+    if not _platform_form_ok():
+        return error_page(400, "expired")
+
+    action = request.form.get("action", "")
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT cafe_name, plan, plan_until FROM cafes WHERE cafe_id = %s",
+                       (cafe_id,))
+        cafe = cursor.fetchone()
+        if not cafe:
+            return error_page(404)
+        now = utc_now()
+        until = _moment(cafe["plan_until"])
+        if action == "lifetime":
+            cursor.execute("UPDATE cafes SET plan = 'lifetime', plan_until = %s "
+                           "WHERE cafe_id = %s", (PLATFORM_LIFETIME_UNTIL, cafe_id))
+            said = "%s is free for life." % cafe["cafe_name"]
+        elif action == "end_lifetime":
+            # A week to choose a plan, rather than a sudden stop.
+            cursor.execute("UPDATE cafes SET plan = 'trial', plan_until = %s "
+                           "WHERE cafe_id = %s", (now + timedelta(days=7), cafe_id))
+            said = "%s's lifetime plan ended; it has a week to choose a plan." % cafe["cafe_name"]
+        elif action == "extend":
+            try:
+                days = max(1, min(3650, int(request.form.get("days") or 0)))
+            except ValueError:
+                days = 0
+            if not days or cafe["plan"] == "lifetime":
+                said = "Nothing to extend."
+            else:
+                start = until if until and until > now else now
+                cursor.execute("UPDATE cafes SET plan = %s, plan_until = %s WHERE cafe_id = %s",
+                               (cafe["plan"] or "trial", start + timedelta(days=days), cafe_id))
+                said = "%s now runs to %s." % (cafe["cafe_name"],
+                                               plan_day(start + timedelta(days=days)))
+        else:
+            return error_page(404)
+        connection.commit()
+        cache_drop_cafe(cafe_id)
+    finally:
+        cursor.close()
+        connection.close()
+    flash(said)
+    return redirect(url_for("platform_home") + "#cafes")
+
+
+@app.route("/platform/events/<target>/resolve", methods=["POST"])
+def platform_resolve(target):
+    """An alert dealt with - or all of them."""
+    stop = _platform_guard()
+    if stop:
+        return stop
+    if not _platform_form_ok():
+        return error_page(400, "expired")
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    try:
+        if target == "all":
+            cursor.execute("UPDATE monitor_events SET resolved_at = %s "
+                           "WHERE resolved_at IS NULL", (utc_now(),))
+        elif target.isdigit():
+            cursor.execute("UPDATE monitor_events SET resolved_at = %s "
+                           "WHERE event_id = %s", (utc_now(), int(target)))
+        else:
+            return error_page(404)
+        connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+    return redirect(url_for("platform_home") + "#alerts")
+
+
 @app.route("/healthz")
 def healthz():
     """
@@ -12637,6 +13974,8 @@ def healthz():
         }), 200
     except Exception as error:
         app.logger.exception("health check failed")
+        record_event("health", "error", "Health check failed: the database did not answer",
+                     detail="%s\n\n%s" % (error, traceback.format_exc()))
         return jsonify({"status": "error",
                         "database": "unavailable"}), 503
 
@@ -12739,6 +14078,12 @@ ERROR_WORDS = {
                    "the developer. Please try again in a moment.",
           "said": "Something went wrong on our side and that was not "
                   "saved. Please try again."},
+    "paused": {"title": "Plan ended",
+               "heading": "This café's plan has ended",
+               "words": "Nothing has been lost - the menu, orders and figures "
+                        "are all kept. Your café's admin can renew it from "
+                        "Subscription, and everything comes back at once.",
+               "said": "This café's plan has ended. Ask your admin to renew it."},
     503: {"title": "Briefly unavailable",
           "heading": "We are briefly unavailable",
           "words": "Please try again in a minute.",
@@ -12785,6 +14130,10 @@ def error_page(status, kind=None):
         home, home_label = _error_way_out()
     except Exception:
         home, home_label = "/", "Home"
+    if kind == "paused":
+        # Every page is resting, so "back to the app" would only come
+        # back here.
+        home, home_label = url_for("logout"), "Sign out"
 
     try:
         html = app.jinja_env.get_template("error.html").render(
@@ -12857,6 +14206,9 @@ def handle_unexpected_error(error):
         return handle_http_error(error)
 
     app.logger.exception("Unhandled application error")
+    record_event("crash", "error",
+                 "%s: %s" % (type(error).__name__, str(error)[:150]),
+                 detail=traceback.format_exc())
     note_failed_save()
 
     if wants_json_response() or request.path.startswith("/api/"):

@@ -1,0 +1,140 @@
+{# ------------------------------------------------------------------
+   A paid invoice for the subscription, to keep: printed, or saved as a
+   PDF from the print dialog ("Save as PDF"). A page of its own, white
+   and plain, so it prints as a document and not as the app.
+   ------------------------------------------------------------------ #}
+{% from "_brand_mark.html" import coffee_mark %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice {{ invoice.invoice_no }} · {{ platform_name }}</title>
+    {% include "_favicon.html" %}
+    <meta name="robots" content="noindex">
+    {% include "_fonts.html" %}
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 32px 16px;
+            background: #EFE9E1;
+            color: #2A1C14;
+            font-family: "Manrope", system-ui, sans-serif;
+        }
+        .inv {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 40px 44px;
+            border-radius: 14px;
+            background: #fff;
+            box-shadow: 0 18px 50px -24px rgba(42, 28, 20, .45);
+        }
+        .inv__top { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
+        .inv__brand { display: flex; align-items: center; gap: 12px; color: #B8875A; }
+        .inv__brand svg { width: 40px; height: 40px; }
+        .inv__brand strong { display: block; color: #2A1C14; font-family: "Fraunces", Georgia, serif; font-size: 24px; }
+        .inv__brand small { color: #8A6D58; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+        .inv h1 { margin: 0; font-family: "Fraunces", Georgia, serif; font-size: 30px; text-align: right; }
+        .inv__no { margin: 4px 0 0; color: #8A6D58; font-size: 13px; text-align: right; }
+        .inv__paid {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 3px 12px;
+            border-radius: 999px;
+            background: #E3F1E6;
+            color: #2E7D46;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .inv__parties { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 32px 0 26px; }
+        .inv__parties h2 { margin: 0 0 6px; color: #8A6D58; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; }
+        .inv__parties p { margin: 0; line-height: 1.6; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { padding: 10px 0; border-bottom: 2px solid #2A1C14; color: #8A6D58; font-size: 11.5px; letter-spacing: .08em; text-align: left; text-transform: uppercase; }
+        th:last-child, td:last-child { text-align: right; }
+        td { padding: 14px 0; border-bottom: 1px solid #E6DED4; vertical-align: top; }
+        td small { display: block; color: #8A6D58; font-size: 12.5px; margin-top: 3px; }
+        .inv__total td { border-bottom: 0; padding-top: 16px; font-size: 18px; font-weight: 800; }
+        .inv__foot { margin: 28px 0 0; color: #8A6D58; font-size: 12.5px; line-height: 1.6; }
+        .inv__actions { max-width: 760px; margin: 18px auto 0; text-align: right; }
+        .inv__actions button {
+            padding: 11px 20px;
+            border: 0;
+            border-radius: 999px;
+            background: #2A1C14;
+            color: #fff;
+            font: inherit;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        @media (max-width: 600px) {
+            .inv { padding: 26px 20px; }
+            .inv__top, .inv__parties { display: block; }
+            .inv h1, .inv__no { text-align: left; margin-top: 16px; }
+            .inv__parties > div + div { margin-top: 18px; }
+        }
+        @media print {
+            body { padding: 0; background: #fff; }
+            .inv { box-shadow: none; padding: 0; }
+            .inv__actions { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<main class="inv">
+    <div class="inv__top">
+        <div class="inv__brand">
+            {{ coffee_mark() }}
+            <div><strong>{{ platform_name }}</strong><small>Calm service, beautifully run</small></div>
+        </div>
+        <div>
+            <h1>Invoice</h1>
+            <p class="inv__no">{{ invoice.invoice_no }} · {{ issued }}</p>
+            <div style="text-align:right;"><span class="inv__paid">Paid</span></div>
+        </div>
+    </div>
+
+    <div class="inv__parties">
+        <div>
+            <h2>Billed to</h2>
+            <p><strong>{{ invoice.cafe_name }}</strong><br>
+                {{ invoice.full_name or "" }}
+                {% if invoice.email %}<br>{{ invoice.email }}{% endif %}
+                {% if invoice.phone_number %}<br>{{ invoice.phone_number }}{% endif %}</p>
+        </div>
+        <div>
+            <h2>Paid to</h2>
+            <p><strong>{{ payee }}</strong><br>by UPI<br>UPI reference {{ invoice.utr }}</p>
+        </div>
+    </div>
+
+    <table>
+        <thead><tr><th>Description</th><th>Period</th><th>Amount</th></tr></thead>
+        <tbody>
+            <tr>
+                <td>{{ product }} · {{ plan.name }}<small>Reference {{ invoice.reference }}</small></td>
+                <td>{{ period }}</td>
+                <td>{{ total }}</td>
+            </tr>
+            <tr class="inv__total"><td colspan="2">Total paid</td><td>{{ total }}</td></tr>
+        </tbody>
+    </table>
+
+    <p class="inv__foot">Thank you for running your café on {{ platform_name }}. This invoice was
+        issued when your payment was confirmed. Keep it for your records.</p>
+</main>
+
+<div class="inv__actions">
+    <button type="button" id="printInvoice">Print or save as PDF</button>
+</div>
+
+<script nonce="{{ csp_nonce() }}">
+document.getElementById("printInvoice").addEventListener("click", function () {
+    window.print();
+});
+</script>
+
+</body>
+</html>

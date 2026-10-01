@@ -12,7 +12,58 @@ branding, fully isolated from the others.
 
 ## What it does
 
-- **Public signup.** `/register` creates a cafe and its first admin owner.
+- **Public signup.** `/register` creates a cafe and its admin, with a
+  month of Refero Pro free.
+- **One admin per cafe.** The account that created the cafe is its admin,
+  and the only one: the settings, the team and the subscription are its,
+  and every food, category and order is filed under it, so it cannot be
+  switched off or deleted. Everybody else is a manager, cashier or staff,
+  with the pages their admin ticks. There is no separate "owner". Cafes
+  from before this keep their creating account as admin; any other admin
+  they had becomes a manager.
+- **Refero Pro: a month free, then Monthly or Yearly.** Rs 650 a month,
+  or Rs 6,000 a year (Rs 500 a month). Under Subscription in the admin's
+  profile menu: the plan and when it ends, the two plans, how it is paid,
+  and every invoice - each one printable or saved as a PDF. Paid by UPI
+  straight into the developer's account: "Pay by UPI" opens the admin's
+  UPI app with the developer's UPI ID, the name on that account, the
+  exact amount and our reference all filled in (or a QR code to scan
+  from a computer), and the admin then gives the 12-digit UPI reference
+  from its receipt. The developer finds the credit and approves it in
+  the console; the plan runs on from the day the current one (or the
+  trial) ends, so paying early loses nothing. A UPI reference can be
+  used once. Prepaid - nothing is taken again by itself: a reminder on
+  every page from a week before the end, three days' grace after it,
+  and then the cafe rests - its staff are told to ask the admin, the
+  table QR sends customers to the counter, and the admin can still sign
+  in and pay. Nothing is deleted, and a payment being checked keeps a
+  cafe working for three days meanwhile. Cards cannot be taken this way:
+  a UPI app can, and the app cannot tell on its own that money arrived,
+  which is why a person confirms it.
+- **The developer's console (`/platform`).** Behind its own password
+  (`PLATFORM_PASSWORD`; unset, it does not exist), five wrong guesses
+  lock that address out for fifteen minutes, and it asks again after
+  two hours. One page: whether the site is healthy, the database's
+  answer time, the last hour's requests, failures and response times,
+  and charts of all three over an hour, a day or a week; every alert;
+  the payments to check, approve or turn down; and every cafe with its
+  admin, plan and what it has paid - with Lifetime free (Refero for
+  good, no reminders, never paused), End lifetime (a week to choose a
+  plan) and days added to any plan. It refreshes itself every minute.
+- **Alerts.** A crash (with its traceback), a database that refused, a
+  failed health check, a page slower than `MONITOR_SLOW_MS` (3 s), a
+  wrong console password, an error in somebody's browser, and anything
+  a cafe reports from Report a problem in the profile menu - each an
+  alert in the console, never a word of it on a cafe's page. The same
+  fault again counts on its open alert instead of adding one, so an
+  outage is one alert with a number on it. Counting costs no request a
+  database trip: each server process keeps its minutes and faults in
+  memory and a background thread writes them; with the database down,
+  the console still opens, says so, and shows what that process is
+  holding. What nothing inside the site can do is say the whole site is
+  down - for that, point a free uptime monitor (UptimeRobot, Better
+  Stack) at `/healthz`, which answers 503 when the database does not:
+  it emails or texts you.
 - **A daily order number.** Orders are counted from 1 again each
   morning, per cafe, and that is the number customers, the kitchen and
   the printed ticket use. The permanent id keeps climbing underneath,
@@ -851,7 +902,7 @@ python tests/smoke_test.py        # expect PASSED: 43   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
 python tests/instant_nav_test.py  # expect PASSED: 26   FAILED: 0
 python tests/instant_post_test.py # expect PASSED: 16   FAILED: 0
-python tests/user_delete_test.py  # expect PASSED: 18   FAILED: 0
+python tests/user_delete_test.py  # expect PASSED: 19   FAILED: 0
 python tests/hot_sellers_test.py  # expect PASSED: 23   FAILED: 0
 python tests/hot_mirror_test.py   # expect PASSED: 20   FAILED: 0
 python tests/settings_test.py     # expect PASSED: 104  FAILED: 0
@@ -903,9 +954,11 @@ python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
 python tests/customer_menu_browser_test.py # expect PASSED: 69  FAILED: 0
 python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
 python tests/error_pages_test.py  # expect PASSED: 36  FAILED: 0
+python tests/subscription_test.py # expect PASSED: 60  FAILED: 0
+python tests/console_test.py      # expect PASSED: 50  FAILED: 0
 ```
 
-All fifty-six run in memory against a SQLite stand-in — no database or
+All fifty-eight run in memory against a SQLite stand-in — no database or
 network needed. The twenty-four that drive a browser use a headless Edge or
 Chrome when one is installed, and skip themselves when none is.
 

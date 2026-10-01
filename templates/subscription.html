@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+{% from "_brand_mark.html" import coffee_mark %}
+
+{% block title %}Subscription{% endblock %}
+
+{% block content %}
+<style>
+    .sub-wrap { display: grid; gap: 18px; max-width: 980px; }
+
+    .sub-card,
+    .sub-section {
+        padding: 22px 24px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-lg);
+        background: var(--espresso-850);
+    }
+
+    .sub-head {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .sub-head__mark {
+        display: grid;
+        place-items: center;
+        width: 58px;
+        height: 58px;
+        border-radius: 16px;
+        background: var(--glass-on), rgba(var(--copper-rgb), .22);
+        box-shadow: var(--glass-on-edges);
+        color: var(--copper-light);
+    }
+    .sub-head__mark svg { width: 34px; height: 34px; }
+
+    .sub-head h2 { margin: 0; font-size: 20px; }
+    .sub-head p { margin: 2px 0 0; color: var(--cream-faint); font-size: 14px; }
+    .sub-head .btn { margin-left: auto; }
+
+    .sub-status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 18px;
+        padding: 13px 16px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-900);
+        color: var(--cream);
+        font-size: 14.5px;
+    }
+    .sub-status i { color: var(--copper-light); font-size: 17px; }
+    .sub-status span { flex: 1 1 auto; line-height: 1.5; }
+    .sub-status--grace, .sub-status--checking { border-color: rgba(242, 201, 76, .45); }
+    .sub-status--grace i, .sub-status--checking i { color: #F2C94C; }
+    .sub-status--paused { border-color: rgba(225, 97, 79, .5); }
+    .sub-status--paused i { color: #F0A193; }
+    .sub-status--lifetime i, .sub-status--active i { color: #8FBB99; }
+
+    .sub-section h2 { margin: 0 0 4px; font-size: 18px; }
+    .sub-section > p { margin: 0 0 16px; color: var(--cream-faint); font-size: 13.5px; }
+
+    .sub-plans {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .sub-plan {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 20px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-lg);
+        background: var(--espresso-900);
+    }
+    .sub-plan--best { border-color: rgba(var(--copper-rgb), .6); }
+    .sub-plan h3 { margin: 0; font-size: 17px; }
+
+    .sub-plan__badge {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: rgba(143, 187, 153, .18);
+        color: #8FBB99;
+        font-size: 11.5px;
+        font-weight: 800;
+    }
+
+    .sub-plan__price { margin: 4px 0 0; font-family: "Fraunces", Georgia, serif; font-size: 34px; font-weight: 700; }
+    .sub-plan__price small { font-family: var(--font-body); font-size: 13.5px; font-weight: 600; color: var(--cream-faint); }
+    .sub-plan__per { margin: 0; color: var(--cream-dim); font-size: 13px; }
+
+    .sub-plan ul { margin: 6px 0 4px; padding: 0; list-style: none; display: grid; gap: 7px; }
+    .sub-plan li { display: flex; gap: 9px; color: var(--cream-dim); font-size: 13.5px; }
+    .sub-plan li i { color: #8FBB99; }
+    .sub-plan .btn { margin-top: auto; justify-content: center; }
+
+    .sub-pay {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 16px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-md);
+        background: var(--espresso-900);
+    }
+    .sub-pay__logo {
+        display: grid;
+        place-items: center;
+        width: 46px;
+        height: 32px;
+        border-radius: 7px;
+        background: #F2F2F2;
+        color: #097939;
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: .02em;
+    }
+    .sub-pay strong { display: block; color: var(--cream); }
+    .sub-pay small { color: var(--cream-faint); font-size: 12.5px; }
+
+    .sub-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .sub-table th {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--espresso-700);
+        color: var(--cream-faint);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-align: left;
+        text-transform: uppercase;
+    }
+    .sub-table td { padding: 13px 12px; border-bottom: 1px solid var(--espresso-800); color: var(--cream); }
+    .sub-table tr:last-child td { border-bottom: 0; }
+    .sub-table small { display: block; color: var(--cream-faint); font-size: 12px; }
+
+    .sub-tag {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .sub-tag--paid { background: rgba(143, 187, 153, .18); color: #8FBB99; }
+    .sub-tag--pending { background: rgba(242, 201, 76, .16); color: #F2C94C; }
+    .sub-tag--rejected { background: rgba(225, 97, 79, .18); color: #F0A193; }
+
+    .sub-link { color: var(--copper-light); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+    .sub-empty { margin: 0; color: var(--cream-faint); font-size: 14px; }
+
+    @media (max-width: 760px) {
+        .sub-plans { grid-template-columns: minmax(0, 1fr); }
+        .sub-head { flex-wrap: wrap; }
+        .sub-head .btn { margin-left: 0; }
+        .sub-table thead { display: none; }
+        .sub-table tr { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--espresso-800); }
+        .sub-table td { padding: 0; border: 0; }
+    }
+</style>
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Account</div>
+        <h1><i class="bi bi-gem"></i> Subscription</h1>
+        <p>Your plan, how it is paid, and every invoice.</p>
+    </div>
+</div>
+
+<div class="sub-wrap">
+
+    {# ---- The plan, and where it stands ---- #}
+    <section class="sub-card" aria-labelledby="planTitle">
+        <div class="sub-head">
+            <span class="sub-head__mark">{{ coffee_mark() }}</span>
+            <div>
+                {% if state.status == 'lifetime' %}
+                <h2 id="planTitle">{{ product }} · Lifetime</h2>
+                <p>Free, for good</p>
+                {% elif state.plan in ('monthly', 'yearly') %}
+                <h2 id="planTitle">{{ product }}</h2>
+                <p>{{ state.label }}</p>
+                {% elif state.plan == 'trial' %}
+                <h2 id="planTitle">{{ product }} · Free trial</h2>
+                <p>A month free, everything included</p>
+                {% else %}
+                <h2 id="planTitle">{{ product }}</h2>
+                <p>{{ cafe_name }}</p>
+                {% endif %}
+            </div>
+            {% if state.status != 'lifetime' %}
+            <a class="btn btn--ghost" href="#plans" data-no-instant>
+                {{ "Adjust plan" if state.plan in ('monthly', 'yearly') else "Choose a plan" }}
+            </a>
+            {% endif %}
+        </div>
+
+        <div class="sub-status sub-status--{{ state.status }}" role="status">
+            <i class="bi bi-calendar-event" aria-hidden="true"></i>
+            <span>
+                {% if state.status == 'lifetime' %}
+                Your plan never ends - it is on the house, with every feature, for good.
+                {% elif state.status == 'trial' %}
+                Your free trial ends on {{ until_day }}. Choose a plan any time before then -
+                it starts when the trial finishes, so no free day is lost.
+                {% elif state.status == 'active' %}
+                Your {{ state.label|lower }} plan is active until {{ until_day }}. Renewing
+                early adds to the end of it.
+                {% elif state.status == 'grace' %}
+                Your plan ended on {{ until_day }}. Everything keeps working until
+                {{ pause_day }} - renew before then to carry on without a break.
+                {% elif state.status == 'checking' %}
+                Your plan ended on {{ until_day }}, and your payment is being checked.
+                Everything stays on while it is.
+                {% elif state.status == 'paused' %}
+                Your café is resting since {{ pause_day }}. Nothing has been lost - choose
+                a plan below and everything comes back as soon as it is confirmed.
+                {% else %}
+                Your café is on Refero. Choose a plan below whenever you are ready.
+                {% endif %}
+            </span>
+        </div>
+
+        {% if state.pending and state.status != 'checking' %}
+        <div class="sub-status sub-status--checking" role="status">
+            <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+            <span>A payment you sent is being checked - usually within a few hours. It shows
+                below as Paid, with its invoice, once it is confirmed.</span>
+        </div>
+        {% endif %}
+
+        {% if awaiting %}
+        <div class="sub-status" role="status">
+            <i class="bi bi-qr-code-scan" aria-hidden="true"></i>
+            <span>You started paying for the {{ awaiting.plan }} plan but have not sent its
+                UPI reference yet.</span>
+            <a class="btn btn--ghost" href="{{ url_for('subscription_pay', reference=awaiting.reference) }}">Continue</a>
+        </div>
+        {% endif %}
+    </section>
+
+    {# ---- The plans ---- #}
+    {% if state.status != 'lifetime' %}
+    <section class="sub-section" id="plans" aria-labelledby="plansTitle">
+        <h2 id="plansTitle">Plans</h2>
+        <p>Everything in Refero, for your whole team. Paid in advance by UPI - nothing is
+            taken again on its own, and you are reminded a week before it ends.</p>
+
+        <div class="sub-plans">
+            {% for plan in plans %}
+            <form method="POST" action="{{ url_for('subscription_choose') }}"
+                  class="sub-plan{% if plan.key == 'yearly' %} sub-plan--best{% endif %}"
+                  data-no-instant>
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+                <input type="hidden" name="plan" value="{{ plan.key }}">
+                {% if plan.key == 'yearly' %}<span class="sub-plan__badge">Save {{ yearly_saves }}</span>{% endif %}
+                <h3>{{ product }} · {{ plan.name }}</h3>
+                <p class="sub-plan__price">{{ plan.price }} <small>/ {{ plan.per }}</small></p>
+                <p class="sub-plan__per">
+                    {% if plan.key == 'yearly' %}{{ plan.per_month_text }} a month, paid once a year
+                    {% else %}Paid month by month{% endif %}
+                </p>
+                <ul>
+                    <li><i class="bi bi-check2"></i> Orders at the counter and from every table's QR</li>
+                    <li><i class="bi bi-check2"></i> Kitchen screen, billing and receipts</li>
+                    <li><i class="bi bi-check2"></i> Menu, stock, reviews and reports</li>
+                    <li><i class="bi bi-check2"></i> Your whole team, each with their own pages</li>
+                </ul>
+                <button type="submit" class="btn btn--primary"{% if not upi_ready %} disabled{% endif %}>
+                    <i class="bi bi-phone"></i> Pay {{ plan.price }} by UPI
+                </button>
+            </form>
+            {% endfor %}
+        </div>
+        {% if not upi_ready %}
+        <p class="sub-empty" style="margin-top:12px;">Paying online is being set up - please check back soon.</p>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {# ---- How it is paid ---- #}
+    <section class="sub-section" aria-labelledby="payTitle">
+        <h2 id="payTitle">Payment</h2>
+        <p>Any UPI app - Google Pay, PhonePe, Paytm, BHIM or your bank's. The amount and who it
+            goes to are filled in for you.</p>
+        <div class="sub-pay">
+            <span class="sub-pay__logo" aria-hidden="true">UPI</span>
+            <div>
+                <strong>Paid to {{ payee }}</strong>
+                <small>Confirmed against the payment received, then your plan starts.</small>
+            </div>
+        </div>
+    </section>
+
+    {# ---- Invoices ---- #}
+    <section class="sub-section" aria-labelledby="invoiceTitle">
+        <h2 id="invoiceTitle">Invoices</h2>
+        {% if payments %}
+        <table class="sub-table">
+            <thead>
+                <tr><th>Date</th><th>Plan</th><th>Total</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                {% for row in payments %}
+                <tr>
+                    <td>{{ row.day }}</td>
+                    <td>{{ product }} · {{ row.plan_name }}{% if row.period %}<small>{{ row.period }}</small>{% endif %}</td>
+                    <td>{{ row.total }}</td>
+                    <td>
+                        {% if row.status == 'paid' %}<span class="sub-tag sub-tag--paid">Paid</span>
+                        {% elif row.status == 'pending' %}<span class="sub-tag sub-tag--pending">Being checked</span>
+                        {% else %}<span class="sub-tag sub-tag--rejected">Not found</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if row.status == 'paid' %}
+                        <a class="sub-link" href="{{ url_for('subscription_invoice', payment_id=row.payment_id) }}"
+                           target="_blank" rel="noopener">Download PDF</a>
+                        {% elif row.status == 'pending' %}
+                        <small>UPI ref {{ row.utr }}</small>
+                        {% else %}
+                        <small>{{ row.note or "We could not find this payment in our account." }}</small>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="sub-empty">No payments yet. Each one you make is listed here, with its invoice.</p>
+        {% endif %}
+    </section>
+
+</div>
+{% endblock %}

@@ -6572,3 +6572,59 @@ div.food-art {
 }
 
 .profile-dropdown__item.is-current i { color: var(--copper-light); }
+
+/* ==========================================================
+   The plan: the reminder line at the top of a page, and the
+   chip beside Subscription in the profile menu.
+   ========================================================== */
+.plan-notice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 18px;
+    padding: 12px 16px;
+    border: 1px solid rgba(var(--copper-rgb), .35);
+    border-radius: var(--radius-md);
+    background: var(--glass-on), rgba(var(--copper-rgb), .12);
+    box-shadow: var(--glass-on-edges);
+    color: var(--cream);
+    font-size: 14px;
+}
+
+.plan-notice > i { color: var(--copper-light); font-size: 18px; }
+.plan-notice p { flex: 1 1 auto; margin: 0; line-height: 1.5; }
+
+.plan-notice--warn {
+    border-color: rgba(242, 201, 76, .45);
+    background: var(--glass-on), rgba(242, 201, 76, .12);
+}
+.plan-notice--warn > i { color: #F2C94C; }
+
+.plan-notice__go {
+    flex: 0 0 auto;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: var(--copper);
+    color: #241710;
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.plan-chip {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.plan-chip--info { background: rgba(var(--copper-rgb), .18); color: var(--copper-light); }
+.plan-chip--good { background: rgba(143, 187, 153, .18); color: #8FBB99; }
+.plan-chip--warn { background: rgba(242, 201, 76, .16); color: #F2C94C; }
+.plan-chip--bad { background: rgba(225, 97, 79, .18); color: #F0A193; }
+
+@media (max-width: 640px) {
+    .plan-notice { flex-wrap: wrap; }
+    .plan-notice__go { margin-left: 30px; }
+}

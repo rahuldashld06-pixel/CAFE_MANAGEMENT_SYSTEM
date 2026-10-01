@@ -5,6 +5,7 @@ This is a test harness, not part of the deployed application. It translates
 the subset of MySQL that app.py uses into SQLite so the routes can be
 exercised without a real database server.
 """
+import os
 import re
 import sqlite3
 import sys
@@ -478,6 +479,10 @@ def skip_tour():
 
 def install():
     """Register this shim as `mysql.connector` before app.py is imported."""
+    # The monitor writes what it has counted from a background thread. In
+    # a test that would be a query arriving in the middle of somebody
+    # else's count of queries; here it writes only when asked to.
+    os.environ.setdefault("MONITOR_BACKGROUND", "0")
     mysql = types.ModuleType("mysql")
     connector = types.ModuleType("mysql.connector")
     connector.connect = connect

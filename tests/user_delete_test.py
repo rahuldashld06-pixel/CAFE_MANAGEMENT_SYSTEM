@@ -201,6 +201,30 @@ check("staff rows do offer one",
       "/delete" in html, "no delete control rendered at all")
 
 
+print("\n=== 7. Cafes from before: one admin, settled once ===")
+from tests import mysql_shim as _shim  # noqa: E402
+d = app.test_client()
+sign_up(d, "Cafe Delta", "delta")
+cafe_d = _shim._DB.execute("SELECT cafe_id, owner_user_id FROM cafes WHERE cafe_name = 'Cafe Delta'").fetchone()
+# The old app let a cafe make anybody an admin, and even demote the account
+# that created it.
+_shim._DB.execute("INSERT INTO users (username, password_hash, full_name, role, is_active, cafe_id) "
+                  "VALUES ('oldadmin', 'x', 'Old Admin', 'admin', 1, ?)", (cafe_d[0],))
+_shim._DB.execute("UPDATE users SET role = 'manager', is_active = 0 WHERE user_id = ?", (cafe_d[1],))
+_shim._DB.commit()
+_conn = application.get_db_connection()
+_cur = _conn.cursor(dictionary=True)
+application._settle_one_admin(_cur)
+_conn.commit()
+_cur.close()
+_conn.close()
+roles = dict(_shim._DB.execute("SELECT username, role || ':' || is_active FROM users "
+                               "WHERE cafe_id = ?", (cafe_d[0],)).fetchall())
+check("the account that created the cafe is its admin again, switched on",
+      roles.get("delta") == "admin:1", roles)
+check("and any other admin becomes a manager", roles.get("oldadmin") == "manager:1", roles)
+
+
 print("\n" + "=" * 60)
 print("PASSED: %d   FAILED: %d" % (len(PASSED), len(FAILED)))
 for name in FAILED:

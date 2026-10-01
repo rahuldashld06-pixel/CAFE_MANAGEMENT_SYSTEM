@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Report a problem{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Help</div>
+        <h1><i class="bi bi-life-preserver"></i> Report a problem</h1>
+        <p>Tell the Refero team what went wrong. It reaches them straight away.</p>
+    </div>
+</div>
+
+<div class="panel form-panel" style="max-width:720px;">
+    <form method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
+        <div class="field">
+            <label for="problemWhat">What happened?</label>
+            <textarea id="problemWhat" name="what" rows="6" maxlength="3000" required
+                      placeholder="What you were doing, what you expected, and what happened instead."></textarea>
+        </div>
+        <div class="field">
+            <label for="problemWhere">Which page? <small>filled in for you</small></label>
+            <input id="problemWhere" type="text" name="where" maxlength="255" value="{{ where }}">
+        </div>
+        <div class="note-card">
+            <i class="bi bi-shield-check"></i>
+            <div>Your café's name and your name go with it, so the team can follow up. Nothing
+                else is shared.</div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary"><i class="bi bi-send"></i> Send to the Refero team</button>
+            <a href="{{ url_for('home') }}" class="btn btn--ghost" data-back>Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
