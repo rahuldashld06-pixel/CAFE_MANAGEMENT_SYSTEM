@@ -2624,6 +2624,7 @@ def ensure_auth_schema():
         _backfill_cafe_ids(cursor)
         _backfill_food_numbers(cursor)
         _backfill_order_item_names(cursor)
+        _settle_one_admin(cursor)
 
         connection.commit()
         AUTH_SCHEMA_READY = True
@@ -2658,6 +2659,35 @@ def next_food_no(cursor, owner_id):
     while candidate in taken:
         candidate += 1
     return candidate
+
+
+def _settle_one_admin(cursor):
+    """
+    One admin per cafe: the account that created it.
+
+    Cafes used to be able to make anybody an admin, and the account that
+    created the cafe could even be made something else. Now the creating
+    account is the admin - switched on, since everything is filed under it
+    and somebody has to be able to reach the settings - and any other
+    admin becomes a manager, keeping the manager's usual pages. Cafes with
+    no creating account on record are left as they are: there is nobody
+    to make the admin. Costs two quick updates on later boots, which find
+    nothing to change.
+    """
+    cursor.execute("""
+        UPDATE users SET role = 'admin', is_active = 1
+        WHERE user_id IN (SELECT owner_user_id FROM cafes
+                          WHERE owner_user_id IS NOT NULL)
+          AND (role <> 'admin' OR is_active <> 1)
+    """)
+    cursor.execute("""
+        UPDATE users SET role = 'manager'
+        WHERE role = 'admin'
+          AND cafe_id IN (SELECT cafe_id FROM cafes
+                          WHERE owner_user_id IS NOT NULL)
+          AND user_id NOT IN (SELECT owner_user_id FROM cafes
+                              WHERE owner_user_id IS NOT NULL)
+    """)
 
 
 def _backfill_order_item_names(cursor):
@@ -9358,8 +9388,8 @@ def forgot_password():
             # it tells nobody anything they had not just proved.
             if user["role"] != "admin":
                 flash(
-                    "Staff passwords are looked after by your café's owner "
-                    "or admin. Ask them to set a new one for you from User "
+                    "Staff passwords are looked after by your café's admin. "
+                    "Ask them to set a new one for you from User "
                     "Management - it only takes a moment."
                 )
                 return redirect(url_for("forgot_password"))
@@ -9480,7 +9510,7 @@ REMEMBERED_CAFE_COOKIE = "cafora_cafe"
 # telling a stranger that an account exists and is switched off would be
 # a way to list a cafe's staff.
 ACCOUNT_DEACTIVATED = (
-    "This account has been deactivated by your café's owner or admin. "
+    "This account has been deactivated by your café's admin. "
     "Ask them to turn it back on if you still need it.")
 
 
@@ -9646,13 +9676,24 @@ def last_active_label(value):
 # What each role can reach, said once for the team page. Every role other
 # than admin is held to STAFF_ALLOWED_ENDPOINTS, so the three of them see
 # the same pages - the page says so rather than implying a difference.
+#
+# One admin per cafe: the account that created it. There is no separate
+# "owner" - the admin is the owner, holds the subscription, and is the one
+# account every food, category and order is filed under, so it cannot be
+# switched off or deleted. Everybody else is a manager, cashier or staff.
 ROLE_GUIDE = [
-    ("owner", "Owner", "Every page and setting, and the team. Cannot be removed."),
-    ("admin", "Admin", "Every page and setting, including the team, reports and figures."),
+    ("admin", "Admin", "Every page and setting, the team and the subscription. "
+                       "One per cafe - the account that created it."),
     ("manager", "Manager", "Orders, kitchen, billing, the menu and stock."),
     ("cashier", "Cashier", "Orders, kitchen, billing, the menu and stock."),
     ("staff", "Staff", "Orders, kitchen, billing, the menu and stock."),
 ]
+
+# What anybody but the cafe's own admin can be made.
+TEAM_ROLES = ("manager", "cashier", "staff")
+
+ONE_ADMIN = ("A cafe has one admin - the account that created it. "
+             "Choose Manager, Cashier or Staff.")
 
 
 def sign_in_is_stale():
@@ -9936,8 +9977,8 @@ def users():
         counts = dict((key, 0) for key, _, _ in ROLE_GUIDE)
         for person in user_list:
             person["is_owner"] = person["user_id"] == owner_id
-            person["kind"] = "owner" if person["is_owner"] else person["role"]
-            person["role_label"] = ("Owner" if person["is_owner"]
+            person["kind"] = "admin" if person["is_owner"] else person["role"]
+            person["role_label"] = ("Admin" if person["is_owner"]
                                     else (person["role"] or "").capitalize())
             words = (person["full_name"] or person["username"] or "?").split()
             person["initials"] = "".join(w[0] for w in words[:2]).upper()
@@ -9947,13 +9988,13 @@ def users():
                                      [TASK_LABELS[key] for key in tasks_of(person)])
             counts[person["kind"]] = counts.get(person["kind"], 0) + 1
 
-        # The owner first, then everyone else as they were added.
+        # The admin first, then everyone else as they were added.
         user_list.sort(key=lambda p: (not p["is_owner"],))
 
         return render_template(
             "users.html",
             users=user_list,
-            # The owner account cannot be deleted; the template uses this to
+            # The admin account cannot be deleted; the template uses this to
             # leave the button off that row rather than offer an action that
             # would just come back refused.
             cafe_owner_id=owner_id,
@@ -9994,7 +10035,10 @@ def add_user():
             flash(str(wrong))
             return redirect(url_for("add_user"))
 
-        if role not in {"admin", "manager", "cashier", "staff"}:
+        if role == "admin":
+            flash(ONE_ADMIN)
+            return redirect(url_for("add_user"))
+        if role not in TEAM_ROLES:
             flash("Invalid role.")
             return redirect(url_for("add_user"))
 
@@ -10002,7 +10046,7 @@ def add_user():
         # (a script, an older page) gives the role's usual pages.
         tasks_sent = bool(request.form.get("tasks_sent"))
         tasks = form_tasks()
-        if role != "admin" and tasks_sent and not tasks:
+        if tasks_sent and not tasks:
             flash("Tick at least one task, so they have a page to open.")
             return redirect(url_for("add_user"))
 
@@ -10028,17 +10072,10 @@ def add_user():
                 phone_number or None,
                 email or None,
                 require_cafe_session(),
-                (",".join(tasks) if role != "admin" and tasks_sent else None),
+                (",".join(tasks) if tasks_sent else None),
             ))
             connection.commit()
             flash(f"User '{username}' created successfully.")
-
-            if role == "admin" and not phone_number:
-                flash(
-                    "Tip: add a mobile number for this admin to turn on "
-                    "one-time code login."
-                )
-
             return redirect(url_for("users"))
         except mysql.connector.IntegrityError:
             if connection:
@@ -10052,7 +10089,8 @@ def add_user():
 
     return render_template("user_form.html", user=None, tasks=TASKS,
                            chosen=list(DEFAULT_TASKS),
-                           default_tasks=list(DEFAULT_TASKS))
+                           default_tasks=list(DEFAULT_TASKS),
+                           is_admin_account=False, team_roles=TEAM_ROLES)
 
 
 @app.route("/users/<int:user_id>/password", methods=["POST"])
@@ -10129,6 +10167,10 @@ def edit_user(user_id):
             flash("User not found.")
             return redirect(url_for("users"))
 
+        # The cafe's admin is the account that created it, and stays the
+        # admin: its role and its being switched on are not on the form.
+        is_admin_account = user_id == get_cafe_owner_id()
+
         if request.method == "POST":
             full_name = request.form.get("full_name", "").strip()
             role = request.form.get("role", "cashier")
@@ -10138,7 +10180,13 @@ def edit_user(user_id):
             phone_country = request.form.get(
                 "phone_country", default_phone_country())
 
-            if not full_name or role not in {"admin", "manager", "cashier", "staff"}:
+            if is_admin_account:
+                role, is_active = "admin", 1
+            elif role == "admin":
+                flash(ONE_ADMIN)
+                return redirect(url_for("edit_user", user_id=user_id))
+
+            if not full_name or role not in ("admin",) + TEAM_ROLES:
                 flash("Please provide valid user details.")
                 return redirect(url_for("edit_user", user_id=user_id))
 
@@ -10165,22 +10213,6 @@ def edit_user(user_id):
             if user_id == session.get("user_id") and not is_active:
                 flash("You cannot deactivate your own account.")
                 return redirect(url_for("edit_user", user_id=user_id))
-
-            # Demoting or deactivating the last active admin would leave the
-            # café with no one who can reach User Management, Branding or
-            # Reports - an unrecoverable lockout for that tenant.
-            if user["role"] == "admin" and (role != "admin" or not is_active):
-                cursor.execute("""
-                    SELECT COUNT(*) AS n FROM users
-                    WHERE cafe_id = %s AND role = 'admin'
-                      AND is_active = 1 AND user_id != %s
-                """, (require_cafe_session(), user_id))
-                if cursor.fetchone()["n"] == 0:
-                    flash(
-                        "This is the only active admin for your café. "
-                        "Promote another user to admin first."
-                    )
-                    return redirect(url_for("edit_user", user_id=user_id))
 
             if new_password:
                 if len(new_password) < 8:
@@ -10230,7 +10262,9 @@ def edit_user(user_id):
         return render_template("user_form.html", user=user, tasks=TASKS,
                                chosen=(list(DEFAULT_TASKS) if user["role"] == "admin"
                                        else tasks_of(user)),
-                               default_tasks=list(DEFAULT_TASKS))
+                               default_tasks=list(DEFAULT_TASKS),
+                               is_admin_account=is_admin_account,
+                               team_roles=TEAM_ROLES)
 
     finally:
         if cursor:
@@ -10268,18 +10302,9 @@ def toggle_user(user_id):
             flash("User not found.")
             return redirect(url_for("users"))
 
-        if target["role"] == "admin" and target["is_active"]:
-            cursor.execute("""
-                SELECT COUNT(*) AS n FROM users
-                WHERE cafe_id = %s AND role = 'admin'
-                  AND is_active = 1 AND user_id != %s
-            """, (require_cafe_session(), user_id))
-            if cursor.fetchone()["n"] == 0:
-                flash(
-                    "This is the only active admin for your café. "
-                    "Promote another user to admin first."
-                )
-                return redirect(url_for("users"))
+        if user_id == get_cafe_owner_id():
+            flash("This is the café's admin account. It cannot be switched off.")
+            return redirect(url_for("users"))
 
         cursor.execute("""
             UPDATE users
@@ -10310,9 +10335,9 @@ def delete_user(user_id):
     Three accounts are refused, because deleting them breaks something that
     cannot be undone from the UI:
       * your own, so an admin cannot lock themselves out mid-session;
-      * the café owner, whose id every food, category and order row carries -
-        losing it would orphan the entire café's data;
-      * the last active admin, which would leave nobody able to administer.
+      * the café's admin, whose id every food, category and order row
+        carries - losing it would orphan the entire café's data, and
+        leave nobody able to run it.
     """
     denied = require_role("admin")
     if denied:
@@ -10344,23 +10369,10 @@ def delete_user(user_id):
 
         if user_id == get_cafe_owner_id():
             flash(
-                "This is the café's owner account. Every food item, category "
+                "This is the café's admin account. Every food item, category "
                 "and order is filed under it, so it cannot be deleted."
             )
             return redirect(url_for("users"))
-
-        if target["role"] == "admin" and target["is_active"]:
-            cursor.execute("""
-                SELECT COUNT(*) AS n FROM users
-                WHERE cafe_id = %s AND role = 'admin'
-                  AND is_active = 1 AND user_id != %s
-            """, (cafe_id, user_id))
-            if cursor.fetchone()["n"] == 0:
-                flash(
-                    "This is the only active admin for your café. "
-                    "Promote another user to admin first."
-                )
-                return redirect(url_for("users"))
 
         # Pending one-time codes cascade with the row, but say so explicitly
         # rather than relying on the constraint being present on every
@@ -10915,7 +10927,7 @@ TUTORIAL_ADMIN = [_WELCOME, _step(
     _step("bi-people", "User Management", "[data-tour=users]",
           "The people who work here.",
           "It lets you add someone, give them a password, and choose "
-          "whether they are an owner or on the till."),
+          "the pages they can open."),
     _PROFILE,
 ]
 
@@ -12550,7 +12562,7 @@ def llms_txt():
         "",
         "## Start here",
         "",
-        "- [Sign in](%s/login): for a café's owner, admins and staff" % base,
+        "- [Sign in](%s/login): for a café's admin and staff" % base,
         "- [Create an account](%s/register): set up a new café or "
         "restaurant" % base,
         "- [Reset a password](%s/forgot-password): for owners and "
@@ -12703,7 +12715,7 @@ ERROR_WORDS = {
     403: {"title": "Not available",
           "heading": "That page is not open to you",
           "words": "Your account does not include it. If you need it, ask "
-                   "the owner or an admin of the cafe.",
+                   "the cafe's admin.",
           "said": "That is not something your account can do."},
     404: {"title": "Page not found",
           "heading": "We could not find that page",

@@ -122,7 +122,8 @@ legacy = add("oldform", "cashier")
 check("a form without the task boxes gives the role's usual pages",
       legacy and legacy[0][1] is None, legacy)
 boss = add("second", "admin", ["billing"])
-check("an admin has every task, so none are stored", boss[0][1] is None, boss)
+check("there is no second admin to give tasks to - a cafe has one",
+      boss == [] and any("one admin" in m for m in flashes(owner)), boss)
 
 
 # =====================================================================
@@ -245,8 +246,9 @@ check("an admin sees every page",
       sidebar(page) == ["Dashboard", "New Order", "Kitchen", "Billing", "Reviews",
                         "Categories", "Food Management", "Inventory", "Reports",
                         "User Management"], sidebar(page))
-client, response = sign_in("second")
-check("and opens on the dashboard", response.headers["Location"].endswith("/"))
+client, response = sign_in("tia")
+check("and opens on the dashboard",
+      response.headers.get("Location", "").endswith("/"), response.headers.get("Location"))
 
 
 print("\n" + "=" * 60)

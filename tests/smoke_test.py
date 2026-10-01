@@ -170,15 +170,16 @@ r = a.get("/dashboard")
 check("Café A's admin is still active after the toggle attempt",
       r.status_code == 200, f"status={r.status_code}")
 
-print("\n=== 6. Last-admin lockout protection ===")
+print("\n=== 6. The cafe's one admin stays the admin ===")
 r = a.get("/users")
 owner_id = min([int(x) for x in _re.findall(rb"/users/(\d+)/edit", r.data)])
 r = a.post(f"/users/{owner_id}/edit", data={
-    "full_name": "Alpha Owner", "role": "cashier", "is_active": "1",
+    "full_name": "Alpha Owner", "role": "cashier", "is_active": "0",
     "phone_number": "", "_csrf_token": csrf(a)}, follow_redirects=True)
-check("Demoting the only admin is refused",
-      b"only active admin" in r.data or b"cannot deactivate" in r.data.lower(),
-      r.data[:400])
+role, active = mysql_shim._DB.execute(
+    "SELECT role, is_active FROM users WHERE user_id = ?", (owner_id,)).fetchone()
+check("Demoting or switching off the admin does not happen - it stays the admin",
+      role == "admin" and active == 1, "role=%r active=%r" % (role, active))
 
 print("\n=== 7. The shell is the product; the cafe name is still per-cafe ===")
 # Branding used to be a single JSON file at the project root, so one cafe

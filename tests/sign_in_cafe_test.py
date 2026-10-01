@@ -6,8 +6,8 @@ Management.
    decides whose place it is and the username whose account there, so
    the right name and the right account sign in, and a wrong name does
    not - with the same message as a wrong password, counted the same.
- - Forgot password is for owners and admins. Staff are told, kindly, to
-   ask their owner or admin, who sets a new one from User Management.
+ - Forgot password is for the cafe's admin. Staff are told, kindly, to
+   ask their admin, who sets a new one from User Management.
  - A password an admin sets for somebody can be read again by the
    admins, behind an eye. A password somebody chose for themselves is
    never kept, and choosing one throws away what was.
@@ -92,7 +92,7 @@ owner.post("/users/add", data={
     "phone_number": "9123456780", "password": "TillPass-2026",
     "_csrf_token": csrf(owner)})
 owner.post("/users/add", data={
-    "full_name": "Asha Admin", "username": "asha", "role": "admin",
+    "full_name": "Asha Manager", "username": "asha", "role": "manager",
     "phone_number": "", "password": "AdminPass-77",
     "_csrf_token": csrf(owner)})
 flashes(owner)
@@ -199,7 +199,7 @@ check("signing in without the box forgets it",
 
 
 # =====================================================================
-print("\n=== 4. Forgot password is for owners and admins ===")
+print("\n=== 4. Forgot password is for the cafe's admin ===")
 # =====================================================================
 db("UPDATE users SET phone_number = '9123456780' WHERE user_id = ?", (SAM,))
 db("UPDATE users SET phone_number = '9876543210' WHERE user_id = ?", (MAYA,))
@@ -212,15 +212,15 @@ guest.post("/forgot-password", data={
 said = flashes(guest)
 check("a cashier cannot reset their own password here",
       db("SELECT password_hash FROM users WHERE user_id = ?", (SAM,)) == before)
-check("and is told, kindly, to ask the owner or admin",
-      any("owner or admin" in m and "User Management" in m for m in said), said)
+check("and is told, kindly, to ask their admin",
+      any("your café's admin" in m and "User Management" in m for m in said), said)
 guest.post("/forgot-password", data={
     "username": "sam", "full_name": "Wrong Name", "phone_country": "India",
     "phone_number": "9123456780", "new_password": "Stolen-Pass-1",
     "confirm_password": "Stolen-Pass-1"})
 said = flashes(guest)
 check("details that do not match say nothing about the account's role",
-      not any("owner or admin" in m and "Staff" in m for m in said), said)
+      not any("your café's admin" in m and "Staff" in m for m in said), said)
 guest.post("/forgot-password", data={
     "username": "maya", "full_name": "Maya Owner", "phone_country": "India",
     "phone_number": "9876543210", "new_password": "Owner-New-Pass-9",
@@ -231,7 +231,7 @@ db("UPDATE users SET phone_number = NULL")
 client, _ = sign_in("Mom's Café", "maya", "Owner-New-Pass-9")
 check("the owner can", signed_in(client) == MAYA, said)
 check("the page says who it is for",
-      "For owners and admins." in text(app.test_client().get("/forgot-password")))
+      "For the café's admin." in text(app.test_client().get("/forgot-password")))
 db("UPDATE users SET phone_number = NULL")
 
 
@@ -262,8 +262,8 @@ check("but the password itself is not written into the page",
 
 asha, _ = sign_in("Mom's Café", "asha", "AdminPass-77")
 status, said, _ = reveal(asha, SAM)
-check("another admin of the cafe can see it too",
-      said and said.get("password") == "TillPass-2026", said)
+check("a manager - the most anybody but the admin can be - cannot see it",
+      status in (302, 403) and "TillPass" not in str(said), (status, said))
 status, said, _ = reveal(admin, MAYA)
 check("the owner's own password was never kept - they chose it",
       said and said["ok"] is False and "Their own" in said["message"], said)
@@ -313,7 +313,7 @@ check("a kept value that no longer opens (the key changed) is simply not shown",
 # =====================================================================
 print("\n=== 6. An account the owner switched off ===")
 # =====================================================================
-DEACTIVATED = "deactivated by your café's owner or admin"
+DEACTIVATED = "deactivated by your café's admin"
 db("DELETE FROM login_attempts")
 still_in, _ = sign_in("Mom's Café", "sam", "Sams-Own-Secret-5")
 admin.post("/users/%d/toggle" % SAM, data={"_csrf_token": csrf(admin)})

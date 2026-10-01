@@ -6366,8 +6366,18 @@ div.food-art {
     color: var(--cream);
 }
 .task-pick legend small { color: var(--cream-faint); font-weight: 500; font-size: 12.5px; }
-.task-pick__admin { margin: 0 0 8px; color: var(--cream-dim); font-size: 13.5px; }
-.task-pick__admin[hidden] { display: none; }
+/* The cafe's one admin, on its own edit form: a fact, not a choice. */
+.role-fixed {
+    margin: 0;
+    padding: 11px 14px;
+    border: 1px solid var(--espresso-700);
+    border-radius: var(--radius-md);
+    background: var(--espresso-850);
+    color: var(--cream-dim);
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+.role-fixed strong { color: var(--cream); }
 
 .task-pick__grid {
     display: grid;

@@ -2,9 +2,10 @@
 Offline tests for deleting a staff account.
 
 Deleting is permanent and, unlike deactivating, cannot be undone from the
-UI - so the refusals matter as much as the deletion. Three accounts must
-never go: your own, the café owner (every food, category and order row is
-filed under that id), and the last active admin.
+UI - so the refusals matter as much as the deletion. A cafe has one admin,
+the account that created it: every food, category and order row is filed
+under that id, so it must never go - and nobody can be made a second
+admin to try.
 
 Run with:  python tests/user_delete_test.py
 """
@@ -103,27 +104,28 @@ check("the account is gone from the list",
 
 print("\n=== 2. The refusals ===")
 add_user(a, "cashier2", "cashier")
-add_user(a, "admin2", "admin")
+response = add_user(a, "admin2", "admin")
 ids = user_ids(a)
 
+check("nobody can be made a second admin",
+      "one admin" in message(response) and "admin2" not in usernames(a),
+      "message: %r, people: %s" % (message(response), usernames(a)))
+
 response = delete(a, ids["alpha"])
-check("you cannot delete your own account",
+check("the admin cannot delete their own account",
       "your own account" in message(response), "message: %r" % message(response))
-check("and it is still there", "alpha" in usernames(a))
+check("and it is still there - every order and food row is filed under it",
+      "alpha" in usernames(a))
 
-# The owner seen by someone *else* - sign in as the second admin and try.
-b_admin = app.test_client()
-sign_in(b_admin, "admin2")
-response = delete(b_admin, ids["alpha"])
-check("another admin cannot delete the café owner",
-      "owner" in message(response).lower(), "message: %r" % message(response))
-check("the owner account survives", "alpha" in usernames(a),
-      "the owner was deleted - every order and food row is now orphaned")
-
-# Leave exactly one active admin and try to remove them.
-response = delete(a, ids["admin2"])
-check("the second admin can be removed while another admin remains",
-      "deleted" in message(response).lower(), "message: %r" % message(response))
+# A manager - the most anybody else can be - cannot reach the route.
+add_user(a, "manager1", "manager")
+mgr = app.test_client()
+sign_in(mgr, "manager1")
+response = mgr.post("/users/%s/delete" % ids["alpha"],
+                    data={"_csrf_token": csrf(mgr)})
+check("a manager posting to delete the admin is turned away",
+      response.status_code in (301, 302, 303) and "alpha" in usernames(a),
+      "status=%d" % response.status_code)
 
 ids = user_ids(a)
 response = delete(a, ids.get("cashier2", "0"))
@@ -192,9 +194,9 @@ check("the menu is intact", "Latte" in c.get("/foods").get_data(as_text=True))
 print("\n=== 6. The button is only offered where it would work ===")
 html = a.get("/users").get_data(as_text=True)
 owner_id = user_ids(a)["alpha"]
-check("no delete button on the café owner's row",
+check("no delete button on the café admin's row",
       ('/users/%s/delete' % owner_id) not in html,
-      "the owner row offers a delete that would only be refused")
+      "the admin row offers a delete that would only be refused")
 check("staff rows do offer one",
       "/delete" in html, "no delete control rendered at all")
 

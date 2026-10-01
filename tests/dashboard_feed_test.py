@@ -315,15 +315,15 @@ def row_of(username):
 
 
 owner_row, kiran_row = row_of("feedboss"), row_of("kiran")
-check("the owner is marked as the owner",
-      ">Owner</span>" in owner_row, owner_row[:300])
+check("the account that created the cafe is marked as its admin",
+      ">Admin</span>" in owner_row and ">Owner<" not in team, owner_row[:300])
 check("and, looking at the list, is active now",
       '>Now</td>' in owner_row)
 check("a teammate shows when they last signed in",
       "Today, " in kiran_row, re.sub(r"\s+", " ", kiran_row)[:400])
 check("every row carries what the filter reads",
-      'data-kind="owner"' in owner_row and 'data-kind="cashier"' in kiran_row)
-check("the owner's menu offers no delete",
+      'data-kind="admin"' in owner_row and 'data-kind="cashier"' in kiran_row)
+check("the admin's menu offers no delete",
       "/delete" not in owner_row)
 check("a teammate's offers edit, deactivate and delete",
       all(word in kiran_row for word in ("/edit", "/toggle", "/delete")))
@@ -331,9 +331,9 @@ check("a teammate's offers edit, deactivate and delete",
 counts = dict(re.findall(
     r'<strong>(\w+)</strong>\s*<small>[^<]*</small>\s*</span>\s*'
     r'<span class="count-pill[^"]*">\s*(\d+) member', team))
-check("the roles are counted",
-      counts.get("Owner") == "1" and counts.get("Cashier") == "1"
-      and counts.get("Admin") == "0",
+check("the roles are counted - one admin, and no owner any more",
+      counts.get("Admin") == "1" and counts.get("Cashier") == "1"
+      and "Owner" not in counts,
       "counts: %s" % counts)
 
 
