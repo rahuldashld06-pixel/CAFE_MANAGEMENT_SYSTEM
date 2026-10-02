@@ -1,4 +1,4 @@
-{% from "_brand_mark.html" import coffee_mark, coffee_glyph, refero_emblem %}
+{% from "_brand_mark.html" import coffee_mark, coffee_glyph, refero_lockup %}
 {% from "_auth_photo.html" import auth_photo %}
 <!DOCTYPE html>
 <html lang="en">
@@ -27,10 +27,7 @@
        moment the first real page appears. The pages themselves cannot be
        fetched yet - there is no session until sign-in finishes, so every
        one of them would come back as a redirect to here. #}
-    <link rel="prefetch" href="{{ asset_url('css/theme.css') }}">
-    <link rel="prefetch" href="{{ asset_url('css/style.css') }}">
-    <link rel="prefetch" href="{{ asset_url('js/instant.js') }}">
-    <link rel="prefetch" href="{{ asset_url('js/fullscreen.js') }}">
+    {% include "_auth_after.html" %}
 </head>
 
 <body>
@@ -53,7 +50,7 @@
             </span>
         </div>
         {% else %}
-        <div class="brand brand--emblem">{{ refero_emblem() }}</div>
+        <div class="brand">{{ refero_lockup(name=platform_name, tagline=platform_tagline) }}</div>
         {% endif %}
 
         <div class="brand-copy">
@@ -148,7 +145,7 @@
                 </div>
             </div>
 
-            <button type="submit" class="auth-button">
+            <button type="submit" class="auth-button" data-busy="Creating your café…">
                 {{ coffee_glyph('brand-glyph--btn') }}
                 <span>Create your café</span>
             </button>

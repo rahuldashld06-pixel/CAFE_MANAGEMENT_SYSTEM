@@ -18,11 +18,11 @@ What has to hold:
     the cafe rests - staff are told who can bring it back, the admin is
     taken to pay, the table QR sends customers to the counter - and
     paying brings everything back at once;
-  * Free locks sales figures, stock alerts, reviews, reports, other roles
-    and the cafe's own branding, and has room for one teammate as staff;
-    a trial has everything but other roles and own branding; every lock
-    leads to its line on the Subscription page, and the figures behind
-    one are never sent;
+  * a trial and Free both lock sales figures, stock alerts, reviews,
+    reports, the table QR, other roles and the cafe's own branding - they
+    are for subscribers; Free has room for one teammate as staff; every
+    lock leads to its line on the Subscription page, and the figures
+    behind one are never sent;
   * a lifetime plan never ends.
 
 Run with:  python tests/subscription_test.py
@@ -155,11 +155,33 @@ check("(a teammate on the team, as staff - the trial's one role)",
       db("SELECT role FROM users WHERE username = 'cara'") == [("staff",)])
 
 page = text(admin.get("/subscription"))
-check("the admin's Subscription page says when the trial ends",
-      "free trial ends on" in page and application.plan_day(moment(until)) in page)
+check("the admin's Plan & billing page says when the trial ends",
+      "Your trial ends" in page and application.plan_day(moment(until)) in page)
+check("with a pill saying the trial is on", "Free trial active" in page)
 check("offering Monthly at Rs 650 and Yearly at Rs 6,000 - saving Rs 1,800",
-      "₹650" in page and "₹6,000" in page and "Save ₹1,800" in page)
+      "Choose monthly · ₹650" in page and "Choose yearly · ₹6,000" in page
+      and "save ₹1,800" in page)
 check("and showing who is paid", "Paid to Rahul Dash" in page)
+check("with no invoices yet, it says where they will be",
+      "Your invoices will live here" in page)
+
+# "What's included?" is read from the plan rules, not typed: the trial's
+# column shows what it has and locks what is for subscribers.
+def row(html, key):
+    found = re.search(r'<tr id="unlock-%s"[^>]*>(.*?)</tr>' % key, html, re.S)
+    return found.group(1) if found else ""
+
+
+check("what's included compares the free trial with Refero Pro",
+      re.search(r'<th scope="col">Free trial</th>\s*<th scope="col">Refero Pro</th>', page))
+check("the trial's column locks reviews, reports, sales figures and the table QR",
+      all("bill-locked" in row(page, key) and "bill-yes" in row(page, key)
+          for key in ("reviews", "reports", "revenue", "stock_alerts", "table_qr")))
+check("and says the trial's team is staff only, Pro's unlimited",
+      "Staff only" in row(page, "team") and "Unlimited" in row(page, "team"))
+check("its chips list what the trial includes, and nothing it does not",
+      "Orders &amp; billing" in page and "Your team, as staff" in page
+      and ">Reviews<" not in page.split('class="bill-chips"')[1].split("</ul>")[0])
 
 dash = text(admin.get("/dashboard"))
 check("the profile menu carries Subscription, with the trial's days left",
@@ -167,10 +189,10 @@ check("the profile menu carries Subscription, with the trial's days left",
 check("a teammate is not offered it in the profile menu",
       'class="profile-dropdown__item">\n                            <i class="bi bi-gem">' not in text(cashier.get("/dashboard")))
 staff_view = text(cashier.get("/subscription"))
-check("but can read what Refero Pro unlocks - where every lock leads",
-      "What Refero Pro unlocks" in staff_view)
+check("but can read what's included - where every lock leads",
+      "What's included?" in staff_view and 'id="unlocks"' in staff_view)
 check("not choose, pay or see the invoices - that is the admin's",
-      "Pay \u20b9650" not in staff_view and "Invoices" not in staff_view
+      "Choose monthly" not in staff_view and "Invoices" not in staff_view
       and "Only your café's admin can subscribe" in staff_view)
 
 # A cafe from before plans: its trial starts when this arrives.
@@ -393,7 +415,9 @@ check("a teammate is sent there too", cashier.get("/reviews").headers.get("Locat
       .endswith("/subscription?feature=reviews#unlocks"))
 page = text(admin.get("/subscription?feature=reviews"))
 check("which opens on what it unlocks, the asked-for line picked out",
-      re.search(r'sub-unlock--asked"\s+id="unlock-reviews"', page) is not None)
+      re.search(r'id="unlock-reviews" class="bill-row--asked"', page) is not None)
+check("on Free the first column is Refero Free, with room for one teammate",
+      '<th scope="col">Refero Free</th>' in page and "1 teammate" in row(page, "team"))
 check("the sidebar shows Reviews and Reports locked",
       dash.count('class="nav-lock"') >= 2 and 'href="/subscription?feature=reviews#unlocks"' in dash)
 
@@ -432,12 +456,46 @@ dash = text(admin.get("/dashboard"))
 check("on Free the sidebar carries Refero's name, not the cafe's own",
       "Plan Cafe Brand" not in dash and "Refero" in dash)
 
-# A trial: everything but other roles and own branding.
+def table_qr_open():
+    with app.test_request_context():
+        _conn = application.get_db_connection()
+        _cur = _conn.cursor(dictionary=True)
+        _found = application.cafe_for_token(_cur, token, fresh=True)
+        _cur.close()
+        _conn.close()
+    return _found is not None and application.table_ordering_open(_found)
+
+
+set_until(CAFE, now - timedelta(days=9), plan="monthly")      # Free again
+check("on Free the table QR takes no orders - customers are sent to the counter",
+      not table_qr_open())
+check("Table QR Code leads to its line on the Subscription page",
+      admin.get("/settings/qr").headers.get("Location", "").endswith("feature=table_qr#unlocks"))
+check("and the profile menu shows both table QR items locked",
+      dash.count('href="/subscription?feature=table_qr#unlocks"') == 2
+      and 'class="qr-switch-form"' not in dash)
+
+# A trial: the cafe runs - orders, kitchen, billing, menu, stock - and
+# what is for subscribers stays locked.
 set_until(CAFE, now + timedelta(days=20), plan="trial")
 dash = text(admin.get("/dashboard"))
-check("on a trial the figures are all there", "kpi--locked" not in dash and "panel--locked" not in dash)
-check("Reviews and Reports open", admin.get("/reviews").status_code == 200
-      and admin.get("/reports").status_code == 200)
+check("on a trial sales, the average bill and stock to check are locked",
+      dash.count("kpi--locked") == 3 and dash.count("panel--locked") == 4)
+check("and their figures are not sent",
+      admin.get("/api/dashboard-stats").get_json().get("today_revenue") is None
+      and admin.get("/api/dashboard-insights?period=week").get_json().get("locked") is True)
+check("Reviews and Reports lead to the Subscription page",
+      admin.get("/reviews").headers.get("Location", "").endswith("feature=reviews#unlocks")
+      and admin.get("/reports").headers.get("Location", "").endswith("feature=reports#unlocks"))
+check("so does the table QR, and it takes no orders",
+      admin.get("/settings/qr").headers.get("Location", "").endswith("feature=table_qr#unlocks")
+      and not table_qr_open())
+check("the till, the kitchen and billing are all open",
+      admin.get("/orders/add").status_code == 200 and admin.get("/kitchen").status_code == 200
+      and admin.get("/billing").status_code == 200)
+page = text(admin.get("/subscription"))
+check("the Subscription page says the trial runs the cafe and the rest is Pro's",
+      "Your free trial" in page and "runs the café" in page and "In your free trial" not in page)
 check("own branding is still Pro's", "Plan Cafe Brand" not in dash
       and admin.get("/settings/branding").status_code == 302)
 check("and so are other roles", "Cashier - Refero Pro" in text(admin.get("/users/add")))
@@ -449,6 +507,12 @@ check("on Pro the cafe's own name comes back - it was kept", "Plan Cafe Brand" i
 check("Name & Symbol opens", admin.get("/settings/branding").status_code == 200)
 check("and any role can be added",
       "Refero Pro" not in text(admin.get("/users/add")).split('id="userRoleSelect"')[1].split("</select>")[0])
+check("the figures, Reviews and Reports open",
+      "kpi--locked" not in dash and admin.get("/reviews").status_code == 200
+      and admin.get("/reports").status_code == 200)
+check("and the table QR takes orders again",
+      table_qr_open() and admin.get("/settings/qr").status_code == 200
+      and 'class="qr-switch-form"' in dash)
 
 # =====================================================================
 print("\n=== 5c. After fifteen days of Free, the cafe rests ===")
@@ -475,14 +539,8 @@ check("which says it is paused and that nothing is lost",
 check("and can be paid from", choose(admin, "monthly").status_code == 302)
 check("its profile menu says Paused",
       re.search(r'plan-chip--bad">Paused<', page) is not None)
-with app.test_request_context():
-    _conn = application.get_db_connection()
-    _cur = _conn.cursor(dictionary=True)
-    _row = application.cafe_for_token(_cur, token, fresh=True)
-    _cur.close()
-    _conn.close()
 check("the table QR takes no orders - customers are sent kindly to the counter",
-      _row is not None and not application.table_ordering_open(_row))
+      not table_qr_open())
 check("a teammate can still report a problem",
       cashier.get("/report-problem").status_code == 200)
 
@@ -497,7 +555,7 @@ print("\n=== 6. Free for life ===")
 set_until(CAFE, application.PLATFORM_LIFETIME_UNTIL, plan="lifetime")
 page = text(admin.get("/subscription"))
 check("a lifetime cafe's page says it never ends, and offers no plans",
-      "never ends" in page and "Pay ₹650" not in page)
+      "never ends" in page and "Choose monthly" not in page)
 check("its people work, with no reminders",
       cashier.get("/orders/add").status_code == 200
       and "plan-notice" not in text(admin.get("/dashboard")))

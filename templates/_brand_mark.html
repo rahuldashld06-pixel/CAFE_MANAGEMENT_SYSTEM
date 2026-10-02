@@ -1,15 +1,17 @@
 {# ------------------------------------------------------------------
-   The Refero brand, from the emblem: a cafe drawn in a brush-stroke
-   ring - the lamp, the table and its chairs, a plant - with "Refero"
-   in brush script, a coffee bean for the o, two leaves, and "Restaurant
-   and Cafe / Food Management System" beneath.
+   The Refero brand.
 
-   refero_emblem()  the emblem itself, as a round badge, where the brand
-                    is shown large: the sign-in pages, the console, an invoice.
-   coffee_mark()    the monogram drawn from it - the emblem's script R,
-                    its coffee bean and leaves, on a cream disc - for every
-                    small place: logo tiles, the tab, the home screen.
-                    Drawn, not loaded: sharp at any size, and no request.
+   refero_monogram() the round gold monogram: an R whose stem is a fork,
+                     steam rising in its bowl, a chef's hat above it and
+                     two leaves at its foot, in a fine gold ring on deep
+                     green. Where the brand is shown large.
+   refero_lockup()   the monogram with the name beside it, set as the
+                     top bar sets it, and the tagline under the name: the
+                     sign-in pages, the console's door, an invoice.
+   coffee_mark()     the script R, its coffee bean and leaves, on a cream
+                     disc - for every small place: logo tiles, the tab,
+                     the home screen. Drawn, not loaded: sharp at any
+                     size, and no request.
    coffee_glyph()   the same R in one colour (currentColor), for the
                     faint watermark behind the pages, buttons and the
                     printed receipt, where a cream tile would be a box.
@@ -28,7 +30,11 @@
      aria-hidden="true" focusable="false"><path d="M781 551Q781 503 759.5 460.5Q738 418 700.0 384.5Q662 351 611.0 328.0Q560 305 500 297Q515 252 536.5 204.5Q558 157 583.0 113.0Q608 69 635.0 32.0Q662 -5 688 -29Q683 -39 673.5 -49.0Q664 -59 651.5 -67.5Q639 -76 625.5 -81.5Q612 -87 600 -87Q578 -87 558.0 -66.0Q538 -45 517.5 0.5Q497 46 474.5 118.5Q452 191 425 293Q414 293 403.0 293.0Q392 293 386 295Q379 299 371 309Q344 251 323.0 200.0Q302 149 285.5 101.5Q269 54 256.5 9.5Q244 -35 235 -81Q201 -73 176.0 -52.0Q151 -31 129 7Q133 16 137.5 24.5Q142 33 149.0 48.5Q156 64 166.5 88.0Q177 112 194.5 152.0Q212 192 236.5 250.0Q261 308 296 391Q312 428 323.5 456.0Q335 484 344.0 509.5Q353 535 360.5 560.5Q368 586 376 619Q330 603 290.5 583.5Q251 564 225 542Q216 548 206.5 560.0Q197 572 189.0 586.5Q181 601 175.0 616.0Q169 631 168 643Q198 663 241.5 680.0Q285 697 334.0 709.5Q383 722 434.0 729.0Q485 736 529 736Q649 736 715.0 686.5Q781 637 781 551ZM537 635Q530 626 515.0 599.0Q500 572 480.5 534.5Q461 497 439.5 453.0Q418 409 398 366Q473 366 536.0 380.0Q599 394 645.0 419.5Q691 445 716.5 479.5Q742 514 742 556Q742 606 706.0 632.5Q670 659 595 659Q578 659 561.0 657.5Q544 656 525 654Z" transform="translate(10.44 46.88) scale(0.04739 -0.04739)" fill="currentColor"/><g transform="translate(47.5 46.5) rotate(-35)"><ellipse rx="5.6" ry="3.9" fill="currentColor" opacity=".75"/></g></svg>
 {% endmacro %}
 
-{% macro refero_emblem(classes="", alt="Refero - Restaurant and Cafe, Food Management System") %}
-<img class="brand-emblem {{ classes }}" src="{{ asset_url('brand/refero-emblem.webp') }}"
-     alt="{{ alt }}" width="740" height="670" decoding="async">
+{% macro refero_monogram(classes="", alt="") %}
+<img class="brand-monogram {{ classes }}" src="{{ asset_url('brand/refero-monogram.webp') }}"
+     alt="{{ alt }}" width="320" height="320" decoding="async">
+{% endmacro %}
+
+{% macro refero_lockup(classes="", name="Refero", tagline="Calm service, beautifully run") %}
+<span class="brand-lockup {{ classes }}">{{ refero_monogram() }}<span class="brand-lockup__text"><span class="brand-lockup__name">{{ name }}</span><span class="brand-lockup__tagline">{{ tagline }}</span></span></span>
 {% endmacro %}

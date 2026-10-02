@@ -523,6 +523,40 @@ try:
           ring.count("rgb") == 1 and "0px 0px 0px 3px" in ring, ring)
     b.evaluate("document.getElementById('topSearchInput').blur()")
 
+    # =================================================================
+    print("\n=== 8. The profile menu: fits the screen, closes on a choice ===")
+    # =================================================================
+    size(1366, 600)
+    open_page("/dashboard")
+    b.evaluate("document.getElementById('profileTrigger').click()")
+    time.sleep(0.4)
+    menu = json.loads(b.evaluate("""JSON.stringify((function () {
+        var d = document.getElementById('profileDropdown'), r = d.getBoundingClientRect();
+        return {bottom: Math.round(r.bottom), screen: innerHeight,
+                scrolls: d.scrollHeight > d.clientHeight};
+    }()))"""))
+    check("on a short screen the admin's menu stops above the bottom edge",
+          menu["bottom"] <= menu["screen"], menu)
+    check("and scrolls inside itself, so Logout can be reached", menu["scrolls"], menu)
+    b.evaluate("document.getElementById('profileDropdown').scrollTop = 99999")
+    time.sleep(0.2)
+    logout = rect('#profileDropdown a[href="/logout"]')
+    check("scrolled, Logout is on screen", logout["bottom"] <= menu["screen"], logout)
+
+    b.evaluate("""[].find.call(document.querySelectorAll('#profileDropdown a'),
+        function (a) { return a.getAttribute('href') === '/settings/tax'; }).click()""")
+    wait("location.pathname === '/settings/tax'")
+    time.sleep(0.4)
+    check("choosing an option opens it and closes the menu",
+          b.evaluate("location.pathname") == "/settings/tax"
+          and not b.evaluate("document.getElementById('profileMenu').classList.contains('open')"))
+    b.evaluate("document.getElementById('profileTrigger').click()")
+    time.sleep(0.3)
+    check("pressing the profile opens it again",
+          b.evaluate("document.getElementById('profileMenu').classList.contains('open')"))
+    b.evaluate("document.getElementById('profileTrigger').click()")
+    size(1440, 900)
+
 finally:
     try:
         b.close()

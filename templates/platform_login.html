@@ -1,4 +1,4 @@
-{% from "_brand_mark.html" import coffee_mark, refero_emblem %}
+{% from "_brand_mark.html" import coffee_mark, refero_lockup %}
 <!DOCTYPE html>
 <html lang="en" data-theme="copper">
 <head>
@@ -13,7 +13,7 @@
 </head>
 <body class="con-login">
 <main class="con-login__card">
-    {{ refero_emblem("con-emblem") }}
+    {{ refero_lockup("con-lockup", name=platform_name, tagline=platform_tagline) }}
     <h1>The developer's console</h1>
     <p>The site's health, its alerts, every café and its subscription.</p>
     {% if said %}<p class="con-said" role="alert">{{ said }}</p>{% endif %}

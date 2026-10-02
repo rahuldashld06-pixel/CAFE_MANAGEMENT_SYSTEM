@@ -1662,9 +1662,10 @@ TABLE_ORDERING_PAUSED = (
 
 
 def table_ordering_open(cafe):
-    # A paused cafe takes no orders from the table either: customers get
-    # the same kind word to order at the counter.
-    if cafe and plan_state(cafe)["paused"]:
+    # Ordering from the table is Pro's. Without it - a trial, Refero Free,
+    # a paused cafe - customers see the menu and the same kind word to
+    # order at the counter.
+    if cafe and not plan_allows("table_qr", plan_tier(plan_state(cafe))):
         return False
     value = (cafe or {}).get("qr_ordering")
     return True if value is None else bool(value)
@@ -3393,6 +3394,35 @@ def describe_lockout(seconds):
     return "1 minute" if minutes == 1 else "%d minutes" % minutes
 
 
+def otp_code_hash(user_id, code):
+    """
+    A one-time code as it is kept: an HMAC under the app's secret key.
+
+    It was kept with the password hash, which is slow on purpose - about
+    135 ms of processor time, more on a small shared host - paid once to
+    keep the code and again to check it, on every sign-in. Slowness
+    protects a password somebody chose; it never protected six digits,
+    which have only a million values. What protects a code is that it
+    expires in minutes and allows a few tries. Keyed with the secret,
+    the table on its own gives nothing away, which the password hash of
+    a six-digit number did not promise.
+    """
+    key = app.secret_key
+    if isinstance(key, str):
+        key = key.encode("utf-8")
+    message = ("login-otp:%s:%s" % (user_id, code)).encode("utf-8")
+    return "hmac-sha256$" + hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def otp_code_matches(stored, user_id, code):
+    """Whether a typed code is the one kept for this person."""
+    stored = stored or ""
+    if stored.startswith("hmac-sha256$"):
+        return hmac.compare_digest(stored, otp_code_hash(user_id, code))
+    # A code kept before the change, alive for minutes at most.
+    return check_password_hash(stored, code)
+
+
 def issue_login_otp(cursor, connection, user_id):
     """Invalidate any existing codes for this user and store a fresh one."""
     code = generate_otp_code()
@@ -3404,7 +3434,7 @@ def issue_login_otp(cursor, connection, user_id):
     cursor.execute("""
         INSERT INTO login_otp_codes (user_id, code_hash, expires_at)
         VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL %s SECOND))
-    """, (user_id, generate_password_hash(code), OTP_EXPIRY_SECONDS))
+    """, (user_id, otp_code_hash(user_id, code), OTP_EXPIRY_SECONDS))
 
     connection.commit()
     return code
@@ -9256,7 +9286,8 @@ def login_verify_otp():
                 flash("Too many incorrect attempts. Request a new code.")
                 return redirect(url_for("login_verify_otp"))
 
-            if submitted_code and check_password_hash(otp_row["code_hash"], submitted_code):
+            if submitted_code and otp_code_matches(otp_row["code_hash"], pending_user_id,
+                                                   submitted_code):
                 cursor.execute(
                     "DELETE FROM login_otp_codes WHERE user_id = %s",
                     (pending_user_id,)
@@ -10644,7 +10675,8 @@ def inject_platform_name():
     holding both credit that system, and they should agree without either
     of them having it typed in by hand.
     """
-    return {"platform_name": DEFAULT_BRAND_NAME}
+    return {"platform_name": DEFAULT_BRAND_NAME,
+            "platform_tagline": DEFAULT_BRAND_TAGLINE}
 DEFAULT_BRAND_TAGLINE = "Calm service, beautifully run"
 
 
@@ -12840,10 +12872,10 @@ def ai_catalog():
 # brings everything back at once. A payment being checked counts
 # as Pro for three days meanwhile.
 #
-#   Free   orders, kitchen, billing, menu, stock, table QR; one
-#          teammate, as staff. Locked: sales figures, stock
-#          alerts, reviews, reports, other roles, own branding.
-#   Trial  everything but other roles and own branding.
+#   Trial  orders, kitchen, billing, menu, stock; teammates, as
+#          staff. Locked: sales figures, stock alerts, reviews,
+#          reports, the table QR, other roles, own branding.
+#   Free   the same, with room for one teammate.
 #   Pro    everything.
 # ==========================================================
 
@@ -12876,19 +12908,23 @@ PLAN_FEATURES = [
     ("revenue", "Sales and revenue figures",
      "Today's takings, the average bill, the sales chart and what sold best "
      "on the dashboard - each against the period before.",
-     "bi-graph-up-arrow", ("trial", "pro")),
+     "bi-graph-up-arrow", ("pro",)),
     ("stock_alerts", "Stock alerts",
      "What has run out and what is running low, by name, the moment it "
      "happens - before a customer orders it.",
-     "bi-exclamation-triangle", ("trial", "pro")),
+     "bi-exclamation-triangle", ("pro",)),
     ("reviews", "Reviews and dish ratings",
      "What customers say about every dish from the table - stars, comments, "
      "names - and the chart of your best and worst rated.",
-     "bi-star", ("trial", "pro")),
+     "bi-star", ("pro",)),
     ("reports", "Reports",
      "Sales, orders, dishes and stock over any period, to read on screen or "
      "download for your accountant.",
-     "bi-bar-chart-line", ("trial", "pro")),
+     "bi-bar-chart-line", ("pro",)),
+    ("table_qr", "Table QR ordering",
+     "A code on every table: customers open your menu on their phone, order "
+     "straight to the kitchen and rate what they ate.",
+     "bi-qr-code-scan", ("pro",)),
     ("team", "Your whole team, in any role",
      "Managers and cashiers as well as staff, as many as you need, each with "
      "the pages you choose. Free has room for one teammate, as staff.",
@@ -12900,11 +12936,30 @@ PLAN_FEATURES = [
 ]
 PLAN_FEATURE_KEYS = dict((spec[0], spec) for spec in PLAN_FEATURES)
 
+# The Subscription page's "What's included?": what every plan runs on,
+# then each of PLAN_FEATURES - read from the same lists the locks read,
+# so the table cannot promise what a plan does not open. (row, chip)
+PLAN_BASICS = [
+    ("Counter orders, billing & receipts", "Orders & billing"),
+    ("Kitchen screen", "Kitchen screen"),
+    ("Menu, stock & inventory", "Menu & stock"),
+]
+PLAN_FEATURE_ROWS = {
+    "revenue": ("Sales & revenue on the dashboard", "Sales figures"),
+    "stock_alerts": ("Stock alerts", "Stock alerts"),
+    "reviews": ("Dish reviews & ratings", "Reviews"),
+    "reports": ("Sales reports & downloads", "Reports"),
+    "table_qr": ("Table QR ordering", "Table QR"),
+    "team": ("Team members & role-based access", "Your whole team"),
+    "branding": ("Your café's name, logo & sign-in page", "Your own brand"),
+}
+
 # Pages that are a feature of their own: opened without it, they lead to
 # that feature's line on the Subscription page.
 PLAN_LOCKED_ENDPOINTS = {
     "reviews": "reviews", "reports": "reports", "export_report": "reports",
     "branding": "branding",
+    "qr_settings": "table_qr", "table_ordering_switch": "table_qr",
 }
 
 # What a paused cafe's people can still open: the way to pay, their own
@@ -13052,6 +13107,43 @@ def team_roles_open(tier=None):
 def unlock_url(feature):
     """Where a lock leads: that feature's line on the Subscription page."""
     return url_for("subscription", feature=feature, _anchor="unlocks")
+
+
+def plan_comparison(tier, wanted=""):
+    """
+    The rows of "What's included?", and whose column stands beside Pro:
+    the cafe's own plan when it is not Pro, the trial's when it is. A
+    cell is True (a tick), False (locked) or words.
+    """
+    base = tier if tier in ("trial", "free") else "trial"
+    rows = [{"key": None, "title": title, "base": True, "pro": True}
+            for title, _chip in PLAN_BASICS]
+    for key, title, gives, _icon, tiers in PLAN_FEATURES:
+        row_title = PLAN_FEATURE_ROWS.get(key, (title, title))[0]
+        if key == "team":
+            cell = ("Staff only" if base == "trial"
+                    else "%d teammate" % FREE_TEAM_LIMIT)
+            pro = "Unlimited"
+        elif key == "branding":
+            cell, pro = "Refero branding", "Custom"
+        else:
+            cell, pro = base in tiers, True
+        rows.append({"key": key, "title": row_title, "gives": gives,
+                     "base": cell, "pro": pro, "asked": key == wanted})
+    return base, rows
+
+
+def plan_chips(tier):
+    """What the cafe has on its plan now, in a few words each."""
+    chips = [chip for _row, chip in PLAN_BASICS]
+    for key, _title, _gives, _icon, tiers in PLAN_FEATURES:
+        if tier in tiers:
+            chips.append(PLAN_FEATURE_ROWS.get(key, (key, key))[1])
+    if tier == "trial":
+        chips.append("Your team, as staff")
+    elif tier == "free":
+        chips.append("One teammate")
+    return chips
 
 
 def plan_branding(found, tier):
@@ -13311,21 +13403,16 @@ def subscription():
 
     state = plan_state(cafe)
     tier = plan_tier(state)
-    wanted = request.args.get("feature", "")
-    unlocks = []
-    for key, title, gives, icon, tiers in PLAN_FEATURES:
-        unlocks.append({
-            "key": key, "title": title, "gives": gives, "icon": icon,
-            "open": tier in tiers,
-            "in_trial": "trial" in tiers,
-            "asked": key == wanted,
-        })
+    base, compare = plan_comparison(tier, request.args.get("feature", ""))
     return render_template(
         "subscription.html",
         admin=admin,
         tier=tier,
         tier_label=TIER_LABELS[tier],
-        unlocks=unlocks,
+        compare=compare,
+        base_label=TIER_LABELS[base],
+        chips=plan_chips(tier),
+        trial_days=PLAN_TRIAL_DAYS,
         state=state,
         cafe_name=cafe.get("cafe_name") or "",
         until_day=plan_day(state["until"], cafe_id),
@@ -13516,7 +13603,7 @@ def subscription_invoice(payment_id):
         period="%s - %s" % (plan_day(_moment(invoice["period_start"]), cafe_id),
                             plan_day(_moment(invoice["period_end"]), cafe_id)),
         payee=PLATFORM_UPI_NAME or DEFAULT_BRAND_NAME,
-        platform_name=DEFAULT_BRAND_NAME,
+        platform_name=DEFAULT_BRAND_NAME, platform_tagline=DEFAULT_BRAND_TAGLINE,
     )
 
 
@@ -13849,7 +13936,8 @@ def platform_login():
             cursor.close()
             connection.close()
     return render_template("platform_login.html", said=said,
-                           platform_name=DEFAULT_BRAND_NAME)
+                           platform_name=DEFAULT_BRAND_NAME,
+                           platform_tagline=DEFAULT_BRAND_TAGLINE)
 
 
 @app.route("/platform/logout")
@@ -14059,7 +14147,7 @@ def platform_home():
         memory_mb=memory,
         upi_ready=bool(PLATFORM_UPI_ID),
         payee=PLATFORM_UPI_NAME or "(PLATFORM_UPI_NAME not set)",
-        platform_name=DEFAULT_BRAND_NAME,
+        platform_name=DEFAULT_BRAND_NAME, platform_tagline=DEFAULT_BRAND_TAGLINE,
     )
 
 
@@ -14392,7 +14480,7 @@ def error_page(status, kind=None):
             home=home,
             home_label=home_label,
             theme=normalize_theme(g.get("cafe_theme")),
-            platform_name=DEFAULT_BRAND_NAME,
+            platform_name=DEFAULT_BRAND_NAME, platform_tagline=DEFAULT_BRAND_TAGLINE,
             asset_url=asset_url,
         )
     except Exception:

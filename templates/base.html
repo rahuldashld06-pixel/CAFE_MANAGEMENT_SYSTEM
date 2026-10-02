@@ -311,6 +311,12 @@
                            order at the counter. #}
                         {% set qr_on = cafe_branding is not defined or cafe_branding.qr_ordering is not defined or cafe_branding.qr_ordering %}
                         <div class="profile-dropdown__section">Service</div>
+                        {% if not plan_allows('table_qr') %}
+                        <a href="{{ unlock_url('table_qr') }}" class="profile-dropdown__item" data-locked>
+                            <i class="bi bi-qr-code-scan"></i><span>Table QR ordering</span>
+                            <i class="bi bi-lock-fill plan-lock" title="Comes with Refero Pro" aria-label="Locked - Refero Pro"></i>
+                        </a>
+                        {% else %}
                         <form method="POST" action="{{ url_for('table_ordering_switch') }}" class="qr-switch-form"
                               data-table-ordering="{{ 'on' if qr_on else 'off' }}">
                             <input type="hidden" name="open" value="{{ '0' if qr_on else '1' }}">
@@ -322,6 +328,7 @@
                                 <span class="qr-switch__state {{ 'is-on' if qr_on }}">{{ "On" if qr_on else "Off" }}</span>
                             </button>
                         </form>
+                        {% endif %}
 
                         {% if session.get('role') == 'admin' %}
                         <div class="profile-dropdown__section">Customize</div>
@@ -363,9 +370,16 @@
 
                         {# Admin only: replacing the code stops every one
                            already printed and stuck to a table. #}
+                        {% if plan_allows('table_qr') %}
                         <a href="{{ url_for('qr_settings') }}" class="profile-dropdown__item">
                             <i class="bi bi-qr-code"></i><span>Table QR Code</span>
                         </a>
+                        {% else %}
+                        <a href="{{ unlock_url('table_qr') }}" class="profile-dropdown__item" data-locked>
+                            <i class="bi bi-qr-code"></i><span>Table QR Code</span>
+                            <i class="bi bi-lock-fill plan-lock" title="Comes with Refero Pro" aria-label="Locked - Refero Pro"></i>
+                        </a>
+                        {% endif %}
                         {% endif %}
 
                         <div class="profile-dropdown__section">Help</div>
@@ -809,6 +823,22 @@ window.CafeShell = {
             if (!profileMenu.contains(event.target)) {
                 profileMenu.classList.remove("open");
             }
+        });
+
+        // An option chosen closes the menu. The pages swap in under a
+        // header that stays put, so without this the menu sat open over
+        // the page it had just opened; the profile opens it again.
+        const profileDropdown = document.getElementById("profileDropdown");
+        if (profileDropdown) {
+            profileDropdown.addEventListener("click", function (event) {
+                const chosen = event.target.closest && event.target.closest("a[href], button");
+                if (!chosen || !profileDropdown.contains(chosen)) return;
+                profileMenu.classList.remove("open");
+                chosen.blur();
+            });
+        }
+        document.addEventListener("instant:load", function () {
+            profileMenu.classList.remove("open");
         });
 
         document.addEventListener("keydown", function (event) {

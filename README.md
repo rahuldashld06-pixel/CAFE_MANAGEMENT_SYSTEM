@@ -1,14 +1,16 @@
 # Refero — calm service, beautifully run
 
-A multi-tenant café and restaurant system: Flask + MySQL. Its emblem is a
-café drawn in a brush-stroke ring - a lamp over a table and its chairs, a
-plant - with "Refero" in brush script, a coffee bean for the o, two
-leaves, and "Restaurant and Cafe / Food Management System" beneath
-(`static/brand/refero-emblem.webp`, shown as a round badge on the sign-in pages, the
-console and invoices). Everywhere small - logo tiles, the tab, the home
-screen - it is the round monogram drawn from it: the emblem's script R, its bean
-and its leaves on a cream disc (`templates/_brand_mark.html`; the R is Kaushan
-Script's, OFL, traced to a path). Any number of cafes sign up
+A multi-tenant café and restaurant system: Flask + MySQL. Its mark is a
+round gold monogram - an R whose stem is a fork, steam rising in its bowl,
+a chef's hat above it and two leaves at its foot, in a fine gold ring on
+deep green (`static/brand/refero-monogram.webp`). On the sign-in pages,
+the console's door and invoices it stands beside the name, set as the top
+bar sets it, with the tagline - *Calm service, beautifully run* - under
+it; the name and the tagline go together wherever the name is shown.
+Everywhere small - logo tiles, the tab, the home screen - it is a script
+R with a coffee bean and leaves on a cream disc
+(`templates/_brand_mark.html`; the R is Kaushan Script's, OFL, traced to
+a path). Any number of cafes sign up
 through `/register`; each gets its own menu, staff, orders, billing and
 branding, fully isolated from the others.
 
@@ -28,9 +30,12 @@ branding, fully isolated from the others.
   from before this keep their creating account as admin; any other admin
   they had becomes a manager.
 - **Refero Pro: 15 days free, then Monthly or Yearly.** Rs 650 a month,
-  or Rs 6,000 a year (Rs 500 a month). Under Subscription in the admin's
-  profile menu: the plan and when it ends, the two plans, how it is paid,
-  and every invoice - each one printable or saved as a PDF. Paid by UPI
+  or Rs 6,000 a year (Rs 500 a month). Plan & billing, under Subscription
+  in the profile menu: where the plan stands and when it ends, the two
+  plans side by side with a Monthly/Yearly switch, "What's included?" -
+  the cafe's plan beside Pro, row by row, built from the plan rules so it
+  changes when they do - and every invoice, each one printable or saved
+  as a PDF. Paid by UPI
   straight into the developer's account: "Pay by UPI" opens the admin's
   UPI app with the developer's UPI ID, the name on that account, the
   exact amount and our reference all filled in (or a QR code to scan
@@ -51,19 +56,24 @@ branding, fully isolated from the others.
 - **Free, trial and Pro.** What each plan opens is `PLAN_FEATURES` in
   app.py, one list:
 
-  | | Free | Free trial | Refero Pro |
+  | | Free trial | Free | Refero Pro |
   |---|---|---|---|
-  | Orders (counter and table QR), kitchen, billing, menu, stock | yes | yes | yes |
-  | Sales figures, the sales chart, best sellers | locked | yes | yes |
-  | Stock alerts | locked | yes | yes |
-  | Reviews and dish ratings | locked | yes | yes |
-  | Reports and their download | locked | yes | yes |
-  | Teammates | one, as staff | staff only | any role, any number |
+  | Counter orders, kitchen, billing, menu, stock | yes | yes | yes |
+  | Sales figures, the sales chart, best sellers | locked | locked | yes |
+  | Stock alerts | locked | locked | yes |
+  | Reviews and dish ratings | locked | locked | yes |
+  | Reports and their download | locked | locked | yes |
+  | Table QR ordering, and its code | locked | locked | yes |
+  | Teammates | staff only | one, as staff | any role, any number |
   | The cafe's own name, symbol and sign-in photo | Refero's shown | Refero's shown | yes |
 
+  A trial runs the cafe; what is for subscribers stays locked through
+  it. Without the table QR, a customer who scans an old code sees the
+  menu and is asked, kindly, to order at the counter.
+
   A locked option wears a lock - in the sidebar, the profile menu, on a
-  dashboard card - and leads to its own line under "What Refero Pro
-  unlocks" on the Subscription page, picked out. The whole team can read
+  dashboard card - and leads to its own row under "What's included?" on
+  Plan & billing, picked out, with what it gives. The whole team can read
   that page; choosing, paying and the invoices are the admin's. The
   figures behind a lock are never worked out or sent - the dashboard
   and its feeds leave them out, and the veil is drawn over a shape, not
@@ -755,9 +765,16 @@ a short 404 rather than a page drawn for nobody. An address that is no
 page at all is a 404 signed in or out - a customer who mistypes one is
 no longer shown the staff's sign-in.
 
-**Getting in.** Passwords are hashed by Werkzeug (PBKDF2). An admin with
-a mobile number on file is challenged for a one-time code, which expires
-and gives up after five wrong answers. The password path is rate
+**Getting in.** Passwords are hashed by Werkzeug (scrypt; older ones
+PBKDF2) - slow on purpose. An admin with a mobile number on file is
+challenged for a one-time code, which expires and gives up after five
+wrong answers. The code is kept as an HMAC under the app's secret key,
+not with the password hash: slowness never protected six digits, the
+expiry and the attempt limit do, and the slow hash cost about 135 ms of
+processor time (more on a small shared host) to keep the code and again
+to check it, on every sign-in. The sign-in button says "Signing in…" the moment it is
+pressed and ignores a second press, and the next page's stylesheet and
+scripts are fetched once the sign-in page has finished, not alongside it. The password path is rate
 limited the same way: five failures from one address against one
 username buys a 15-minute lockout, counted in the database so it holds
 across workers rather than resetting whenever the next request lands on
@@ -951,7 +968,7 @@ python tests/theme_browser_test.py # expect PASSED: 13  FAILED: 0
 python tests/food_number_test.py  # expect PASSED: 31   FAILED: 0
 python tests/qr_order_test.py     # expect PASSED: 146  FAILED: 0
 python tests/kitchen_screen_test.py # expect PASSED: 21  FAILED: 0
-python tests/password_view_test.py # expect PASSED: 29  FAILED: 0
+python tests/password_view_test.py # expect PASSED: 32  FAILED: 0
 python tests/fullscreen_test.py   # expect PASSED: 29   FAILED: 0
 python tests/tutorial_test.py     # expect PASSED: 40   FAILED: 0
 python tests/tour_browser_test.py # expect PASSED: 26  FAILED: 0
@@ -961,7 +978,7 @@ python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
 python tests/list_search_test.py  # expect PASSED: 109  FAILED: 0
-python tests/identity_test.py     # expect PASSED: 97   FAILED: 0
+python tests/identity_test.py     # expect PASSED: 110  FAILED: 0
 python tests/security_test.py     # expect PASSED: 146  FAILED: 0
 python tests/page_head_test.py    # expect PASSED: 101   FAILED: 0
 python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
@@ -969,7 +986,7 @@ python tests/draft_restore_test.py # expect PASSED: 36  FAILED: 0
 python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
 python tests/dashboard_feed_test.py # expect PASSED: 43  FAILED: 0
 python tests/reports_test.py      # expect PASSED: 39   FAILED: 0
-python tests/shell_browser_test.py # expect PASSED: 66  FAILED: 0
+python tests/shell_browser_test.py # expect PASSED: 71  FAILED: 0
 python tests/order_type_test.py   # expect PASSED: 45   FAILED: 0
 python tests/review_test.py       # expect PASSED: 46   FAILED: 0
 python tests/menu_marks_test.py   # expect PASSED: 99   FAILED: 0
@@ -985,7 +1002,7 @@ python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
 python tests/customer_menu_browser_test.py # expect PASSED: 69  FAILED: 0
 python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
 python tests/error_pages_test.py  # expect PASSED: 36  FAILED: 0
-python tests/subscription_test.py # expect PASSED: 98  FAILED: 0
+python tests/subscription_test.py # expect PASSED: 114 FAILED: 0
 python tests/console_test.py      # expect PASSED: 50  FAILED: 0
 ```
 

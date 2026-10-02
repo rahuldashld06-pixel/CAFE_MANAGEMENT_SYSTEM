@@ -25,6 +25,7 @@ import io
 import os
 import re
 import sys
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -472,6 +473,52 @@ wrong_code.post("/login/verify", data={"otp_code": "000000"},
 check("but a wrong code does not",
       not all_the_way_in(wrong_code),
       "any six digits got in")
+
+# The code was kept with the password hash - slow on purpose, paid once
+# to keep it and again to check it. Six digits were never protected by slowness; the expiry and the
+# attempt limit protect them. It is kept as an HMAC under the app's key.
+keyed = app.test_client()
+sent = keyed.post("/login", data={"username": "ida", "password": "password123"},
+                  follow_redirects=True).get_data(as_text=True)
+code = re.search(r"code:\s*(\d{6})", sent).group(1)
+kept = mysql_shim._DB.execute(
+    "SELECT code_hash FROM login_otp_codes ORDER BY otp_id DESC LIMIT 1").fetchone()[0]
+check("a sign-in code is kept as a keyed hash, not a password hash",
+      kept.startswith("hmac-sha256$") and code not in kept, kept[:20])
+started = time.perf_counter()
+for _ in range(200):
+    application.otp_code_matches(kept, 0, "000000")
+check("which is checked in well under a millisecond",
+      (time.perf_counter() - started) / 200 < 0.001,
+      "%.2f ms each" % ((time.perf_counter() - started) / 200 * 1000))
+keyed.post("/login/verify", data={"otp_code": code}, follow_redirects=True)
+check("and the right code still signs in", all_the_way_in(keyed))
+
+# A code sent a minute before the change was kept the old way; it works
+# for the minutes it has left.
+older = app.test_client()
+sent = older.post("/login", data={"username": "ida", "password": "password123"},
+                  follow_redirects=True).get_data(as_text=True)
+code = re.search(r"code:\s*(\d{6})", sent).group(1)
+mysql_shim._DB.execute("UPDATE login_otp_codes SET code_hash = ?",
+                       (application.generate_password_hash(code),))
+mysql_shim._DB.commit()
+older.post("/login/verify", data={"otp_code": code}, follow_redirects=True)
+check("a code kept the old way still signs in", all_the_way_in(older))
+
+# The sign-in pages: the round monogram, the name beside it as the top
+# bar sets it, and a button that says what it is doing.
+anyone = app.test_client()
+for path, busy in (("/login", "Signing in…"), ("/register", "Creating your café…"),
+                   ("/forgot-password", "Resetting…")):
+    html = anyone.get(path).get_data(as_text=True)
+    check("%s shows the round monogram and the name beside it" % path,
+          "brand/refero-monogram.webp" in html and 'class="brand-lockup__name">Refero<' in html)
+    check("%s's button says %r while it works" % (path, busy),
+          'data-busy="%s"' % busy in html)
+    head = html.split("</head>")[0]
+    check("%s fetches the next page's files after it has loaded, not alongside" % path,
+          '<link rel="prefetch"' not in head and 'link.rel = "prefetch"' in head)
 
 check("sending needs no extra package",
       "smtplib" not in io.open("requirements.txt", encoding="utf-8").read(),

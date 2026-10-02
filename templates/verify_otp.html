@@ -1,3 +1,4 @@
+{% from "_brand_mark.html" import refero_lockup %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -45,6 +46,35 @@
             background: rgba(36,21,15,.94);
             border: 1px solid rgba(217,171,120,.35);
             box-shadow: 0 30px 80px rgba(0,0,0,.45);
+        }
+
+        .otp-shell .brand-lockup {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+        .otp-shell .brand-monogram {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #14201a;
+            box-shadow: 0 0 0 2px rgba(224, 178, 126, .5), 0 12px 28px -12px rgba(0, 0, 0, .9);
+        }
+        .otp-shell .brand-lockup__text { display: grid; gap: 6px; }
+        .otp-shell .brand-lockup__name {
+            font-family: "Fraunces", Georgia, serif;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -.3px;
+            line-height: 1;
+            color: var(--cream);
+        }
+        .otp-shell .brand-lockup__tagline {
+            font-family: "Fraunces", Georgia, serif;
+            font-size: 13.5px;
+            font-style: italic;
+            color: var(--gold-light);
         }
 
         .brand-mark {
@@ -185,12 +215,7 @@
        this step, so the shell's stylesheet, navigation layer and fonts are
        fetched while they are still typing the code. #}
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-
-    <link rel="prefetch" href="{{ asset_url('css/theme.css') }}">
-    <link rel="prefetch" href="{{ asset_url('css/style.css') }}">
-    <link rel="prefetch" href="{{ asset_url('js/instant.js') }}">
-    <link rel="prefetch" href="{{ asset_url('js/fullscreen.js') }}">
-    <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" crossorigin>
+    {% include "_auth_after.html" %}
 
 </head>
 
@@ -204,10 +229,10 @@
             alt="{{ cafe_branding.cafe_name }} logo"
             style="width:56px;height:56px;object-fit:contain;border-radius:50%;margin-bottom:20px;background:rgba(255,250,243,.12);border:1px solid rgba(217,171,120,.45);padding:5px;">
     {% else %}
-        <div class="brand-mark">🔐</div>
+        <div>{{ refero_lockup(name=platform_name, tagline=platform_tagline) }}</div>
     {% endif %}
 
-    <div class="eyebrow">Cafe Management System</div>
+    <div class="eyebrow">One more step</div>
 
     <h1 class="otp-title">Verify it's you</h1>
 
@@ -255,7 +280,8 @@
 
         <button
             type="submit"
-            class="verify-button">
+            class="verify-button"
+            data-busy="Checking…">
 
             Verify &amp; Sign In
 
@@ -265,14 +291,14 @@
 
     <div class="otp-actions">
         <form method="POST" action="{{ url_for('login_resend_otp') }}">
-            <button type="submit">Resend code</button>
+            <button type="submit" data-busy="Sending…">Resend code</button>
         </form>
 
         <a href="{{ url_for('logout') }}">Cancel and start over</a>
     </div>
 
     <div class="otp-note">
-        Cafe Management System · One-Time Code for Admins
+        {{ platform_name }} · A one-time code keeps your account yours
     </div>
 
 </div>

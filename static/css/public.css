@@ -851,6 +851,8 @@ li[data-status="Cancelled"] .p-bell__state { background: rgba(225, 97, 79, .16);
     letter-spacing: .04em;
 }
 
+.p-by__tagline { font-style: italic; }
+
 @media (max-width: 380px) {
     .p-item { padding: 11px; gap: 9px; }
     .p-step button { width: 31px; height: 31px; }

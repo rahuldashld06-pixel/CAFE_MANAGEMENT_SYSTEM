@@ -55,6 +55,14 @@ body {
 }
 
 .err__brand svg { width: 30px; height: 30px; border-radius: 8px; }
+.err__brand-text { display: grid; text-align: left; line-height: 1.1; }
+.err__brand-text small {
+    margin-top: 3px;
+    font-size: 12px;
+    font-style: italic;
+    font-weight: 500;
+    color: var(--e-dim, rgba(238, 214, 182, .7));
+}
 
 .err__card {
     width: min(520px, 100%);

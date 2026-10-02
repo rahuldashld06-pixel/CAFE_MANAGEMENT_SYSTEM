@@ -282,14 +282,26 @@ code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
 }
 
 .con-brand .brand-glyph { border-radius: 8px; }
-.con-emblem {
+.con-lockup { display: inline-flex; align-items: center; gap: 14px; }
+.con-lockup .brand-monogram {
     display: block;
-    box-sizing: border-box;
-    width: 150px;
-    height: 150px;
-    padding: 5px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
-    background: #F4EEE4;
-    object-fit: contain;
-    box-shadow: 0 0 0 3px rgba(238, 214, 182, .45), 0 16px 40px -18px rgba(0, 0, 0, .8);
+    background: #14201a;
+    box-shadow: 0 0 0 2px rgba(224, 178, 126, .5), 0 14px 32px -14px rgba(0, 0, 0, .85);
+}
+.con-lockup .brand-lockup__text { display: grid; gap: 6px; text-align: left; }
+.con-lockup .brand-lockup__name {
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -.3px;
+    line-height: 1;
+}
+.con-lockup .brand-lockup__tagline {
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 14px;
+    font-style: italic;
+    color: var(--c-dim);
 }

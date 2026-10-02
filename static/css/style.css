@@ -4851,7 +4851,24 @@ body.tour-open { overflow: hidden; }
     min-width: 0;
 }
 
-.topbar-brand__name small { display: none; }
+/* The tagline under the name, as the sidebar has it: the brand is the
+   two together. Smaller and in italics, so the name still leads. */
+.topbar-brand__name small {
+    display: block;
+    margin-top: 2px;
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    font-style: italic;
+    font-weight: 500;
+    letter-spacing: .1px;
+    color: var(--cream-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.topbar-brand__name small:empty { display: none; }
+@media (max-width: 430px) {
+    .topbar-brand__name small { font-size: 10.5px; }
+}
 
 /* ---- Search ---- */
 .topbar-search {
@@ -5034,6 +5051,19 @@ body.tour-open { overflow: hidden; }
 }
 
 .topbar .profile-dropdown { top: calc(100% + 8px); }
+
+/* The admin's menu is taller than a laptop screen. It hangs from the
+   sticky bar, so scrolling the page never brought its last items -
+   Logout among them - into view: it stops at the foot of the screen
+   and scrolls inside itself, without dragging the page along. */
+.profile-dropdown {
+    max-height: calc(100vh - 84px);
+    max-height: calc(100dvh - 84px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--espresso-700) transparent;
+}
 
 /* Order Status drops from the header, beside the bell that opened it. */
 .order-status-overlay {

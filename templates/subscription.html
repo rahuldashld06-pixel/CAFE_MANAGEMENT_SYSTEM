@@ -1,425 +1,694 @@
 {% extends "base.html" %}
-{% from "_brand_mark.html" import coffee_mark %}
 
-{% block title %}Subscription{% endblock %}
+{% block title %}Plan & billing{% endblock %}
+
+{#
+  Plan & billing. A cream page in the dark app, laid out as the design
+  has it: where the plan stands, the two plans side by side, what each
+  plan includes, and the invoices.
+
+  "What's included?" is built from the plan rules themselves
+  (plan_comparison: PLAN_BASICS and PLAN_FEATURES) - the same lists the
+  locks read - so it changes when they do, and every lock in the app
+  leads to its own row here (#unlocks, ?feature=).
+#}
 
 {% block content %}
+{% macro cell(value) -%}
+{%- if value is sameas true -%}
+<i class="bi bi-check2 bill-yes" role="img" aria-label="Included"></i>
+{%- elif value is sameas false -%}
+<i class="bi bi-lock-fill bill-locked" role="img" aria-label="Comes with Refero Pro"></i>
+{%- else -%}
+<span class="bill-words">{{ value }}</span>
+{%- endif -%}
+{%- endmacro %}
 <style>
-    .sub-wrap { display: grid; gap: 18px; max-width: 980px; }
+    .bill {
+        --b-paper: #F8F2EA;
+        --b-card: #FFFDFA;
+        --b-line: #EADFD2;
+        --b-line-soft: #F1E8DD;
+        --b-ink: #2A1C14;
+        --b-dim: #6F5B4C;
+        --b-faint: #9C8676;
+        --b-copper: #B0653D;
+        --b-copper-deep: #9A5631;
+        --b-green: #3F7D4E;
+        --b-green-bg: #E5F1E5;
+        --b-amber: #8E6212;
+        --b-amber-bg: #FAEFD6;
+        --b-red: #A4432F;
+        --b-red-bg: #F7E0DA;
 
-    .sub-card,
-    .sub-section {
-        padding: 22px 24px;
-        border: 1px solid var(--espresso-700);
-        border-radius: var(--radius-lg);
-        background: var(--espresso-850);
+        display: grid;
+        gap: 26px;
+        max-width: 1120px;
+        padding: 30px 34px 26px;
+        border-radius: 24px;
+        background: var(--b-paper);
+        color: var(--b-ink);
+        font-family: var(--font-body);
     }
 
-    .sub-head {
+    .bill h1, .bill h2, .bill h3 { color: var(--b-ink); font-family: var(--font-display); }
+
+    /* ---- The head ---- */
+    .bill-head {
         display: flex;
-        align-items: center;
-        gap: 16px;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
     }
+    .bill-eyebrow {
+        margin: 0 0 6px;
+        color: var(--b-copper);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+    }
+    .bill-title { margin: 0; font-size: clamp(30px, 4vw, 42px); font-weight: 700; letter-spacing: -.5px; line-height: 1.05; }
+    .bill-lede { margin: 8px 0 0; color: var(--b-dim); font-size: 15px; }
 
-    .sub-head__mark {
+    .bill-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 15px;
+        border-radius: 999px;
+        font-size: 13.5px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .bill-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .bill-pill--good { background: var(--b-green-bg); color: var(--b-green); border: 1px solid #CFE3CF; }
+    .bill-pill--warn { background: var(--b-amber-bg); color: var(--b-amber); border: 1px solid #EFD9A8; }
+    .bill-pill--bad  { background: var(--b-red-bg); color: var(--b-red); border: 1px solid #EBC2B8; }
+
+    /* ---- Where the plan stands ---- */
+    .bill-hero {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+        gap: 30px;
+        padding: 30px 32px;
+        overflow: hidden;
+        border-radius: 22px;
+        background:
+            radial-gradient(460px 260px at 62% 120%, rgba(238, 214, 182, .07), transparent 70%),
+            linear-gradient(135deg, #3E271B 0%, #2D1C13 100%);
+        color: #F7EFE3;
+        box-shadow: 0 18px 40px -26px rgba(42, 28, 20, .7);
+    }
+    .bill-hero::after {
+        content: "";
+        position: absolute;
+        right: 26%;
+        bottom: -170px;
+        width: 340px;
+        height: 340px;
+        border: 1px solid rgba(238, 214, 182, .07);
+        border-radius: 50%;
+        pointer-events: none;
+    }
+    .bill-hero__lead { display: flex; gap: 16px; align-items: flex-start; }
+    .bill-hero__icon {
         display: grid;
         place-items: center;
-        width: 58px;
-        height: 58px;
-        border-radius: 16px;
-        background: var(--glass-on), rgba(var(--copper-rgb), .22);
-        box-shadow: var(--glass-on-edges);
-        color: var(--copper-light);
+        flex: 0 0 auto;
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        background: rgba(238, 214, 182, .12);
+        color: #EDC9A0;
+        font-size: 22px;
     }
-    .sub-head__mark svg { width: 34px; height: 34px; }
+    .bill-hero h2 { margin: 2px 0 6px; color: #FBF4EA; font-size: 26px; font-weight: 700; letter-spacing: -.3px; }
+    .bill-hero__lead p { margin: 0; color: #D9C8B4; font-size: 15px; line-height: 1.5; }
+    .bill-hero__label { margin: 22px 0 10px; color: #FBF4EA; font-size: 13px; font-weight: 800; }
+    .bill-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .bill-chips li {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 6px 12px;
+        border: 1px solid rgba(238, 214, 182, .28);
+        border-radius: 999px;
+        color: #F1E2CF;
+        font-size: 12.5px;
+        font-weight: 600;
+    }
+    .bill-chips i { color: #A9D3A9; }
+    .bill-hero__side {
+        position: relative;
+        z-index: 1;
+        padding-left: 28px;
+        border-left: 1px solid rgba(238, 214, 182, .16);
+    }
+    .bill-hero__k { margin: 6px 0 6px; color: #CDB79F; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .bill-hero__date { margin: 0 0 10px; color: #FBF4EA; font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -.3px; }
+    .bill-hero__side p:last-child { margin: 0; color: #D9C8B4; font-size: 14px; line-height: 1.55; }
 
-    .sub-head h2 { margin: 0; font-size: 20px; }
-    .sub-head p { margin: 2px 0 0; color: var(--cream-faint); font-size: 14px; }
-    .sub-head .btn { margin-left: auto; }
-
-    .sub-status {
+    .bill-note {
         display: flex;
         align-items: center;
         gap: 12px;
-        margin-top: 18px;
+        margin: -10px 0 0;
         padding: 13px 16px;
-        border: 1px solid var(--espresso-700);
-        border-radius: var(--radius-md);
-        background: var(--espresso-900);
-        color: var(--cream);
-        font-size: 14.5px;
+        border: 1px solid var(--b-line);
+        border-radius: 14px;
+        background: var(--b-card);
+        color: var(--b-dim);
+        font-size: 14px;
     }
-    .sub-status i { color: var(--copper-light); font-size: 17px; }
-    .sub-status span { flex: 1 1 auto; line-height: 1.5; }
-    .sub-status--grace, .sub-status--checking { border-color: rgba(242, 201, 76, .45); }
-    .sub-status--grace i, .sub-status--checking i { color: #F2C94C; }
-    .sub-status--paused { border-color: rgba(225, 97, 79, .5); }
-    .sub-status--paused i { color: #F0A193; }
-    .sub-status--lifetime i, .sub-status--active i { color: #8FBB99; }
+    .bill-note i { color: var(--b-copper); font-size: 17px; }
+    .bill-note span { flex: 1 1 auto; line-height: 1.5; }
 
-    .sub-section h2 { margin: 0 0 4px; font-size: 18px; }
-    .sub-section > p { margin: 0 0 16px; color: var(--cream-faint); font-size: 13.5px; }
-
-    .sub-plans {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* ---- The plans ---- */
+    .bill-sec-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
         gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+    }
+    .bill-sec-head h2 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.3px; }
+    .bill-sec-head p { margin: 6px 0 0; color: var(--b-dim); font-size: 14.5px; }
+
+    .bill-toggle {
+        display: inline-flex;
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--b-line);
+        border-radius: 14px;
+        background: #F1E8DC;
+    }
+    .bill-toggle button {
+        padding: 9px 16px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--b-dim);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .bill-toggle button span { color: var(--b-faint); font-size: 12.5px; font-weight: 600; }
+    .bill-toggle button[aria-pressed="true"] {
+        background: var(--b-card);
+        color: var(--b-ink);
+        box-shadow: 0 1px 2px rgba(42, 28, 20, .12), 0 0 0 1px var(--b-line);
     }
 
-    .sub-plan {
+    .bill-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    .bill-plan {
         position: relative;
         display: flex;
         flex-direction: column;
-        gap: 10px;
-        padding: 20px;
-        border: 1px solid var(--espresso-700);
-        border-radius: var(--radius-lg);
-        background: var(--espresso-900);
+        padding: 28px 26px 24px;
+        border: 1px solid var(--b-line);
+        border-radius: 20px;
+        background: var(--b-card);
+        cursor: pointer;
     }
-    .sub-plan--best { border-color: rgba(var(--copper-rgb), .6); }
-    .sub-plan h3 { margin: 0; font-size: 17px; }
-
-    .sub-plan__badge {
+    .bill-plan--yearly { border: 1.5px solid #C98760; box-shadow: 0 14px 30px -24px rgba(176, 101, 61, .6); }
+    .bill-plan__ribbon {
         position: absolute;
-        top: 14px;
-        right: 14px;
-        padding: 3px 10px;
-        border-radius: 999px;
-        background: rgba(143, 187, 153, .18);
-        color: #8FBB99;
-        font-size: 11.5px;
+        top: -12px;
+        right: 22px;
+        padding: 4px 12px;
+        border-radius: 8px;
+        background: var(--b-copper);
+        color: #FFF8F0;
+        font-size: 11px;
         font-weight: 800;
-    }
-
-    .sub-plan__price { margin: 4px 0 0; font-family: "Fraunces", Georgia, serif; font-size: 34px; font-weight: 700; }
-    .sub-plan__price small { font-family: var(--font-body); font-size: 13.5px; font-weight: 600; color: var(--cream-faint); }
-    .sub-plan__per { margin: 0; color: var(--cream-dim); font-size: 13px; }
-
-    .sub-plan ul { margin: 6px 0 4px; padding: 0; list-style: none; display: grid; gap: 7px; }
-    .sub-plan li { display: flex; gap: 9px; color: var(--cream-dim); font-size: 13.5px; }
-    .sub-plan li i { color: #8FBB99; }
-    .sub-plan .btn { margin-top: auto; justify-content: center; }
-
-    .sub-pay {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 14px 16px;
-        border: 1px solid var(--espresso-700);
-        border-radius: var(--radius-md);
-        background: var(--espresso-900);
-    }
-    .sub-pay__logo {
-        display: grid;
-        place-items: center;
-        width: 46px;
-        height: 32px;
-        border-radius: 7px;
-        background: #F2F2F2;
-        color: #097939;
-        font-size: 12px;
-        font-weight: 900;
-        letter-spacing: .02em;
-    }
-    .sub-pay strong { display: block; color: var(--cream); }
-    .sub-pay small { color: var(--cream-faint); font-size: 12.5px; }
-
-    .sub-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .sub-table th {
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--espresso-700);
-        color: var(--cream-faint);
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: .06em;
-        text-align: left;
+        letter-spacing: .08em;
         text-transform: uppercase;
     }
-    .sub-table td { padding: 13px 12px; border-bottom: 1px solid var(--espresso-800); color: var(--cream); }
-    .sub-table tr:last-child td { border-bottom: 0; }
-    .sub-table small { display: block; color: var(--cream-faint); font-size: 12px; }
-
-    .sub-tag {
-        display: inline-block;
-        padding: 3px 10px;
-        border-radius: 999px;
-        font-size: 12px;
+    .bill-plan h3 { margin: 0; font-size: 21px; font-weight: 700; }
+    .bill-plan__lede { margin: 6px 0 0; color: var(--b-dim); font-size: 14px; }
+    .bill-plan__price { margin: 18px 0 0; font-family: var(--font-display); font-size: 42px; font-weight: 700; line-height: 1; letter-spacing: -.5px; }
+    .bill-plan__price small { margin-left: 4px; color: var(--b-dim); font-family: var(--font-body); font-size: 15px; font-weight: 600; letter-spacing: 0; }
+    .bill-plan__per { margin: 8px 0 0; color: var(--b-dim); font-size: 13.5px; }
+    .bill-plan ul { display: grid; gap: 10px; margin: 20px 0 22px; padding: 0; list-style: none; }
+    .bill-plan li { display: flex; gap: 10px; color: var(--b-ink); font-size: 14.5px; }
+    .bill-plan li i { color: var(--b-copper); }
+    .bill-btn {
+        margin-top: auto;
+        padding: 14px 18px;
+        border: 0;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #F1DABA, #DDB287);
+        color: var(--b-ink);
+        font: inherit;
+        font-size: 15px;
         font-weight: 800;
+        cursor: pointer;
+        transition: filter .15s ease, transform .15s ease;
     }
-    .sub-tag--paid { background: rgba(143, 187, 153, .18); color: #8FBB99; }
-    .sub-tag--pending { background: rgba(242, 201, 76, .16); color: #F2C94C; }
-    .sub-tag--rejected { background: rgba(225, 97, 79, .18); color: #F0A193; }
+    .bill-btn:hover { filter: brightness(1.04); transform: translateY(-1px); }
+    .bill-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+    .bill-plans[data-picked="monthly"] .bill-plan--monthly .bill-btn,
+    .bill-plans[data-picked="yearly"] .bill-plan--yearly .bill-btn {
+        background: var(--b-copper);
+        color: #FFF8F0;
+    }
+    .bill-plans[data-picked="monthly"] .bill-plan--monthly .bill-btn:hover,
+    .bill-plans[data-picked="yearly"] .bill-plan--yearly .bill-btn:hover { background: var(--b-copper-deep); }
+    .bill-assure { margin: 16px 0 0; color: var(--b-faint); font-size: 13px; text-align: center; }
+    .bill-assure i { color: var(--b-green); }
+    .bill-muted { margin: 8px 0 0; color: var(--b-faint); font-size: 13.5px; text-align: center; }
 
-    .sub-link { color: var(--copper-light); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
-
-    .sub-unlocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-    .sub-unlock {
-        display: grid;
-        grid-template-columns: 40px minmax(0, 1fr);
-        gap: 12px;
-        padding: 16px;
-        border: 1px solid var(--espresso-700);
-        border-radius: var(--radius-lg);
-        background: var(--espresso-900);
+    /* ---- What's included, and the invoices ---- */
+    .bill-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+    .bill-grid--one { grid-template-columns: minmax(0, 1fr); }
+    .bill-card {
+        overflow: hidden;
+        border: 1px solid var(--b-line);
+        border-radius: 20px;
+        background: var(--b-card);
         scroll-margin-top: 90px;
     }
-    .sub-unlock__icon {
-        display: grid;
-        place-items: center;
-        width: 40px;
-        height: 40px;
-        border-radius: 12px;
-        background: rgba(var(--copper-rgb), .16);
-        color: var(--copper-light);
-        font-size: 17px;
-    }
-    .sub-unlock h3 { margin: 2px 0 4px; font-size: 15.5px; }
-    .sub-unlock p { margin: 0; color: var(--cream-dim); font-size: 13px; line-height: 1.5; }
-    .sub-unlock__state { margin-top: 8px; }
-    .sub-unlock--locked .sub-unlock__icon { background: rgba(242, 201, 76, .14); color: #F2C94C; }
-    .sub-unlock--asked {
-        border-color: rgba(var(--copper-rgb), .8);
-        background: var(--glass-on), rgba(var(--copper-rgb), .12);
-        box-shadow: var(--glass-on-edges), 0 0 0 3px rgba(var(--copper-rgb), .22);
-    }
-    .sub-tag--open { background: rgba(143, 187, 153, .18); color: #8FBB99; }
-    .sub-tag--locked { background: rgba(242, 201, 76, .16); color: #F2C94C; }
-    .sub-ask { margin: 0; padding: 12px 14px; border-radius: var(--radius-md); background: var(--espresso-900); color: var(--cream-dim); font-size: 13.5px; }
-    .sub-empty { margin: 0; color: var(--cream-faint); font-size: 14px; }
+    .bill-card__head { display: flex; justify-content: space-between; gap: 14px; padding: 22px 24px 18px; }
+    .bill-card__head h2 { margin: 0; font-size: 23px; font-weight: 700; }
+    .bill-card__head p { margin: 6px 0 0; color: var(--b-dim); font-size: 14px; line-height: 1.5; }
+    .bill-link { color: var(--b-ink); font-size: 13.5px; font-weight: 800; text-decoration: none; white-space: nowrap; }
+    .bill-link:hover { color: var(--b-copper); }
 
+    .bill-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .bill-table th, .bill-table td { padding: 14px 18px; border-top: 1px solid var(--b-line-soft); text-align: center; }
+    .bill-table thead th {
+        border-top: 1px solid var(--b-line);
+        background: #FBF6F0;
+        color: var(--b-faint);
+        font-size: 11.5px;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+    }
+    .bill-table thead th:last-child { color: var(--b-copper); }
+    .bill-table th:first-child { padding-left: 24px; text-align: left; }
+    .bill-table tbody th { color: var(--b-ink); font-weight: 600; }
+    .bill-table tbody th small { display: block; margin-top: 4px; color: var(--b-dim); font-size: 12.5px; font-weight: 500; line-height: 1.5; }
+    .bill-yes { color: var(--b-green); font-size: 18px; }
+    .bill-locked { color: #C9B4A3; font-size: 13px; }
+    .bill-words { color: var(--b-faint); font-size: 13px; }
+    .bill-pro .bill-words { color: var(--b-copper); font-size: 14.5px; font-weight: 800; }
+    .bill-row--asked th, .bill-row--asked td { background: #FBEEDF; }
+    .bill-row--asked th { box-shadow: inset 4px 0 0 var(--b-copper); }
+    .bill-ask { margin: 0; padding: 14px 24px; border-top: 1px solid var(--b-line-soft); color: var(--b-dim); font-size: 13.5px; }
+
+    .bill-inv { margin: 0; padding: 0 24px; list-style: none; border-top: 1px solid var(--b-line); }
+    .bill-inv li {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--b-line-soft);
+        font-size: 14px;
+    }
+    .bill-inv strong { display: block; font-weight: 700; }
+    .bill-inv small { display: block; margin-top: 3px; color: var(--b-faint); font-size: 12.5px; }
+    .bill-inv__end { display: grid; justify-items: end; gap: 5px; text-align: right; }
+    .bill-inv__total { font-weight: 800; }
+    .bill-tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+    .bill-tag--paid { background: var(--b-green-bg); color: var(--b-green); }
+    .bill-tag--pending { background: var(--b-amber-bg); color: var(--b-amber); }
+    .bill-tag--rejected { background: var(--b-red-bg); color: var(--b-red); }
+    .bill-inv .bill-link { color: var(--b-copper); }
+
+    .bill-empty { padding: 26px 24px 10px; border-top: 1px solid var(--b-line); text-align: center; }
+    .bill-empty__icon {
+        display: inline-grid;
+        place-items: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        background: #F6ECE1;
+        color: var(--b-copper);
+        font-size: 20px;
+    }
+    .bill-empty h3 { margin: 14px 0 6px; font-size: 17px; }
+    .bill-empty p { margin: 0 auto; max-width: 290px; color: var(--b-dim); font-size: 13.5px; line-height: 1.5; }
+    .bill-upi {
+        display: flex;
+        gap: 10px;
+        margin: 20px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #F6EEE4;
+        color: var(--b-dim);
+        font-size: 13px;
+        line-height: 1.55;
+    }
+    .bill-upi i { color: var(--b-copper); }
+    .bill-upi p { margin: 0; }
+    .bill-upi strong { color: var(--b-copper-deep); }
+
+    .bill-foot { margin: 0; color: var(--b-faint); font-size: 13.5px; text-align: center; }
+    .bill-foot a { color: var(--b-ink); font-weight: 700; text-decoration: none; }
+    .bill-foot a:hover { color: var(--b-copper); }
+
+    @media (max-width: 980px) {
+        .bill-grid { grid-template-columns: minmax(0, 1fr); }
+        .bill-hero { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+        .bill-hero__side { padding: 20px 0 0; border-left: 0; border-top: 1px solid rgba(238, 214, 182, .16); }
+    }
     @media (max-width: 760px) {
-        .sub-plans { grid-template-columns: minmax(0, 1fr); }
-        .sub-head { flex-wrap: wrap; }
-        .sub-head .btn { margin-left: 0; }
-        .sub-table thead { display: none; }
-        .sub-table tr { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--espresso-800); }
-        .sub-table td { padding: 0; border: 0; }
+        .bill { padding: 22px 16px 20px; border-radius: 18px; gap: 22px; }
+        .bill-hero { padding: 22px 20px; }
+        .bill-hero h2 { font-size: 22px; }
+        .bill-plans { grid-template-columns: minmax(0, 1fr); }
+        /* One plan at a time on a phone: the switch above chooses which. */
+        .bill-plans[data-picked="monthly"] .bill-plan--yearly,
+        .bill-plans[data-picked="yearly"] .bill-plan--monthly { display: none; }
+        .bill-plan { padding: 24px 20px 20px; }
+        .bill-table th, .bill-table td { padding: 12px 8px; }
+        .bill-table th:first-child { padding-left: 16px; }
+        .bill-card__head { padding: 18px 16px 14px; }
+        .bill-inv { padding: 0 16px; }
+        .bill-upi { margin: 16px; }
     }
 </style>
 
-<div class="page-header">
-    <div>
-        <div class="eyebrow">Account</div>
-        <h1><i class="bi bi-gem"></i> Subscription</h1>
-        <p>Your plan, how it is paid, and every invoice.</p>
-    </div>
-</div>
+{% set st = state.status %}
+{% if st == 'trial' or st == 'open' %}{% set pill, tone = 'Free trial active', 'good' %}
+{% elif st == 'active' %}{% set pill, tone = product ~ ' · ' ~ state.label, 'good' %}
+{% elif st == 'lifetime' %}{% set pill, tone = product ~ ' · Lifetime', 'good' %}
+{% elif st == 'grace' %}{% set pill, tone = 'Plan ended - renew', 'warn' %}
+{% elif st == 'checking' %}{% set pill, tone = 'Payment being checked', 'warn' %}
+{% elif st == 'free' %}{% set pill, tone = 'Refero Free', 'warn' %}
+{% else %}{% set pill, tone = 'Paused', 'bad' %}{% endif %}
 
-<div class="sub-wrap">
+<div class="bill" id="billing">
 
-    {# ---- The plan, and where it stands ---- #}
-    <section class="sub-card" aria-labelledby="planTitle">
-        <div class="sub-head">
-            <span class="sub-head__mark">{{ coffee_mark() }}</span>
-            <div>
-                {% if state.status == 'lifetime' %}
-                <h2 id="planTitle">{{ product }} · Lifetime</h2>
-                <p>Free, for good</p>
-                {% elif state.plan in ('monthly', 'yearly') %}
-                <h2 id="planTitle">{{ product }}</h2>
-                <p>{{ state.label }}</p>
-                {% elif state.status == 'free' %}
-                <h2 id="planTitle">Refero Free</h2>
-                <p>The essentials, until {{ pause_day }}</p>
-                {% elif state.status == 'paused' %}
-                <h2 id="planTitle">Paused</h2>
-                <p>Everything is kept, waiting for a plan</p>
-                {% elif state.plan == 'trial' %}
-                <h2 id="planTitle">{{ product }} · Free trial</h2>
-                <p>15 days free - all but other roles and your own branding</p>
+    <header class="bill-head">
+        <div>
+            <p class="bill-eyebrow">Account</p>
+            <h1 class="bill-title">Plan &amp; billing</h1>
+            <p class="bill-lede">{% if admin %}Your subscription, payment details and invoices, all in
+                one place.{% else %}Your café's plan, and what {{ product }} adds to it.{% endif %}</p>
+        </div>
+        <span class="bill-pill bill-pill--{{ tone }}" role="status">{{ pill }}</span>
+    </header>
+
+    {# ---- Where the plan stands ---- #}
+    <section class="bill-hero" aria-labelledby="planTitle">
+        <div>
+            <div class="bill-hero__lead">
+                {% if st == 'trial' or st == 'open' %}
+                <span class="bill-hero__icon" aria-hidden="true"><i class="bi bi-stars"></i></span>
+                <div>
+                    <h2 id="planTitle">{{ trial_days }} days to find your rhythm.</h2>
+                    <p>Run your café on Refero while you get to know it - and add {{ product }}
+                        whenever you're ready.</p>
+                </div>
+                {% elif st == 'active' or st == 'lifetime' %}
+                <span class="bill-hero__icon" aria-hidden="true"><i class="bi bi-gem"></i></span>
+                <div>
+                    <h2 id="planTitle">{% if st == 'lifetime' %}{{ product }}, for good.{% else %}{{ product }} is yours.{% endif %}</h2>
+                    <p>Everything Refero does, for your whole team.</p>
+                </div>
+                {% elif st == 'grace' or st == 'checking' %}
+                <span class="bill-hero__icon" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
+                <div>
+                    <h2 id="planTitle">{% if st == 'checking' %}Your payment is being checked.{% else %}Your plan has ended.{% endif %}</h2>
+                    <p>{% if st == 'checking' %}Usually within a few hours - everything stays on
+                        meanwhile.{% else %}Everything keeps working for a few days while you
+                        renew.{% endif %}</p>
+                </div>
+                {% elif st == 'free' %}
+                <span class="bill-hero__icon" aria-hidden="true"><i class="bi bi-cup-hot"></i></span>
+                <div>
+                    <h2 id="planTitle">You're on Refero Free.</h2>
+                    <p>The essentials keep your café running. {{ product }} brings back the rest.</p>
+                </div>
                 {% else %}
-                <h2 id="planTitle">{{ product }}</h2>
-                <p>{{ cafe_name }}</p>
+                <span class="bill-hero__icon" aria-hidden="true"><i class="bi bi-pause-circle"></i></span>
+                <div>
+                    <h2 id="planTitle">Your café is resting.</h2>
+                    <p>Nothing has been lost. A plan brings it all back.</p>
+                </div>
                 {% endif %}
             </div>
-            {% if state.status != 'lifetime' and admin %}
-            <a class="btn btn--ghost" href="#plans" data-no-instant>
-                {{ "Adjust plan" if state.plan in ('monthly', 'yearly') else "Choose a plan" }}
-            </a>
+
+            <p class="bill-hero__label">
+                {% if st == 'trial' or st == 'open' %}Included during your trial
+                {% elif st == 'free' %}Still working on Refero Free
+                {% elif st == 'paused' %}Waiting for you
+                {% else %}Yours on {{ product }}{% endif %}
+            </p>
+            <ul class="bill-chips">
+                {% for chip in chips %}<li><i class="bi bi-check2" aria-hidden="true"></i>{{ chip }}</li>{% endfor %}
+            </ul>
+        </div>
+
+        <div class="bill-hero__side">
+            {% if st == 'trial' or st == 'open' %}
+            <p class="bill-hero__k">Your trial ends</p>
+            <p class="bill-hero__date">{{ until_day }}</p>
+            <p>Choose a plan any time before then. Your paid plan starts after the trial, so you
+                won't lose a free day.</p>
+            {% elif st == 'active' %}
+            <p class="bill-hero__k">Paid until</p>
+            <p class="bill-hero__date">{{ until_day }}</p>
+            <p>Your {{ state.label|lower }} plan is active until then. Renewing early adds to the
+                end of it - nothing is taken on its own.</p>
+            {% elif st == 'lifetime' %}
+            <p class="bill-hero__k">Your plan</p>
+            <p class="bill-hero__date">For life</p>
+            <p>Your plan never ends - it is on the house, with every feature, for good.</p>
+            {% elif st == 'grace' %}
+            <p class="bill-hero__k">Everything works until</p>
+            <p class="bill-hero__date">{{ free_day }}</p>
+            <p>Your plan ended on {{ until_day }}. Then the café is on Refero Free for
+                {{ free_days }} days, and pauses after that. Renew before {{ free_day }} to keep
+                it all.</p>
+            {% elif st == 'checking' %}
+            <p class="bill-hero__k">Your plan ended on</p>
+            <p class="bill-hero__date">{{ until_day }}</p>
+            <p>Your payment is being checked, and everything stays on while it is. It shows
+                below as Paid, with its invoice, once it is confirmed.</p>
+            {% elif st == 'free' %}
+            <p class="bill-hero__k">Your café pauses on</p>
+            <p class="bill-hero__date">{{ pause_day }}</p>
+            <p>You are on Refero Free until then. Orders at the counter, the kitchen, billing,
+                the menu and stock all keep working; the rest comes with {{ product }}. Then the
+                café pauses until it subscribes - nothing is deleted.</p>
+            {% else %}
+            <p class="bill-hero__k">Paused since</p>
+            <p class="bill-hero__date">{{ pause_day }}</p>
+            <p>Your café is paused since {{ pause_day }}. Nothing has been lost -
+                {% if admin %}choose a plan below and everything comes back as soon as it is
+                confirmed.{% else %}your café's admin can bring it all back with a plan.{% endif %}</p>
             {% endif %}
         </div>
-
-        <div class="sub-status sub-status--{{ state.status }}" role="status">
-            <i class="bi bi-calendar-event" aria-hidden="true"></i>
-            <span>
-                {% if state.status == 'lifetime' %}
-                Your plan never ends - it is on the house, with every feature, for good.
-                {% elif state.status == 'trial' %}
-                Your free trial ends on {{ until_day }}. Choose a plan any time before then -
-                it starts when the trial finishes, so no free day is lost.
-                {% elif state.status == 'active' %}
-                Your {{ state.label|lower }} plan is active until {{ until_day }}. Renewing
-                early adds to the end of it.
-                {% elif state.status == 'grace' %}
-                Your plan ended on {{ until_day }}. Everything keeps working until
-                {{ free_day }}; then the café is on Refero Free for {{ free_days }} days, and
-                pauses after that. Renew before {{ free_day }} to keep it all.
-                {% elif state.status == 'checking' %}
-                Your plan ended on {{ until_day }}, and your payment is being checked.
-                Everything stays on while it is.
-                {% elif state.status == 'free' %}
-                You are on Refero Free until {{ pause_day }}. Orders at the counter and from
-                the tables, the kitchen, billing, the menu and stock all keep working; what
-                is below comes with Refero Pro. On {{ pause_day }} the café pauses until it
-                subscribes - nothing is deleted.
-                {% elif state.status == 'paused' %}
-                Your café is paused since {{ pause_day }}. Nothing has been lost - choose a
-                plan below and everything comes back as soon as it is confirmed.
-                {% else %}
-                Your café is on Refero. Choose a plan below whenever you are ready.
-                {% endif %}
-            </span>
-        </div>
-
-        {% if state.pending and state.status != 'checking' %}
-        <div class="sub-status sub-status--checking" role="status">
-            <i class="bi bi-hourglass-split" aria-hidden="true"></i>
-            <span>A payment you sent is being checked - usually within a few hours. It shows
-                below as Paid, with its invoice, once it is confirmed.</span>
-        </div>
-        {% endif %}
-
-        {% if awaiting %}
-        <div class="sub-status" role="status">
-            <i class="bi bi-qr-code-scan" aria-hidden="true"></i>
-            <span>You started paying for the {{ awaiting.plan }} plan but have not sent its
-                UPI reference yet.</span>
-            <a class="btn btn--ghost" href="{{ url_for('subscription_pay', reference=awaiting.reference) }}">Continue</a>
-        </div>
-        {% endif %}
     </section>
 
-    {# ---- What Refero Pro unlocks: where every lock leads ---- #}
-    <section class="sub-section" id="unlocks" aria-labelledby="unlocksTitle">
-        <h2 id="unlocksTitle">What Refero Pro unlocks</h2>
-        <p>{% if tier == 'pro' %}All of it is yours.{% elif tier == 'trial' %}Your free trial
-            has most of it already; your own branding and other roles come with Pro.{% else %}On
-            Refero Free these are locked. Subscribe and they open at once - nothing to set up
-            again.{% endif %}</p>
-        <div class="sub-unlocks">
-            {% for item in unlocks %}
-            <article class="sub-unlock{% if not item.open %} sub-unlock--locked{% endif %}{% if item.asked %} sub-unlock--asked{% endif %}"
-                     id="unlock-{{ item.key }}">
-                <span class="sub-unlock__icon" aria-hidden="true">
-                    <i class="bi {{ 'bi-lock-fill' if not item.open else item.icon }}"></i>
-                </span>
-                <div>
-                    <h3>{{ item.title }}</h3>
-                    <p>{{ item.gives }}</p>
-                    <div class="sub-unlock__state">
-                        {% if item.open and tier == 'trial' %}<span class="sub-tag sub-tag--open">In your free trial</span>
-                        {% elif item.open %}<span class="sub-tag sub-tag--open">Unlocked</span>
-                        {% else %}<span class="sub-tag sub-tag--locked"><i class="bi bi-lock-fill"></i> Refero Pro</span>{% endif %}
-                    </div>
-                </div>
-            </article>
-            {% endfor %}
-        </div>
-        {% if not admin and tier != 'pro' %}
-        <p class="sub-ask" style="margin-top:14px;"><i class="bi bi-info-circle"></i>
-            Only your café's admin can subscribe - ask them, and everything above opens for the
-            whole team.</p>
-        {% endif %}
-    </section>
+    {% if state.pending and st != 'checking' %}
+    <p class="bill-note" role="status">
+        <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+        <span>A payment you sent is being checked - usually within a few hours. It shows below
+            as Paid, with its invoice, once it is confirmed.</span>
+    </p>
+    {% endif %}
+
+    {% if awaiting and admin %}
+    <p class="bill-note" role="status">
+        <i class="bi bi-qr-code-scan" aria-hidden="true"></i>
+        <span>You started paying for the {{ awaiting.plan }} plan but have not sent its UPI
+            reference yet.</span>
+        <a class="bill-link" href="{{ url_for('subscription_pay', reference=awaiting.reference) }}">Continue</a>
+    </p>
+    {% endif %}
 
     {# ---- The plans: the admin's ---- #}
-    {% if state.status != 'lifetime' and admin %}
-    <section class="sub-section" id="plans" aria-labelledby="plansTitle">
-        <h2 id="plansTitle">Plans</h2>
-        <p>Everything in Refero, for your whole team. Paid in advance by UPI - nothing is
-            taken again on its own, and you are reminded a week before it ends.</p>
+    {% if st != 'lifetime' and admin %}
+    <section id="plans" aria-labelledby="plansTitle">
+        <div class="bill-sec-head">
+            <div>
+                <h2 id="plansTitle">Choose your {{ product }} plan</h2>
+                <p>Everything your café needs, for your whole team. Pay once by UPI, with no
+                    automatic renewal.</p>
+            </div>
+            <div class="bill-toggle" role="group" aria-label="How often to pay">
+                <button type="button" data-pick="monthly" aria-pressed="true">Monthly</button>
+                <button type="button" data-pick="yearly" aria-pressed="false">Yearly <span>· save {{ yearly_saves }}</span></button>
+            </div>
+        </div>
 
-        <div class="sub-plans">
+        <div class="bill-plans" data-picked="monthly">
             {% for plan in plans %}
             <form method="POST" action="{{ url_for('subscription_choose') }}"
-                  class="sub-plan{% if plan.key == 'yearly' %} sub-plan--best{% endif %}"
-                  data-no-instant>
+                  class="bill-plan bill-plan--{{ plan.key }}" data-plan="{{ plan.key }}" data-no-instant>
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token_value }}">
                 <input type="hidden" name="plan" value="{{ plan.key }}">
-                {% if plan.key == 'yearly' %}<span class="sub-plan__badge">Save {{ yearly_saves }}</span>{% endif %}
-                <h3>{{ product }} · {{ plan.name }}</h3>
-                <p class="sub-plan__price">{{ plan.price }} <small>/ {{ plan.per }}</small></p>
-                <p class="sub-plan__per">
-                    {% if plan.key == 'yearly' %}{{ plan.per_month_text }} a month, paid once a year
-                    {% else %}Paid month by month{% endif %}
+                {% if plan.key == 'yearly' %}
+                <span class="bill-plan__ribbon">Best value</span>
+                <h3>Pro, one easy year</h3>
+                <p class="bill-plan__lede">More savings, same full-featured Refero.</p>
+                {% else %}
+                <h3>Pro, month to month</h3>
+                <p class="bill-plan__lede">A little more room to grow.</p>
+                {% endif %}
+                <p class="bill-plan__price">{{ plan.price }}<small>/ {{ plan.per }}</small></p>
+                <p class="bill-plan__per">
+                    {% if plan.key == 'yearly' %}Just {{ plan.per_month_text }} a month · save {{ yearly_saves }} a year
+                    {% else %}Paid month by month · renew when you like{% endif %}
                 </p>
                 <ul>
-                    <li><i class="bi bi-check2"></i> Orders at the counter and from every table's QR</li>
-                    <li><i class="bi bi-check2"></i> Kitchen screen, billing and receipts</li>
-                    <li><i class="bi bi-check2"></i> Menu, stock, reviews and reports</li>
-                    <li><i class="bi bi-check2"></i> Your whole team, each with their own pages</li>
+                    <li><i class="bi bi-check2" aria-hidden="true"></i>Counter and table QR orders, all in one place</li>
+                    <li><i class="bi bi-check2" aria-hidden="true"></i>Kitchen screen, billing and receipts</li>
+                    <li><i class="bi bi-check2" aria-hidden="true"></i>Menu, stock, reviews and sales reports</li>
+                    <li><i class="bi bi-check2" aria-hidden="true"></i>Every teammate, with their own sign-in</li>
+                    <li><i class="bi bi-check2" aria-hidden="true"></i>Your café's own name and logo</li>
                 </ul>
-                <button type="submit" class="btn btn--primary"{% if not upi_ready %} disabled{% endif %}>
-                    <i class="bi bi-phone"></i> Pay {{ plan.price }} by UPI
+                <button type="submit" class="bill-btn"{% if not upi_ready %} disabled{% endif %}>
+                    Choose {{ plan.name|lower }} · {{ plan.price }}
                 </button>
             </form>
             {% endfor %}
         </div>
+        <p class="bill-assure"><i class="bi bi-check2" aria-hidden="true"></i> Pay securely with any UPI
+            app · No card required · No auto-renewal</p>
         {% if not upi_ready %}
-        <p class="sub-empty" style="margin-top:12px;">Paying online is being set up - please check back soon.</p>
+        <p class="bill-muted">Paying online is being set up - please check back soon.</p>
         {% endif %}
     </section>
     {% endif %}
 
-    {% if admin %}
-    {# ---- How it is paid ---- #}
-    <section class="sub-section" aria-labelledby="payTitle">
-        <h2 id="payTitle">Payment</h2>
-        <p>Any UPI app - Google Pay, PhonePe, Paytm, BHIM or your bank's. The amount and who it
-            goes to are filled in for you.</p>
-        <div class="sub-pay">
-            <span class="sub-pay__logo" aria-hidden="true">UPI</span>
-            <div>
-                <strong>Paid to {{ payee }}</strong>
-                <small>Confirmed against the payment received, then your plan starts.</small>
-            </div>
-        </div>
-    </section>
+    <div class="bill-grid{% if not admin %} bill-grid--one{% endif %}">
 
-    {# ---- Invoices ---- #}
-    <section class="sub-section" aria-labelledby="invoiceTitle">
-        <h2 id="invoiceTitle">Invoices</h2>
-        {% if payments %}
-        <table class="sub-table">
-            <thead>
-                <tr><th>Date</th><th>Plan</th><th>Total</th><th>Status</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
+        {# ---- What each plan includes: where every lock leads ---- #}
+        <section class="bill-card" id="unlocks" aria-labelledby="unlocksTitle">
+            <div class="bill-card__head">
+                <div>
+                    <h2 id="unlocksTitle">What's included?</h2>
+                    <p>{% if tier == 'pro' %}All of it is yours - every row below, for your whole
+                        team.{% elif tier == 'trial' %}Your free trial runs the café - orders,
+                        kitchen, billing, menu and stock. {{ product }} opens the rest the moment
+                        you subscribe.{% else %}On Refero Free the essentials keep working.
+                        Subscribe and the rest opens at once - nothing to set up again.{% endif %}</p>
+                </div>
+                {% if admin and st != 'lifetime' %}
+                <a class="bill-link" href="#plans" data-no-instant>See plan details <i class="bi bi-arrow-up" aria-hidden="true"></i></a>
+                {% endif %}
+            </div>
+            <table class="bill-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Feature</th>
+                        <th scope="col">{{ base_label }}</th>
+                        <th scope="col">{{ product }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in compare %}
+                    <tr{% if row.key %} id="unlock-{{ row.key }}"{% endif %}{% if row.asked %} class="bill-row--asked"{% endif %}>
+                        <th scope="row">{{ row.title }}{% if row.asked %}<small>{{ row.gives }}</small>{% endif %}</th>
+                        <td>{{ cell(row.base) }}</td>
+                        <td class="bill-pro">{{ cell(row.pro) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if not admin and tier != 'pro' %}
+            <p class="bill-ask"><i class="bi bi-info-circle" aria-hidden="true"></i>
+                Only your café's admin can subscribe - ask them, and everything above opens for the
+                whole team.</p>
+            {% endif %}
+        </section>
+
+        {% if admin %}
+        {# ---- Invoices ---- #}
+        <aside class="bill-card" aria-labelledby="invoiceTitle">
+            <div class="bill-card__head">
+                <div>
+                    <h2 id="invoiceTitle">Invoices</h2>
+                    <p>Your payment history and receipts.</p>
+                </div>
+            </div>
+            {% if payments %}
+            <ul class="bill-inv">
                 {% for row in payments %}
-                <tr>
-                    <td>{{ row.day }}</td>
-                    <td>{{ product }} · {{ row.plan_name }}{% if row.period %}<small>{{ row.period }}</small>{% endif %}</td>
-                    <td>{{ row.total }}</td>
-                    <td>
-                        {% if row.status == 'paid' %}<span class="sub-tag sub-tag--paid">Paid</span>
-                        {% elif row.status == 'pending' %}<span class="sub-tag sub-tag--pending">Being checked</span>
-                        {% else %}<span class="sub-tag sub-tag--rejected">Not found</span>{% endif %}
-                    </td>
-                    <td>
+                <li>
+                    <div>
+                        <strong>{{ product }} · {{ row.plan_name }}</strong>
+                        <small>{{ row.day }}{% if row.period %} · {{ row.period }}{% endif %}</small>
+                    </div>
+                    <div class="bill-inv__end">
+                        <span class="bill-inv__total">{{ row.total }}</span>
                         {% if row.status == 'paid' %}
-                        <a class="sub-link" href="{{ url_for('subscription_invoice', payment_id=row.payment_id) }}"
+                        <span class="bill-tag bill-tag--paid">Paid</span>
+                        <a class="bill-link" href="{{ url_for('subscription_invoice', payment_id=row.payment_id) }}"
                            target="_blank" rel="noopener">Download PDF</a>
                         {% elif row.status == 'pending' %}
+                        <span class="bill-tag bill-tag--pending">Being checked</span>
                         <small>UPI ref {{ row.utr }}</small>
                         {% else %}
+                        <span class="bill-tag bill-tag--rejected">Not found</span>
                         <small>{{ row.note or "We could not find this payment in our account." }}</small>
                         {% endif %}
-                    </td>
-                </tr>
+                    </div>
+                </li>
                 {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="sub-empty">No payments yet. Each one you make is listed here, with its invoice.</p>
+            </ul>
+            {% else %}
+            <div class="bill-empty">
+                <span class="bill-empty__icon" aria-hidden="true"><i class="bi bi-receipt"></i></span>
+                <h3>Your invoices will live here</h3>
+                <p>Once your first payment is confirmed, you can download its invoice from this
+                    page.</p>
+            </div>
+            {% endif %}
+            <div class="bill-upi">
+                <i class="bi bi-stars" aria-hidden="true"></i>
+                <p><strong>UPI, made simple.</strong> Pay with Google Pay, PhonePe, Paytm, BHIM or
+                    your bank's UPI app. Paid to {{ payee }} - we confirm your payment before your
+                    plan starts.</p>
+            </div>
+        </aside>
         {% endif %}
-    </section>
-    {% endif %}
+    </div>
 
+    <p class="bill-foot">Questions about billing? <a href="{{ url_for('report_problem') }}">Our team is
+        happy to help.</a></p>
 </div>
 
 <script nonce="{{ csp_nonce() }}">
 (function () {
-    var asked = document.querySelector(".sub-unlock--asked");
+    // Monthly or yearly: the chosen plan's button is the filled one, and
+    // on a phone it is the only card shown.
+    var plans = document.querySelector(".bill-plans");
+    var switches = document.querySelectorAll(".bill-toggle [data-pick]");
+
+    function pick(which) {
+        if (!plans) return;
+        plans.setAttribute("data-picked", which);
+        for (var i = 0; i < switches.length; i++) {
+            switches[i].setAttribute("aria-pressed",
+                switches[i].getAttribute("data-pick") === which ? "true" : "false");
+        }
+    }
+
+    for (var i = 0; i < switches.length; i++) {
+        switches[i].addEventListener("click", function () {
+            pick(this.getAttribute("data-pick"));
+        });
+    }
+    if (plans) {
+        plans.addEventListener("click", function (event) {
+            var card = event.target.closest && event.target.closest(".bill-plan");
+            if (card) pick(card.getAttribute("data-plan"));
+        });
+    }
+
+    // Arrived from a lock: its row, picked out, in view.
+    var asked = document.querySelector(".bill-row--asked");
     if (asked && asked.scrollIntoView) asked.scrollIntoView({block: "center"});
 }());
 </script>

@@ -208,6 +208,40 @@ try:
           browser.evaluate("location.pathname") == "/login",
           "the click navigated to %s" % browser.evaluate("location.pathname"))
 
+    # Pressed, the button says what it is doing, and a second press
+    # waits for the first. Held on this page: a listener on the window
+    # runs after the page's own and keeps the form from leaving.
+    browser.evaluate("""
+        (function () {
+            var f = document.getElementById('signInForm');
+            f.cafe_name.value = 'x'; f.username.value = 'x';
+            window.__posts = 0;
+            window.addEventListener('submit', function (e) {
+                if (!e.defaultPrevented) window.__posts += 1;
+                e.preventDefault();
+            });
+            document.querySelector('.auth-button').click();
+        }())
+    """)
+    pressed = browser.evaluate("""
+        (function () {
+            var b = document.querySelector('.auth-button');
+            return {text: b.textContent.trim(), busy: b.classList.contains('is-busy'),
+                    aria: b.getAttribute('aria-busy')};
+        }())
+    """)
+    check("pressed, Sign in says it is signing in, with a spinner",
+          pressed["text"] == "Signing in…" and pressed["busy"] and pressed["aria"] == "true",
+          pressed)
+    browser.evaluate("document.querySelector('.auth-button').click()")
+    check("and a second press does not post the form again",
+          browser.evaluate("window.__posts") == 1,
+          "posted %s times" % browser.evaluate("window.__posts"))
+    wait_for("document.readyState === 'complete'", "the page to finish")
+    time.sleep(0.2)
+    check("once the page has finished, the next page's files are fetched",
+          browser.evaluate("document.querySelectorAll('link[rel=prefetch]').length") >= 4)
+
     click_toggle()
     check("clicking again puts the mask back",
           field_type("input[name=password]") == "password",
