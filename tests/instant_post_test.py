@@ -347,7 +347,20 @@ try:
     browser.evaluate("location.href = '/categories/add'")
     wait_for("!!document.querySelector('[name=category_name]')",
              "the add-category form")
-    time.sleep(0.4)
+
+    # Settled means quiet: nothing static asked for in the last 0.6s. The
+    # browser fetches what the page asks of it after the page itself - a
+    # headline's typeface, the home-screen icon - and on a busy machine
+    # one of them landed after a fixed 0.4s pause and was counted
+    # against the post below, once in two dozen full runs.
+    def statics():
+        return len([1 for method, p in LOADS
+                    if method == "GET" and p.startswith("/static/")])
+    seen, quiet_from = statics(), time.time()
+    while time.time() - quiet_from < 0.6:
+        time.sleep(0.1)
+        if statics() != seen:
+            seen, quiet_from = statics(), time.time()
 
     # Mark and count only once the page is settled: setting location.href
     # above is itself a full navigation, and marking before it would be
