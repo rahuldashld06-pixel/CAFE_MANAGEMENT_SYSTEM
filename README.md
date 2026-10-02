@@ -19,7 +19,7 @@ branding, fully isolated from the others.
 ## What it does
 
 - **Public signup.** `/register` creates a cafe and its admin, with a
-  month of Refero Pro free.
+  15-day free trial.
 - **One admin per cafe.** The account that created the cafe is its admin,
   and the only one: the settings, the team and the subscription are its,
   and every food, category and order is filed under it, so it cannot be
@@ -27,7 +27,7 @@ branding, fully isolated from the others.
   with the pages their admin ticks. There is no separate "owner". Cafes
   from before this keep their creating account as admin; any other admin
   they had becomes a manager.
-- **Refero Pro: a month free, then Monthly or Yearly.** Rs 650 a month,
+- **Refero Pro: 15 days free, then Monthly or Yearly.** Rs 650 a month,
   or Rs 6,000 a year (Rs 500 a month). Under Subscription in the admin's
   profile menu: the plan and when it ends, the two plans, how it is paid,
   and every invoice - each one printable or saved as a PDF. Paid by UPI
@@ -40,8 +40,12 @@ branding, fully isolated from the others.
   trial) ends, so paying early loses nothing. A UPI reference can be
   used once. Prepaid - nothing is taken again by itself: a reminder on
   every page from a week before the end, three days' grace after it,
-  and then the cafe is on Refero Free. Nothing is deleted, and a payment
-  being checked counts as Pro for three days meanwhile. Cards cannot be
+  then fifteen days of Refero Free (below), and then the cafe rests
+  until it subscribes - its staff are told to ask the admin, the table
+  QR sends customers to the counter, and the admin can still sign in
+  and pay. The same after a trial as after a paid plan. Nothing is
+  deleted, and a payment being checked counts as Pro for three days
+  meanwhile. Cards cannot be
   taken this way: a UPI app can, and the app cannot tell on its own that
   money arrived, which is why a person confirms it.
 - **Free, trial and Pro.** What each plan opens is `PLAN_FEATURES` in
@@ -981,7 +985,7 @@ python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
 python tests/customer_menu_browser_test.py # expect PASSED: 69  FAILED: 0
 python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
 python tests/error_pages_test.py  # expect PASSED: 36  FAILED: 0
-python tests/subscription_test.py # expect PASSED: 83  FAILED: 0
+python tests/subscription_test.py # expect PASSED: 98  FAILED: 0
 python tests/console_test.py      # expect PASSED: 50  FAILED: 0
 ```
 

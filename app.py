@@ -1662,6 +1662,10 @@ TABLE_ORDERING_PAUSED = (
 
 
 def table_ordering_open(cafe):
+    # A paused cafe takes no orders from the table either: customers get
+    # the same kind word to order at the counter.
+    if cafe and plan_state(cafe)["paused"]:
+        return False
     value = (cafe or {}).get("qr_ordering")
     return True if value is None else bool(value)
 
@@ -2760,14 +2764,14 @@ def next_food_no(cursor, owner_id):
 
 def _start_plans(cursor):
     """
-    Every cafe from before plans starts a month's free trial today.
+    Every cafe from before plans starts the free trial today.
 
     Once: after the first pass no cafe is left without a plan, so later
     boots run one update that finds nothing.
     """
     cursor.execute(
         "UPDATE cafes SET plan = 'trial', plan_until = %s WHERE plan IS NULL",
-        (add_months(utc_now(), PLAN_TRIAL_MONTHS),))
+        (utc_now() + timedelta(days=PLAN_TRIAL_DAYS),))
 
 
 def _settle_one_admin(cursor):
@@ -9424,7 +9428,7 @@ def register():
             cur.execute("""INSERT INTO users(username,password_hash,full_name,role,is_active,phone_number,email,cafe_id)
                          VALUES(%s,%s,%s,'admin',1,%s,%s,%s)""",(username,generate_password_hash(password),full_name,phone or None,email or None,cid))
             uid=cur.lastrowid
-            # Its admin, and a month free to see whether it suits them.
+            # Its admin, and fifteen days free to see whether it suits them.
             plan, until = new_cafe_plan()
             cur.execute('UPDATE cafes SET owner_user_id=%s, plan=%s, plan_until=%s WHERE cafe_id=%s',
                         (uid, plan, until, cid)); c.commit()
@@ -9992,6 +9996,17 @@ def require_login():
         if wants_json_response() or request.path.startswith("/api/"):
             return jsonify({"error": "Not one of your pages."}), 403
         return redirect(landing_url(user))
+
+    # Refero Free has run its fifteen days: the cafe rests until it
+    # subscribes. Its admin is taken to Subscription; everybody else is
+    # told, kindly, who can bring it back. Nothing is deleted.
+    plan = g.get("cafe_plan")
+    if plan and plan["paused"] and request.endpoint not in PLAN_OPEN_ENDPOINTS:
+        if wants_json_response() or request.path.startswith("/api/"):
+            return jsonify({"error": ERROR_WORDS["paused"]["said"]}), 402
+        if user.get("role") == "admin":
+            return redirect(url_for("subscription"))
+        return error_page(402, "paused")
 
     # A page that is a Pro feature, on a plan without it: the Subscription
     # page, at that feature's line, says what it holds and how to have it.
@@ -12806,7 +12821,7 @@ def ai_catalog():
 # ==========================================================
 # The subscription
 #
-# A new cafe has a month free. After it, Refero Pro is Monthly
+# A new cafe has fifteen days free. After it, Refero Pro is Monthly
 # (Rs 650) or Yearly (Rs 6,000 - Rs 500 a month), paid by UPI
 # straight into the developer's own account: the amount, the
 # payee's name and our reference are filled in for the admin,
@@ -12815,13 +12830,15 @@ def ai_catalog():
 # received, in the console, and the plan runs on from the day
 # the last one ends - a payment made early loses nothing.
 #
-# Prepaid: nothing is taken again by itself. Reminders from a
-# week before the end; three days' grace after it; then the
-# cafe is on Refero Free - it keeps taking orders, at the
-# counter and from the tables, with the Pro parts locked
-# (PLAN_FEATURES). Nothing is deleted, and paying unlocks it
-# all at once. A payment being checked counts as Pro for three
-# days meanwhile.
+# Prepaid: nothing is taken again by itself. When a trial or a
+# plan ends: reminders from a week before; three days' grace,
+# working as before; then fifteen days of Refero Free - still
+# taking orders, with the Pro parts locked (PLAN_FEATURES); then
+# the cafe rests until it subscribes - its staff are told to ask
+# the admin, the table QR sends customers to the counter, and the
+# admin can still sign in and pay. Nothing is deleted, and paying
+# brings everything back at once. A payment being checked counts
+# as Pro for three days meanwhile.
 #
 #   Free   orders, kitchen, billing, menu, stock, table QR; one
 #          teammate, as staff. Locked: sales figures, stock
@@ -12830,8 +12847,12 @@ def ai_catalog():
 #   Pro    everything.
 # ==========================================================
 
-PLAN_TRIAL_MONTHS = 1
+# Long enough to run a few busy days on it; short enough to decide.
+# Trials already running keep the end they were given.
+PLAN_TRIAL_DAYS = 15
 PLAN_GRACE_DAYS = 3
+# Refero Free, after the grace, before the cafe rests.
+PLAN_FREE_DAYS = 15
 PLAN_REMIND_DAYS = 7
 PLAN_PRODUCT = "Refero Pro"
 
@@ -12886,6 +12907,15 @@ PLAN_LOCKED_ENDPOINTS = {
     "branding": "branding",
 }
 
+# What a paused cafe's people can still open: the way to pay, their own
+# account, telling us something is wrong, and signing out.
+PLAN_OPEN_ENDPOINTS = {
+    "subscription", "subscription_choose", "subscription_pay",
+    "subscription_invoice", "logout", "change_password", "account_photo",
+    "user_media", "order_status_feed", "tutorial_seen", "timezone_guess",
+    "report_problem", "client_error",
+}
+
 # Teammates a Free cafe can have besides its admin.
 FREE_TEAM_LIMIT = 1
 TIER_LABELS = {"free": "Refero Free", "trial": "Free trial", "pro": "Refero Pro"}
@@ -12923,8 +12953,9 @@ def plan_state(row, now=None):
 
     status is one of trial, active, lifetime, grace (ended, still
     working as before), checking (past grace but a payment is being
-    checked), free - or open, for a cafe from before plans that has not
-    yet been given its trial, which counts as a trial.
+    checked), free (Refero Free, for PLAN_FREE_DAYS), paused - or open,
+    for a cafe from before plans that has not yet been given its trial,
+    which counts as a trial.
     """
     now = now or utc_now()
     row = row or {}
@@ -12933,8 +12964,9 @@ def plan_state(row, now=None):
     pending_at = _moment(row.get("plan_pending_at"))
 
     state = {"plan": plan or None, "label": PLAN_LABELS.get(plan, plan),
-             "until": until, "pause_at": None, "days_left": None,
-             "pending": pending_at is not None, "remind": False}
+             "until": until, "free_at": None, "pause_at": None,
+             "days_left": None, "free_left": None,
+             "pending": pending_at is not None, "paused": False, "remind": False}
 
     if plan == "lifetime":
         state["status"] = "lifetime"
@@ -12943,22 +12975,29 @@ def plan_state(row, now=None):
         state["status"] = "open"
         return state
 
-    pause_at = until + timedelta(days=PLAN_GRACE_DAYS)
+    free_at = until + timedelta(days=PLAN_GRACE_DAYS)
+    pause_at = free_at + timedelta(days=PLAN_FREE_DAYS)
     checking = (pending_at is not None
                 and now < pending_at + timedelta(days=PLAN_GRACE_DAYS))
     if now < until:
         status = "trial" if plan == "trial" else "active"
-    elif now < pause_at:
+    elif now < free_at:
         status = "grace"
     elif checking:
         status = "checking"
-    else:
+    elif now < pause_at:
         status = "free"
+    else:
+        status = "paused"
 
     days_left = (max(1, math.ceil((until - now).total_seconds() / 86400))
                  if now < until else 0)
+    free_left = (max(1, math.ceil((pause_at - now).total_seconds() / 86400))
+                 if status == "free" else 0)
     state.update({
-        "status": status, "pause_at": pause_at, "days_left": days_left,
+        "status": status, "free_at": free_at, "pause_at": pause_at,
+        "days_left": days_left, "free_left": free_left,
+        "paused": status == "paused",
         "remind": (status in ("grace", "checking")
                    or (status in ("trial", "active")
                        and days_left <= PLAN_REMIND_DAYS)),
@@ -12968,7 +13007,7 @@ def plan_state(row, now=None):
 
 def new_cafe_plan():
     """
-    What a newly registered cafe starts on: the month's free trial.
+    What a newly registered cafe starts on: the 15-day free trial.
 
     NEW_CAFE_PLAN=lifetime starts every new cafe on Pro instead - for the
     test suite, whose cafes are there to test orders and kitchens, not
@@ -12976,7 +13015,7 @@ def new_cafe_plan():
     """
     if not IS_PRODUCTION and os.environ.get("NEW_CAFE_PLAN") == "lifetime":
         return "lifetime", PLATFORM_LIFETIME_UNTIL
-    return "trial", add_months(utc_now(), PLAN_TRIAL_MONTHS)
+    return "trial", utc_now() + timedelta(days=PLAN_TRIAL_DAYS)
 
 
 def plan_tier(state):
@@ -13164,7 +13203,7 @@ def inject_plan():
             notice = {"tone": "warn", "icon": "bi-exclamation-circle",
                       "text": "Your plan ended on %s. Everything keeps working "
                               "until %s - renew before then." % (
-                                  end, plan_day(state["pause_at"], cafe_id)),
+                                  end, plan_day(state["free_at"], cafe_id)),
                       "action": url_for("subscription"), "action_label": "Renew now"}
         else:
             notice = {"tone": "warn", "icon": "bi-exclamation-circle",
@@ -13174,13 +13213,26 @@ def inject_plan():
         notice = {"tone": "info", "icon": "bi-hourglass-split",
                   "text": "Your payment is being checked. Everything stays on "
                           "while it is.", "action": None}
-    elif status == "free" and admin and (request.endpoint or "") in ("home", "dashboard"):
-        notice = {"tone": "info", "icon": "bi-lock",
-                  "text": "You are on Refero Free. Sales figures, stock alerts, "
-                          "reviews, reports and your own branding come with "
-                          "Refero Pro.",
-                  "action": url_for("subscription", _anchor="unlocks"),
-                  "action_label": "See what Pro unlocks"}
+    elif status == "free":
+        pause_day = plan_day(state["pause_at"], cafe_id)
+        soon = state["free_left"] <= PLAN_REMIND_DAYS
+        if admin and soon:
+            notice = {"tone": "warn", "icon": "bi-pause-circle",
+                      "text": "On Refero Free, your café pauses in %s, on %s, "
+                              "unless it subscribes." % (days_word(state["free_left"]), pause_day),
+                      "action": url_for("subscription"), "action_label": "See plans"}
+        elif admin and (request.endpoint or "") in ("home", "dashboard"):
+            notice = {"tone": "info", "icon": "bi-lock",
+                      "text": "You are on Refero Free until %s. Sales figures, "
+                              "stock alerts, reviews, reports and your own "
+                              "branding come with Refero Pro." % pause_day,
+                      "action": url_for("subscription", _anchor="unlocks"),
+                      "action_label": "See what Pro unlocks"}
+        elif not admin and state["free_left"] <= 3:
+            notice = {"tone": "warn", "icon": "bi-pause-circle",
+                      "text": "This café pauses on %s unless it subscribes - "
+                              "please let your admin know." % pause_day,
+                      "action": None}
 
     # Not on the page that is all about the plan already.
     if (request.endpoint or "").startswith("subscription"):
@@ -13199,7 +13251,9 @@ def inject_plan():
         elif status in ("grace", "checking"):
             badge = {"text": "Renew", "tone": "warn"}
         elif status == "free":
-            badge = {"text": "Free", "tone": "info"}
+            badge = {"text": "Free", "tone": "warn" if state["free_left"] <= PLAN_REMIND_DAYS else "info"}
+        elif status == "paused":
+            badge = {"text": "Paused", "tone": "bad"}
     return {"plan_notice": notice, "plan_badge": badge}
 
 
@@ -13275,7 +13329,9 @@ def subscription():
         state=state,
         cafe_name=cafe.get("cafe_name") or "",
         until_day=plan_day(state["until"], cafe_id),
+        free_day=plan_day(state["free_at"], cafe_id),
         pause_day=plan_day(state["pause_at"], cafe_id),
+        free_days=PLAN_FREE_DAYS,
         plans=[dict(PLANS[key], key=key, price=rupees(PLANS[key]["amount"]),
                     per_month_text=rupees(PLANS[key]["per_month"]))
                for key in ("monthly", "yearly")],
@@ -13994,7 +14050,7 @@ def platform_home():
             "trial": states.count("trial"),
             "paying": states.count("active"),
             "lifetime": states.count("lifetime"),
-            "attention": sum(states.count(k) for k in ("grace", "checking", "free")),
+            "attention": sum(states.count(k) for k in ("grace", "checking", "free", "paused")),
             "revenue": rupees(revenue),
         },
         errors_open=errors_open,
@@ -14269,6 +14325,12 @@ ERROR_WORDS = {
                    "the developer. Please try again in a moment.",
           "said": "Something went wrong on our side and that was not "
                   "saved. Please try again."},
+    "paused": {"title": "Plan ended",
+               "heading": "This café's plan has ended",
+               "words": "Nothing has been lost - the menu, orders and figures "
+                        "are all kept. Your café's admin can subscribe from "
+                        "Subscription, and everything comes back at once.",
+               "said": "This café's plan has ended. Ask your admin to subscribe."},
     503: {"title": "Briefly unavailable",
           "heading": "We are briefly unavailable",
           "words": "Please try again in a minute.",
@@ -14315,6 +14377,10 @@ def error_page(status, kind=None):
         home, home_label = _error_way_out()
     except Exception:
         home, home_label = "/", "Home"
+    if kind == "paused":
+        # Every page is resting, so "back to the app" would only come
+        # back here.
+        home, home_label = url_for("logout"), "Sign out"
 
     try:
         html = app.jinja_env.get_template("error.html").render(

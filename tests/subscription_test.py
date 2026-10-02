@@ -1,10 +1,10 @@
 """
-The subscription: a month free, then Monthly (Rs 650) or Yearly (Rs 6,000),
+The subscription: 15 days free, then Monthly (Rs 650) or Yearly (Rs 6,000),
 paid by UPI straight into the developer's account and confirmed by hand.
 
 What has to hold:
 
-  * a new cafe starts a month's free trial; cafes from before plans get
+  * a new cafe starts a 15-day free trial; cafes from before plans get
     one too;
   * only the cafe's admin sees and pays for the plan;
   * the UPI link carries the developer's UPI ID, the name on the account,
@@ -13,9 +13,11 @@ What has to hold:
     twice;
   * a confirmed payment runs on from the day the current plan ends, and
     its invoice is the cafe's alone;
-  * reminders from a week before; three days' grace; then the cafe is on
-    Refero Free - it keeps taking orders, with Pro's parts locked - and
-    paying unlocks them all at once;
+  * reminders from a week before; three days' grace; then fifteen days
+    of Refero Free - still taking orders, with Pro's parts locked; then
+    the cafe rests - staff are told who can bring it back, the admin is
+    taken to pay, the table QR sends customers to the counter - and
+    paying brings everything back at once;
   * Free locks sales figures, stock alerts, reviews, reports, other roles
     and the cafe's own branding, and has room for one teammate as staff;
     a trial has everything but other roles and own branding; every lock
@@ -134,14 +136,14 @@ def approve(payment_id):
 
 
 # =====================================================================
-print("\n=== 1. A new cafe starts with a month free ===")
+print("\n=== 1. A new cafe starts with 15 days free ===")
 # =====================================================================
 admin, CAFE = register("Plan Cafe", "plana")
 plan, until = db("SELECT plan, plan_until FROM cafes WHERE cafe_id = ?", (CAFE,))[0]
 now = application.utc_now()
 check("its plan is the trial", plan == "trial", plan)
-check("which runs a calendar month", moment(until).date() == application.add_months(now, 1).date(),
-      (until, now))
+check("which runs fifteen days",
+      abs((moment(until) - now) - timedelta(days=15)) < timedelta(minutes=1), (until, now))
 
 with admin.session_transaction() as _sess:
     _token = _sess.get("_csrf_token", "")
@@ -210,6 +212,14 @@ check("unless a payment is being checked",
 check("for three days, not for ever",
       state({"plan": "monthly", "plan_until": t - timedelta(days=9),
              "plan_pending_at": t - timedelta(days=4)}, t)["status"] == "free")
+check("fifteen days of Free after the grace, then it rests",
+      state({"plan": "monthly", "plan_until": t - timedelta(days=17)}, t)["status"] == "free"
+      and state({"plan": "monthly", "plan_until": t - timedelta(days=19)}, t)["paused"])
+check("the same after a trial",
+      state({"plan": "trial", "plan_until": t - timedelta(days=19)}, t)["paused"])
+check("a payment being checked keeps a resting cafe working",
+      state({"plan": "monthly", "plan_until": t - timedelta(days=40),
+             "plan_pending_at": t - timedelta(days=1)}, t)["status"] == "checking")
 check("a lifetime plan never ends",
       state({"plan": "lifetime", "plan_until": t - timedelta(days=900)}, t)["status"] == "lifetime")
 
@@ -439,6 +449,47 @@ check("on Pro the cafe's own name comes back - it was kept", "Plan Cafe Brand" i
 check("Name & Symbol opens", admin.get("/settings/branding").status_code == 200)
 check("and any role can be added",
       "Refero Pro" not in text(admin.get("/users/add")).split('id="userRoleSelect"')[1].split("</select>")[0])
+
+# =====================================================================
+print("\n=== 5c. After fifteen days of Free, the cafe rests ===")
+# =====================================================================
+set_until(CAFE, now - timedelta(days=16), plan="monthly")
+dash = text(admin.get("/dashboard"))
+check("two days before, the admin is told when it will pause",
+      "your café pauses in" in dash and "See plans" in dash)
+check("and so is the team", "please let your admin know" in text(cashier.get("/orders/add")))
+
+set_until(CAFE, now - timedelta(days=19), plan="monthly")
+staff_page = cashier.get("/orders/add")
+check("then a teammate gets the plan-ended page, not the till",
+      staff_page.status_code == 402 and "plan has ended" in text(staff_page), staff_page.status_code)
+check("which says nothing has been lost, and offers to sign out",
+      "Nothing has been lost" in text(staff_page) and 'href="/logout"' in text(staff_page))
+check("the cafe's script requests are answered 402 too",
+      cashier.get("/api/kitchen/board").status_code == 402)
+check("the admin is taken to Subscription",
+      admin.get("/dashboard").headers.get("Location", "").endswith("/subscription"))
+page = text(admin.get("/subscription"))
+check("which says it is paused and that nothing is lost",
+      "paused since" in page and "Nothing has been lost" in page)
+check("and can be paid from", choose(admin, "monthly").status_code == 302)
+check("its profile menu says Paused",
+      re.search(r'plan-chip--bad">Paused<', page) is not None)
+with app.test_request_context():
+    _conn = application.get_db_connection()
+    _cur = _conn.cursor(dictionary=True)
+    _row = application.cafe_for_token(_cur, token, fresh=True)
+    _cur.close()
+    _conn.close()
+check("the table QR takes no orders - customers are sent kindly to the counter",
+      _row is not None and not application.table_ordering_open(_row))
+check("a teammate can still report a problem",
+      cashier.get("/report-problem").status_code == 200)
+
+set_until(CAFE, now - timedelta(days=19), plan="monthly", pending=now - timedelta(hours=2))
+check("a payment being checked brings it back meanwhile",
+      cashier.get("/orders/add").status_code == 200
+      and admin.get("/reviews").status_code == 200)
 
 # =====================================================================
 print("\n=== 6. Free for life ===")

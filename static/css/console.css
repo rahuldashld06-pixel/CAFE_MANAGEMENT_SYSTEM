@@ -246,7 +246,7 @@ code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
     font-weight: 800;
     white-space: nowrap;
 }
-.con-chip--crash, .con-chip--database, .con-chip--health, .con-chip--security { background: rgba(240, 128, 110, .18); color: var(--c-bad); }
+.con-chip--crash, .con-chip--database, .con-chip--health, .con-chip--security, .con-chip--paused { background: rgba(240, 128, 110, .18); color: var(--c-bad); }
 .con-chip--slow, .con-chip--browser, .con-chip--grace, .con-chip--checking { background: rgba(242, 201, 76, .15); color: var(--c-warn); }
 .con-chip--report { background: rgba(143, 184, 232, .16); color: #8FB8E8; }
 .con-chip--ok, .con-chip--active, .con-chip--lifetime { background: rgba(143, 187, 153, .16); color: var(--c-good); }

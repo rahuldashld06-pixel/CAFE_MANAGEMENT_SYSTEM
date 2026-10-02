@@ -220,10 +220,13 @@
                 <p>{{ state.label }}</p>
                 {% elif state.status == 'free' %}
                 <h2 id="planTitle">Refero Free</h2>
-                <p>The essentials, free for good</p>
+                <p>The essentials, until {{ pause_day }}</p>
+                {% elif state.status == 'paused' %}
+                <h2 id="planTitle">Paused</h2>
+                <p>Everything is kept, waiting for a plan</p>
                 {% elif state.plan == 'trial' %}
                 <h2 id="planTitle">{{ product }} · Free trial</h2>
-                <p>A month free - all but other roles and your own branding</p>
+                <p>15 days free - all but other roles and your own branding</p>
                 {% else %}
                 <h2 id="planTitle">{{ product }}</h2>
                 <p>{{ cafe_name }}</p>
@@ -249,15 +252,19 @@
                 early adds to the end of it.
                 {% elif state.status == 'grace' %}
                 Your plan ended on {{ until_day }}. Everything keeps working until
-                {{ pause_day }}; after that the café is on Refero Free - renew before then
-                to keep it all.
+                {{ free_day }}; then the café is on Refero Free for {{ free_days }} days, and
+                pauses after that. Renew before {{ free_day }} to keep it all.
                 {% elif state.status == 'checking' %}
                 Your plan ended on {{ until_day }}, and your payment is being checked.
                 Everything stays on while it is.
                 {% elif state.status == 'free' %}
-                You are on Refero Free. Orders at the counter and from the tables, the
-                kitchen, billing, the menu and stock all keep working. What is below comes
-                with Refero Pro, the moment it is paid for.
+                You are on Refero Free until {{ pause_day }}. Orders at the counter and from
+                the tables, the kitchen, billing, the menu and stock all keep working; what
+                is below comes with Refero Pro. On {{ pause_day }} the café pauses until it
+                subscribes - nothing is deleted.
+                {% elif state.status == 'paused' %}
+                Your café is paused since {{ pause_day }}. Nothing has been lost - choose a
+                plan below and everything comes back as soon as it is confirmed.
                 {% else %}
                 Your café is on Refero. Choose a plan below whenever you are ready.
                 {% endif %}
