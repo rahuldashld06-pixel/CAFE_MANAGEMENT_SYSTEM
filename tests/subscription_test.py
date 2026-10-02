@@ -1,5 +1,6 @@
 """
-The subscription: 15 days free, then Monthly (Rs 650) or Yearly (Rs 6,000),
+The subscription: 15 days free, then Monthly (Rs 750) or Yearly (Rs 7,800 -
+Rs 650 a month),
 paid by UPI straight into the developer's account and confirmed by hand.
 
 What has to hold:
@@ -158,9 +159,15 @@ page = text(admin.get("/subscription"))
 check("the admin's Plan & billing page says when the trial ends",
       "Your trial ends" in page and application.plan_day(moment(until)) in page)
 check("with a pill saying the trial is on", "Free trial active" in page)
-check("offering Monthly at Rs 650 and Yearly at Rs 6,000 - saving Rs 1,800",
-      "Choose monthly · ₹650" in page and "Choose yearly · ₹6,000" in page
-      and "save ₹1,800" in page)
+check("offering Monthly at Rs 750 and Yearly at Rs 7,800 - saving Rs 1,200",
+      "Choose monthly · ₹750" in page and "Choose yearly · ₹7,800" in page
+      and "save ₹1,200" in page)
+check("the yearly plan says it is Rs 650 a month", "Just ₹650 a month" in page)
+check("rupees are grouped the Indian way",
+      application.rupees(Decimal("123456")) == "₹1,23,456"
+      and application.rupees(Decimal("12345678.50")) == "₹1,23,45,678.50"
+      and application.rupees(Decimal("750.00")) == "₹750"
+      and application.rupees(Decimal("7800")) == "₹7,800", application.rupees(Decimal("123456")))
 check("and showing who is paid", "Paid to Rahul Dash" in page)
 check("with no invoices yet, it says where they will be",
       "Your invoices will live here" in page)
@@ -265,7 +272,16 @@ check("the pay page opens the UPI app", link is not None)
 query = parse_qs(urlparse(link.group(1).replace("&amp;", "&")).query) if link else {}
 check("paid to the developer's UPI ID", query.get("pa") == ["refero.dev@okaxis"], query)
 check("under the name on the account", query.get("pn") == ["Rahul Dash"], query)
-check("for exactly Rs 650.00, in rupees", query.get("am") == ["650.00"] and query.get("cu") == ["INR"], query)
+check("for exactly Rs 750.00, in rupees", query.get("am") == ["750.00"] and query.get("cu") == ["INR"], query)
+
+# Started at an old price and not yet paid: it asks today's.
+db("UPDATE plan_payments SET amount = 650 WHERE reference = ?", (reference,))
+again = re.search(r'href="(upi://pay\?[^"]+)"', text(admin.get(location)))
+again = parse_qs(urlparse(again.group(1).replace("&amp;", "&")).query) if again else {}
+check("a payment started before the price changed asks today's price",
+      again.get("am") == ["750.00"]
+      and Decimal(str(db("SELECT amount FROM plan_payments WHERE reference = ?",
+                         (reference,))[0][0])) == Decimal("750"), again)
 check("with our reference in the note, to match it in the statement",
       reference in (query.get("tn") or [""])[0], query)
 check("and a code to scan from a computer", "<svg" in page and "Scan with any UPI app" in page)
@@ -313,7 +329,7 @@ invoice = admin.get("/subscription/invoice/%d" % payment_id)
 html = text(invoice)
 check("the invoice is numbered and says who paid whom, how much",
       invoice.status_code == 200 and re.search(r"RF-\d{4}-\d{5}", html)
-      and "Plan Cafe" in html and "Rahul Dash" in html and "₹650" in html
+      and "Plan Cafe" in html and "Rahul Dash" in html and "₹750" in html
       and "427812345678" in html)
 check("another cafe's admin cannot open it", other.get("/subscription/invoice/%d" % payment_id).status_code == 404)
 check("nor can a cashier", cashier.get("/subscription/invoice/%d" % payment_id).status_code in (302, 303))

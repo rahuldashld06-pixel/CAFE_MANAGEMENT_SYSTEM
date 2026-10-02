@@ -12956,7 +12956,7 @@ def ai_catalog():
 # The subscription
 #
 # A new cafe has fifteen days free. After it, Refero Pro is Monthly
-# (Rs 650) or Yearly (Rs 6,000 - Rs 500 a month), paid by UPI
+# (Rs 750) or Yearly (Rs 7,800 - Rs 650 a month), paid by UPI
 # straight into the developer's own account: the amount, the
 # payee's name and our reference are filled in for the admin,
 # who pays in any UPI app and gives us the UPI reference from
@@ -12991,10 +12991,12 @@ PLAN_REMIND_DAYS = 7
 PLAN_PRODUCT = "Refero Pro"
 
 PLANS = {
-    "monthly": {"name": "Monthly", "months": 1, "amount": Decimal("650.00"),
-                "per": "month", "per_month": Decimal("650")},
-    "yearly": {"name": "Yearly", "months": 12, "amount": Decimal("6000.00"),
-               "per": "year", "per_month": Decimal("500")},
+    "monthly": {"name": "Monthly", "months": 1, "amount": Decimal("750.00"),
+                "per": "month", "per_month": Decimal("750")},
+    # Rs 650 a month, paid for the year: 650 x 12 = 7,800, which is
+    # Rs 1,200 less than twelve months at 750.
+    "yearly": {"name": "Yearly", "months": 12, "amount": Decimal("7800.00"),
+               "per": "year", "per_month": Decimal("650")},
 }
 PLAN_LABELS = {"trial": "Free trial", "monthly": "Monthly", "yearly": "Yearly",
                "lifetime": "Lifetime"}
@@ -13281,10 +13283,22 @@ def days_word(count):
 
 
 def rupees(amount):
-    """Rs 650 or Rs 6,000 - whole rupees, grouped the way they are read."""
-    value = Decimal(str(amount or 0))
-    whole = value == value.to_integral_value()
-    return "\u20b9" + ("{:,.0f}".format(value) if whole else "{:,.2f}".format(value))
+    """
+    Rs 750, Rs 7,800, Rs 1,23,456 - grouped the Indian way, as a rupee
+    amount is read: the last three digits, then twos (lakh, crore).
+    Paise only when there are any.
+    """
+    value = Decimal(str(amount or 0)).quantize(Decimal("0.01"))
+    sign = "-" if value < 0 else ""
+    value = abs(value)
+    whole, paise = str(value).split(".")
+    if len(whole) > 3:
+        head, groups = whole[:-3], [whole[-3:]]
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        whole = ",".join(([head] if head else []) + groups)
+    return "\u20b9" + sign + whole + ("" if paise == "00" else "." + paise)
 
 
 def upi_link(amount, note):
@@ -13611,6 +13625,19 @@ def subscription_pay(reference):
             return error_page(404)
         if payment["status"] != "awaiting":
             return redirect(url_for("subscription"))
+
+        # Not paid yet, so it asks today's price - a payment started before
+        # the price changed would otherwise ask the old one. Only on the
+        # way in: once the UPI reference is sent, what was asked is kept.
+        current = PLANS.get(payment["plan"], {}).get("amount")
+        if (request.method == "GET" and current is not None
+                and Decimal(str(payment["amount"])) != current):
+            cursor.execute(
+                "UPDATE plan_payments SET amount = %s "
+                "WHERE payment_id = %s AND status = 'awaiting'",
+                (current, payment["payment_id"]))
+            connection.commit()
+            payment["amount"] = current
 
         if request.method == "POST":
             utr = re.sub(r"[\s-]+", "", request.form.get("utr") or "")
