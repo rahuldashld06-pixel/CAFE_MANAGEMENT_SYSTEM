@@ -13129,7 +13129,11 @@ def plan_state(row, now=None):
     state = {"plan": plan or None, "label": PLAN_LABELS.get(plan, plan),
              "until": until, "free_at": None, "pause_at": None,
              "days_left": None, "free_left": None,
-             "pending": pending_at is not None, "paused": False, "remind": False}
+             "pending": pending_at is not None, "paused": False, "remind": False,
+             # A payment sent and being checked - for as long as a check
+             # is given. Pro meanwhile, whatever the plan was.
+             "paying": (pending_at is not None
+                        and now < pending_at + timedelta(days=PLAN_GRACE_DAYS))}
 
     if plan == "lifetime":
         state["status"] = "lifetime"
@@ -13189,9 +13193,11 @@ def plan_tier(state):
     if status in ("active", "lifetime", "checking"):
         return "pro"
     if status == "grace":
-        return "pro" if state.get("plan") in PLANS else "trial"
+        return "pro" if (state.get("plan") in PLANS or state.get("paying")) else "trial"
     if status in ("trial", "open"):
-        return "trial"
+        # Bought in the trial: Pro from the moment it is paid for, not
+        # from the day the trial would have ended.
+        return "pro" if state.get("paying") else "trial"
     return "free"
 
 
@@ -13351,8 +13357,9 @@ def approve_plan_payment(cursor, payment_id, now=None):
     cursor.execute("SELECT plan, plan_until FROM cafes WHERE cafe_id = %s FOR UPDATE",
                    (payment["cafe_id"],))
     cafe = cursor.fetchone() or {}
-    until = _moment(cafe.get("plan_until"))
-    start = until if (until and until > now and cafe.get("plan") != "lifetime") else now
+    # A paid plan running on is added to the end of it; a trial is not -
+    # buying Pro ends the trial, and the plan starts now.
+    start = plan_runs_on_from(cafe, now)
     end = add_months(start, PLANS[payment["plan"]]["months"])
 
     cursor.execute("""
@@ -13368,6 +13375,18 @@ def approve_plan_payment(cursor, payment_id, now=None):
     return end
 
 
+def plan_runs_on_from(cafe, now):
+    """
+    Where a plan bought now would join on: the end of a paid plan still
+    running, or now - from a trial (buying Pro ends it), a plan that has
+    ended, or lifetime.
+    """
+    until = _moment(cafe.get("plan_until"))
+    if until and until > now and cafe.get("plan") in PLANS:
+        return until
+    return now
+
+
 def plan_next_start(cursor, cafe_id, cafe, now=None):
     """
     When a plan bought now begins: where what is already paid for ends -
@@ -13377,8 +13396,7 @@ def plan_next_start(cursor, cafe_id, cafe, now=None):
     out and then the year.
     """
     now = now or utc_now()
-    until = _moment(cafe.get("plan_until"))
-    start = until if (until and until > now and cafe.get("plan") != "lifetime") else now
+    start = plan_runs_on_from(cafe, now)
     cursor.execute(
         "SELECT plan FROM plan_payments WHERE cafe_id = %s AND status = 'pending' "
         "ORDER BY payment_id", (cafe_id,))
@@ -13416,18 +13434,21 @@ def plan_timeline(cursor, cafe_id, cafe, now=None):
     if rows and rows[0]["when"] == "next":
         rows.insert(0, {"label": PLAN_LABELS["trial"], "start": None,
                         "end": rows[0]["start"], "when": "now"})
+    on_trial = cafe.get("plan") == "trial"
+    waiting = [row for row in payments if row["status"] == "pending" and row["plan"] in PLANS]
     if not rows:
         until = _moment(cafe.get("plan_until"))
-        if until and until > now:
+        # A trial with a payment being checked is already over in all but
+        # name: it ends the moment the payment is confirmed.
+        if until and until > now and not (on_trial and waiting):
             rows.append({"label": PLAN_LABELS.get(cafe.get("plan"), "Your plan"),
                          "start": None, "end": until, "when": "now"})
-    start = rows[-1]["end"] if rows else now
-    for row in payments:
-        if row["status"] == "pending" and row["plan"] in PLANS:
-            end = add_months(start, PLANS[row["plan"]]["months"])
-            rows.append({"label": PLANS[row["plan"]]["name"], "start": start,
-                         "end": end, "when": "checking"})
-            start = end
+    start = rows[-1]["end"] if (rows and not on_trial) else now
+    for row in waiting:
+        end = add_months(start, PLANS[row["plan"]]["months"])
+        rows.append({"label": PLANS[row["plan"]]["name"], "start": start,
+                     "end": end, "when": "checking"})
+        start = end
     return rows
 
 
@@ -13474,7 +13495,7 @@ def inject_plan():
     end = plan_day(state["until"], cafe_id)
     notice = None
 
-    if status == "trial" and state["remind"] and admin:
+    if status == "trial" and state["remind"] and admin and not state["paying"]:
         notice = {"tone": "info", "icon": "bi-gift",
                   "text": "Your free trial ends in %s, on %s. Choose a plan "
                           "to keep everything running." % (days_word(state["days_left"]), end),
@@ -13528,6 +13549,8 @@ def inject_plan():
     if admin:
         if status == "lifetime":
             badge = {"text": "Lifetime", "tone": "good"}
+        elif status == "trial" and state["paying"]:
+            badge = {"text": "Pro · being checked", "tone": "good"}
         elif status == "trial":
             badge = {"text": "Trial · %s left" % days_word(state["days_left"]),
                      "tone": "warn" if state["remind"] else "info"}
@@ -13782,7 +13805,9 @@ def subscription_pay(reference):
     cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute("SELECT plan, plan_until FROM cafes WHERE cafe_id = %s", (cafe_id,))
-        starts = plan_next_start(cursor, cafe_id, cursor.fetchone() or {})
+        cafe_now = cursor.fetchone() or {}
+        on_trial = cafe_now.get("plan") == "trial"
+        starts = plan_next_start(cursor, cafe_id, cafe_now)
         ends = add_months(starts, plan["months"])
     finally:
         cursor.close()
@@ -13795,6 +13820,7 @@ def subscription_pay(reference):
         plan=plan,
         price=rupees(payment["amount"]),
         later=starts > utc_now() + timedelta(minutes=5),
+        on_trial=on_trial,
         starts_day=plan_day(starts, cafe_id),
         ends_day=plan_day(ends, cafe_id),
         payee=PLATFORM_UPI_NAME or DEFAULT_BRAND_NAME,

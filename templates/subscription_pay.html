@@ -124,6 +124,10 @@
             <span>This plan starts on <strong>{{ starts_day }}</strong>, when your current one
                 ends, and runs to <strong>{{ ends_day }}</strong>. It continues automatically -
                 nothing to do on the day, and no day is lost.</span>
+            {% elif on_trial %}
+            <span>Refero Pro starts <strong>at once</strong> - every feature opens as soon as you
+                send the UPI reference below, and your free trial ends then. The {{ plan.per }}
+                runs from the moment your payment is confirmed.</span>
             {% else %}
             <span>This plan starts as soon as your payment is confirmed, and runs for a
                 {{ plan.per }} from then.</span>
@@ -174,8 +178,13 @@
                     </button>
                 </form>
                 <p class="pay-help">We confirm it against the payment received, usually within a few
-                    hours, and your plan starts then - on from the day your current one ends. Your
-                    café keeps working while we check.</p>
+                    hours.
+                    {% if on_trial %}Refero Pro is on from the moment you send it; once it is
+                    confirmed your plan starts and the free trial ends.
+                    {% elif later %}Once it is confirmed, your plan runs on from {{ starts_day }}, the
+                    day your current one ends. Your café keeps working while we check.
+                    {% else %}Your plan starts once it is confirmed, and your café keeps working while
+                    we check.{% endif %}</p>
             </div>
         </div>
     </section>

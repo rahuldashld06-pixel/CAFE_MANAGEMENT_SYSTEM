@@ -57,8 +57,12 @@ branding, fully isolated from the others.
   exact amount and our reference all filled in (or a QR code to scan
   from a computer), and the admin then gives the 12-digit UPI reference
   from its receipt. The developer finds the credit and approves it in
-  the console; the plan runs on from the day the current one (or the
-  trial) ends, so paying early loses nothing. A UPI reference can be
+  the console. Bought in the free trial, Refero Pro starts at once: every
+  feature opens the moment the UPI reference is sent, and once the payment
+  is confirmed the plan runs from then and the trial is over (turned
+  down, the cafe is back on its trial, its days kept). Bought while a paid
+  plan runs, it runs on from the day that one ends, so paying early loses
+  nothing. A UPI reference can be
   used once. Prepaid - nothing is taken again by itself: a reminder on
   every page from a week before the end, three days' grace after it,
   then fifteen days of Refero Free (below), and then the cafe rests
@@ -1030,7 +1034,7 @@ python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
 python tests/customer_menu_browser_test.py # expect PASSED: 69  FAILED: 0
 python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
 python tests/error_pages_test.py  # expect PASSED: 36  FAILED: 0
-python tests/subscription_test.py # expect PASSED: 130 FAILED: 0
+python tests/subscription_test.py # expect PASSED: 135 FAILED: 0
 python tests/console_test.py      # expect PASSED: 50  FAILED: 0
 ```
 

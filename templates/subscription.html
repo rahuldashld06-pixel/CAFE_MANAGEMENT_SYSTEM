@@ -300,7 +300,9 @@
 </style>
 
 {% set st = state.status %}
-{% if st == 'trial' or st == 'open' %}{% set pill, tone = 'Free trial active', 'good' %}
+{% set trial_paying = (st == 'trial' or st == 'open') and state.paying %}
+{% if trial_paying %}{% set pill, tone = product ~ ' · being checked', 'good' %}
+{% elif st == 'trial' or st == 'open' %}{% set pill, tone = 'Free trial active', 'good' %}
 {% elif st == 'active' %}{% set pill, tone = product ~ ' · ' ~ current_label, 'good' %}
 {% elif st == 'lifetime' %}{% set pill, tone = product ~ ' · Lifetime', 'good' %}
 {% elif st == 'grace' %}{% set pill, tone = 'Plan ended - renew', 'warn' %}
@@ -324,7 +326,14 @@
     <section class="panel bill-hero" aria-labelledby="planTitle">
         <div>
             <div class="bill-hero__lead">
-                {% if st == 'trial' or st == 'open' %}
+                {% if trial_paying %}
+                <span class="bill-hero__icon" aria-hidden="true"><i class="bi bi-gem"></i></span>
+                <div>
+                    <h2 id="planTitle">{{ product }} is on.</h2>
+                    <p>Every feature is open while your payment is checked - usually within a few
+                        hours. Your free trial ends once it is confirmed.</p>
+                </div>
+                {% elif st == 'trial' or st == 'open' %}
                 <span class="bill-hero__icon" aria-hidden="true"><i class="bi bi-stars"></i></span>
                 <div>
                     <h2 id="planTitle">{{ trial_days }} days to find your rhythm.</h2>
@@ -361,7 +370,8 @@
             </div>
 
             <p class="bill-hero__label">
-                {% if st == 'trial' or st == 'open' %}Included during your trial
+                {% if trial_paying %}Yours on {{ product }}
+                {% elif st == 'trial' or st == 'open' %}Included during your trial
                 {% elif st == 'free' %}Still working on Refero Free
                 {% elif st == 'paused' %}Waiting for you
                 {% else %}Yours on {{ product }}{% endif %}
@@ -372,11 +382,16 @@
         </div>
 
         <div class="bill-hero__side">
-            {% if st == 'trial' or st == 'open' %}
+            {% if trial_paying %}
+            <p class="bill-hero__k">Your payment</p>
+            <p class="bill-hero__date">Being checked</p>
+            <p>Once it is confirmed your plan starts and the free trial ends. If it cannot be
+                found, the trial carries on to {{ until_day }}.</p>
+            {% elif st == 'trial' or st == 'open' %}
             <p class="bill-hero__k">Your trial ends</p>
             <p class="bill-hero__date">{{ until_day }}</p>
-            <p>Choose a plan any time before then. Your paid plan starts after the trial, so you
-                won't lose a free day.</p>
+            <p>Buy {{ product }} any time - it starts the moment you pay, every feature opens,
+                and the free trial ends then.</p>
             {% elif st == 'active' %}
             <p class="bill-hero__k">Paid until</p>
             <p class="bill-hero__date">{{ until_day }}</p>
@@ -418,7 +433,7 @@
                     <span class="bill-line__dot" aria-hidden="true"></span>
                     <div>
                         <strong>{% if row.when == 'now' %}Now{% elif row.when == 'next' %}Next{% else %}Being checked{% endif %} · {{ row.label }}</strong>
-                        <small>{% if row.start_day %}{{ row.start_day }} to {{ row.end_day }}{% else %}until {{ row.end_day }}{% endif %}{% if row.when == 'next' %} - starts automatically when the one before it ends{% elif row.when == 'checking' %} - once confirmed, it continues from there{% endif %}</small>
+                        <small>{% if row.start_day %}{{ row.start_day }} to {{ row.end_day }}{% else %}until {{ row.end_day }}{% endif %}{% if row.when == 'next' %} - starts automatically when the one before it ends{% elif row.when == 'checking' and trial_paying %} - Pro is on already; it runs from the moment it is confirmed{% elif row.when == 'checking' %} - once confirmed, it continues from there{% endif %}</small>
                     </div>
                 </li>
                 {% endfor %}
@@ -459,7 +474,13 @@
             </div>
         </div>
 
-        {% if next_start_day %}
+        {% if (st == 'trial' or st == 'open') and not trial_paying %}
+        <p class="bill-note bill-note--go" role="note" style="margin-bottom:16px;">
+            <i class="bi bi-lightning-charge" aria-hidden="true"></i>
+            <span>Buy now and {{ product }} starts <strong>at once</strong> - every feature opens as
+                soon as you send your UPI reference, and your free trial ends.</span>
+        </p>
+        {% elif next_start_day %}
         <p class="bill-note bill-note--go" role="note" style="margin-bottom:16px;">
             <i class="bi bi-calendar-check" aria-hidden="true"></i>
             <span>You're covered until <strong>{{ next_start_day }}</strong>. A plan you buy now

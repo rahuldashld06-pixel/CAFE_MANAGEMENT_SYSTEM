@@ -303,6 +303,15 @@ check("and the cafe is marked as waiting on a check",
 page = text(admin.get("/subscription"))
 check("the invoice list shows it being checked", "Being checked" in page and "427812345678" in page)
 
+# Bought in the trial: Pro at once, while it is checked.
+check("bought in the trial, Pro opens at once - while it is being checked",
+      admin.get("/reviews").status_code == 200 and admin.get("/settings/qr").status_code == 200)
+check("the page says Pro is on and the trial ends once it is confirmed",
+      "Refero Pro is on." in page and "free trial ends once it is confirmed" in page
+      and "Refero Pro · being checked" in page)
+check("and the trial's reminder is not shown any more",
+      "Your free trial ends in" not in text(admin.get("/dashboard")))
+
 other, OTHER = register("Other Cafe", "otherx")
 location2 = choose(other, "yearly").headers["Location"]
 pay(other, location2, "427812345678")
@@ -318,8 +327,11 @@ payment_id = db("SELECT payment_id FROM plan_payments WHERE reference = ?", (ref
 end = approve(payment_id)
 plan, until, pending = db("SELECT plan, plan_until, plan_pending_at FROM cafes WHERE cafe_id = ?", (CAFE,))[0]
 check("the cafe is on Monthly", plan == "monthly", plan)
-check("from the day its trial ended - no free day lost",
-      moment(until) == application.add_months(trial_end, 1), (until, trial_end))
+approved_at = application.utc_now()
+check("confirmed, it starts now - the trial ends there, not on its last day",
+      abs((moment(until) - application.add_months(approved_at, 1)).total_seconds()) < 120
+      and moment(until) < application.add_months(trial_end, 1), (until, trial_end))
+check("and the cafe is on Monthly, not the trial", plan == "monthly")
 check("and nothing is waiting any more", pending is None)
 check("approving it twice does nothing", approve(payment_id) is None)
 
@@ -374,10 +386,11 @@ plan, until = db("SELECT plan, plan_until FROM cafes WHERE cafe_id = ?", (CAFE,)
 check("a year bought early is added to the end of the month already paid",
       plan == "yearly" and moment(until) == application.add_months(monthly_end, 12), (plan, until))
 page = text(admin.get("/subscription"))
-check("the plan, in order: the trial now, then the month, then the year, each on its own",
-      page.index("Now · Free trial") < page.index("Next · Monthly") < page.index("Next · Yearly")
+check("the plan, in order: the month now, then the year, on its own",
+      "Now · Free trial" not in page
+      and page.index("Now · Monthly") < page.index("Next · Yearly")
       and "starts automatically" in page)
-check("and the pill names the plan paid for first, not the trial",
+check("and the pill names the plan running now",
       "Refero Pro · Monthly" in page)
 
 # Turned down: said, and the cafe is not left waiting.
@@ -394,6 +407,9 @@ application.cache_clear()
 page = text(other.get("/subscription"))
 check("a payment that could not be found says why, on the cafe's own page",
       "No credit with this reference reached us." in page and "Not found" in page)
+check("turned down in the trial, the cafe is back on its trial, its days kept and Pro locked again",
+      db("SELECT plan FROM cafes WHERE cafe_id = ?", (OTHER,))[0][0] == "trial"
+      and other.get("/reviews").headers.get("Location", "").endswith("feature=reviews#unlocks"))
 check("and the cafe is not left marked as waiting",
       db("SELECT plan_pending_at FROM cafes WHERE cafe_id = ?", (OTHER,))[0][0] is None)
 
