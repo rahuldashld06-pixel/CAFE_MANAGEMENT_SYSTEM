@@ -531,6 +531,9 @@ check("and the profile menu shows both table QR items locked",
 # what is for subscribers stays locked.
 set_until(CAFE, now + timedelta(days=20), plan="trial")
 dash = text(admin.get("/dashboard"))
+check("a trial wears no crown", 'class="profile-crown"' not in dash)
+check("the watermark behind the page carries the tagline",
+      '<span class="app-watermark__tagline">Calm service, Beautifully run</span>' in dash)
 check("on a trial sales, the average bill and stock to check are locked",
       dash.count("kpi--locked") == 3 and dash.count("panel--locked") == 4)
 check("and their figures are not sent",
@@ -556,6 +559,9 @@ check("and so are other roles", "Cashier - Refero Pro" in text(admin.get("/users
 set_until(CAFE, now + timedelta(days=20), plan="monthly")
 dash = text(admin.get("/dashboard"))
 check("on Pro the cafe's own name comes back - it was kept", "Plan Cafe Brand" in dash)
+check("and Pro wears a crown on the profile picture, in the bar and in the menu",
+      dash.count('class="profile-crown"') == 2 and "profile-avatar--pro" in dash)
+check("on every teammate's too", 'class="profile-crown"' in text(cashier.get("/orders/add")))
 check("Name & Symbol opens", admin.get("/settings/branding").status_code == 200)
 check("and any role can be added",
       "Refero Pro" not in text(admin.get("/users/add")).split('id="userRoleSelect"')[1].split("</select>")[0])

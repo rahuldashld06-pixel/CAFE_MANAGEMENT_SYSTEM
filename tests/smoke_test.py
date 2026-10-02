@@ -197,8 +197,8 @@ def installed_name(html):
 
 
 check("both cafes see the same product name in the shell",
-      "Calm service, beautifully run" in shell_a
-      and "Calm service, beautifully run" in shell_b,
+      "Calm service, Beautifully run" in shell_a
+      and "Calm service, Beautifully run" in shell_b,
       shell_a[:300])
 
 # Where the name is still per-cafe, it must not cross over.

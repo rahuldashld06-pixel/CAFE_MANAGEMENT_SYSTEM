@@ -10779,7 +10779,7 @@ def inject_platform_name():
     """
     return {"platform_name": DEFAULT_BRAND_NAME,
             "platform_tagline": DEFAULT_BRAND_TAGLINE}
-DEFAULT_BRAND_TAGLINE = "Calm service, beautifully run"
+DEFAULT_BRAND_TAGLINE = "Calm service, Beautifully run"
 
 
 # A line for the foot of a customer's bill. Plain sayings rather than
@@ -10888,11 +10888,15 @@ def get_cafe_branding(cafe_id):
         return defaults
 
     version = row["branding_version"] or 1
+    tagline = (row["brand_tagline"] or "").strip()
+    # The default typed back in by hand is still the default - and reads
+    # as it does now, not as it read when it was saved.
+    if tagline.lower() == DEFAULT_BRAND_TAGLINE.lower():
+        tagline = ""
     found = plan_branding({
         "cafe_name": row["cafe_name"] or defaults["cafe_name"],
         "brand_name": (row["brand_name"] or "").strip() or DEFAULT_BRAND_NAME,
-        "brand_tagline": ((row["brand_tagline"] or "").strip()
-                          or DEFAULT_BRAND_TAGLINE),
+        "brand_tagline": tagline or DEFAULT_BRAND_TAGLINE,
         "logo": (
             url_for("cafe_media", cafe_id=cafe_id, kind="logo", v=version)
             if row["has_logo"] else ""
@@ -10915,7 +10919,7 @@ def branding():
     page, so it is a decision about the business rather than a personal
     preference.
 
-    Left alone it reads "Refero / Calm service, beautifully run", which is the
+    Left alone it reads "Refero / Calm service, Beautifully run", which is the
     software's own name rather than anybody's cafe. Clearing a field
     puts that default back rather than leaving a blank corner.
     """

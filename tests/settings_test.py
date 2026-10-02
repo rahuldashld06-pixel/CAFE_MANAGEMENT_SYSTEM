@@ -282,7 +282,7 @@ name, tagline, logo = corner(a)
 check("a cafe that has chosen nothing reads Refero",
       name == "Refero", "it reads %r" % name)
 check("with the line that has always gone under it",
-      tagline == "Calm service, beautifully run", "it reads %r" % tagline)
+      tagline == "Calm service, Beautifully run", "it reads %r" % tagline)
 check("and no uploaded symbol beside it", logo is None,
       "a symbol is drawn where none was set")
 check("the drawn coffee cup stands in until one is uploaded",
@@ -290,7 +290,7 @@ check("the drawn coffee cup stands in until one is uploaded",
       "nothing is drawn in the symbol's place")
 
 missing = [path for path in SHELL_PAGES
-           if "Calm service, beautifully run" not in a.get(path).get_data(as_text=True)]
+           if "Calm service, Beautifully run" not in a.get(path).get_data(as_text=True)]
 check("it is on every page", not missing, "missing from: %s" % missing)
 check("no cup icon is drawn either",
       "bi-cup-hot-fill" not in a.get("/orders/add").get_data(as_text=True),
@@ -357,7 +357,7 @@ a.post("/settings/branding", data={
     content_type="multipart/form-data", follow_redirects=True)
 name, tagline, _ = corner(a)
 check("the name falls back", name == "Refero", "it reads %r" % name)
-check("and so does the tagline", tagline == "Calm service, beautifully run",
+check("and so does the tagline", tagline == "Calm service, Beautifully run",
       "it reads %r" % tagline)
 
 # Put it back for the checks below.

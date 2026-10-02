@@ -6008,15 +6008,17 @@ body.tour-open { overflow: hidden; }
     line-height: 1;
 }
 
+/* The tagline, as the top bar sets it: italic, in its own case - the
+   capital B is part of it. */
 .app-watermark__tagline {
-    margin-top: 1.4vh;
-    font-family: var(--font-body);
-    font-size: min(2.1vh, 1.5vw);
-    font-weight: 800;
-    letter-spacing: .34em;
-    text-transform: uppercase;
+    margin-top: 1.6vh;
+    font-family: var(--font-display);
+    font-size: min(3.4vh, 2.4vw);
+    font-style: italic;
+    font-weight: 600;
+    letter-spacing: .02em;
     white-space: nowrap;
-    opacity: .05;
+    opacity: .06;
     color: var(--watermark-ink);
 }
 
@@ -6905,3 +6907,31 @@ div.food-art {
     }
     .lock-opening__key, .lock-opening__shackle { animation-name: none; }
 }
+
+
+/* ==========================================================
+   Refero Pro wears a crown: a small gold one, set at a tilt on the
+   profile picture, for everybody in a cafe on Pro.
+   ========================================================== */
+.profile-avatar--pro { position: relative; overflow: visible; }
+.profile-crown {
+    position: absolute;
+    top: -9px;
+    left: -6px;
+    z-index: 1;
+    width: 19px;
+    height: 15px;
+    transform: rotate(-24deg);
+    pointer-events: none;
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .55));
+}
+.profile-crown svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.profile-crown path, .profile-crown rect, .profile-crown circle {
+    fill: #F2C94C;
+    stroke: #8A5A12;
+    stroke-width: .9;
+    stroke-linejoin: round;
+}
+.profile-crown rect { fill: #E3A92F; }
+.profile-avatar--lg .profile-crown { top: -10px; left: -7px; width: 23px; height: 18px; }
+.profile-avatar--pro { box-shadow: 0 0 0 2px rgba(242, 201, 76, .55); }

@@ -512,8 +512,10 @@ anyone = app.test_client()
 for path, busy in (("/login", "Signing in…"), ("/register", "Creating your café…"),
                    ("/forgot-password", "Resetting…")):
     html = anyone.get(path).get_data(as_text=True)
-    check("%s shows the round monogram and the name beside it" % path,
-          "brand/refero-monogram.webp" in html and 'class="brand-lockup__name">Refero<' in html)
+    check("%s shows the app's own round R, the name beside it and the tagline" % path,
+          re.search(r'class="brand-monogram">\s*<svg class="brand-glyph brand-glyph--tile', html)
+          and 'class="brand-lockup__name">Refero<' in html
+          and "Calm service, Beautifully run" in html)
     check("%s's button says %r while it works" % (path, busy),
           'data-busy="%s"' % busy in html)
     head = html.split("</head>")[0]

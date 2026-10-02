@@ -34,14 +34,15 @@
         .inv__brand { display: flex; align-items: center; gap: 12px; color: #B8875A; }
         .inv__brand .brand-lockup { display: inline-flex; align-items: center; gap: 12px; }
         .inv__brand .brand-monogram { display: block; width: 64px; height: 64px; border-radius: 50%;
-                                      background: #14201a; box-shadow: 0 0 0 2px #E6D2B4; }
+                                      background: transparent; box-shadow: 0 0 0 2px #E6D2B4; }
+        .inv__brand .brand-monogram svg { display: block; width: 100%; height: 100%; }
         .inv__brand .brand-lockup__text { display: grid; gap: 4px; }
         .inv__brand .brand-lockup__name { color: #2A1C14; font-family: "Fraunces", Georgia, serif;
                                           font-size: 28px; font-weight: 700; letter-spacing: -.3px;
                                           line-height: 1; }
         .inv__brand .brand-lockup__tagline { color: #8A6D58; font-family: "Fraunces", Georgia, serif;
                                              font-size: 13px; font-style: italic; }
-        .inv__brand svg { width: 40px; height: 40px; }
+        .inv__brand > svg { width: 40px; height: 40px; }
         .inv__brand strong { display: block; color: #2A1C14; font-family: "Fraunces", Georgia, serif; font-size: 24px; }
         .inv__brand small { color: #8A6D58; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
         .inv h1 { margin: 0; font-family: "Fraunces", Georgia, serif; font-size: 30px; text-align: right; }

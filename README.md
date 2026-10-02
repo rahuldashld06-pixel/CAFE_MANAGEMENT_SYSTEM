@@ -1,16 +1,15 @@
-# Refero — calm service, beautifully run
+# Refero — Calm service, Beautifully run
 
 A multi-tenant café and restaurant system: Flask + MySQL. Its mark is a
-round gold monogram - an R whose stem is a fork, steam rising in its bowl,
-a chef's hat above it and two leaves at its foot, in a fine gold ring on
-deep green (`static/brand/refero-monogram.webp`). On the sign-in pages,
-the console's door and invoices it stands beside the name, set as the top
-bar sets it, with the tagline - *Calm service, beautifully run* - under
-it; the name and the tagline go together wherever the name is shown.
-Everywhere small - logo tiles, the tab, the home screen - it is a script
-R with a coffee bean and leaves on a cream disc
-(`templates/_brand_mark.html`; the R is Kaushan Script's, OFL, traced to
-a path). Any number of cafes sign up
+script R with a coffee bean and leaves on a cream disc - one logo, inside
+the app and out: the top bar, logo tiles, the tab and the home screen,
+and large on the sign-in pages, the code screen, the console's door and
+invoices, where it stands beside the name with the tagline - *Calm
+service, Beautifully run* - under it (`templates/_brand_mark.html`; the
+R is Kaushan Script's, OFL, traced to a path). The name and the tagline
+go together wherever the name is shown, the watermark behind every page
+included. A cafe on Refero Pro wears a small gold crown on its people's
+profile pictures. Any number of cafes sign up
 through `/register`; each gets its own menu, staff, orders, billing and
 branding, fully isolated from the others.
 
@@ -486,7 +485,7 @@ branding, fully isolated from the others.
   week.
 - **Name and symbol in the top corner.** An admin sets the name, the
   tagline and the symbol the sidebar shows, under Profile -> Name & Symbol.
-  Left alone it reads "Refero / Calm service, beautifully run" beside the Refero
+  Left alone it reads "Refero / Calm service, Beautifully run" beside the Refero
   mark - a cup of coffee inside the C it is named for - and clearing a
   field puts that default back rather than leaving a blank corner. The same name is in the bar that stays at the top on a
   phone.
@@ -1022,7 +1021,7 @@ python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
 python tests/customer_menu_browser_test.py # expect PASSED: 69  FAILED: 0
 python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
 python tests/error_pages_test.py  # expect PASSED: 36  FAILED: 0
-python tests/subscription_test.py # expect PASSED: 126 FAILED: 0
+python tests/subscription_test.py # expect PASSED: 130 FAILED: 0
 python tests/console_test.py      # expect PASSED: 50  FAILED: 0
 ```
 
