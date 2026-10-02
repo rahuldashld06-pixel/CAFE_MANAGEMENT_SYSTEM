@@ -6643,7 +6643,10 @@ div.food-art {
     height: 100%;
 }
 
+/* Round, like the emblem it comes from. */
 .brand-mark:has(> .brand-glyph--tile),
-.topbar-brand__mark:has(> .brand-glyph--tile) {
-    background: #F4EDE2;
+.topbar-brand__mark:has(> .brand-glyph--tile),
+.brand-preview:has(> .brand-glyph--tile) {
+    border-radius: 50%;
+    background: transparent;
 }

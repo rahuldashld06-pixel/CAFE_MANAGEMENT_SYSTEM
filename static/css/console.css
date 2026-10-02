@@ -282,5 +282,14 @@ code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
 }
 
 .con-brand .brand-glyph { border-radius: 8px; }
-.con-emblem { display: block; width: 150px; height: auto; border-radius: 18px;
-              box-shadow: 0 16px 40px -18px rgba(0, 0, 0, .8); }
+.con-emblem {
+    display: block;
+    box-sizing: border-box;
+    width: 150px;
+    height: 150px;
+    padding: 5px;
+    border-radius: 50%;
+    background: #F4EEE4;
+    object-fit: contain;
+    box-shadow: 0 0 0 3px rgba(238, 214, 182, .45), 0 16px 40px -18px rgba(0, 0, 0, .8);
+}

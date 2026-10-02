@@ -4,10 +4,10 @@ A multi-tenant café and restaurant system: Flask + MySQL. Its emblem is a
 café drawn in a brush-stroke ring - a lamp over a table and its chairs, a
 plant - with "Refero" in brush script, a coffee bean for the o, two
 leaves, and "Restaurant and Cafe / Food Management System" beneath
-(`static/brand/refero-emblem.webp`, shown large on the sign-in pages, the
+(`static/brand/refero-emblem.webp`, shown as a round badge on the sign-in pages, the
 console and invoices). Everywhere small - logo tiles, the tab, the home
-screen - it is the monogram drawn from it: the emblem's script R, its bean
-and its leaves on its cream (`templates/_brand_mark.html`; the R is Kaushan
+screen - it is the round monogram drawn from it: the emblem's script R, its bean
+and its leaves on a cream disc (`templates/_brand_mark.html`; the R is Kaushan
 Script's, OFL, traced to a path). Any number of cafes sign up
 through `/register`; each gets its own menu, staff, orders, billing and
 branding, fully isolated from the others.

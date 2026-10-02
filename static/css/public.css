@@ -1494,4 +1494,4 @@ div.food-art {
 /* The Refero monogram fills a cafe's mark tile the way an uploaded logo
    does; it has its own cream ground. */
 .p-head__mark .brand-glyph--tile { width: 100%; height: 100%; }
-.p-head__mark:has(> .brand-glyph--tile) { background: #F4EDE2; }
+.p-head__mark:has(> .brand-glyph--tile) { border-radius: 50%; background: transparent; }
