@@ -50,13 +50,13 @@ def csrf(client):
 def sign_up(client, cafe, username):
     return client.post("/register", data={
         "cafe_name": cafe, "full_name": username.title(), "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def sign_in(client, username):
     return client.post("/login", data={"username": username,
-                                       "password": "password123"},
+                                       "password": "Brew-Latte-42"},
                        follow_redirects=True)
 
 
@@ -129,7 +129,7 @@ check("the profile menu links to the photo page",
 print("\n=== 2. Only an admin may change the rate ===")
 a.post("/users/add", data={
     "full_name": "Till One", "username": "till1", "role": "cashier",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf(a)}, follow_redirects=True)
 
 staff = app.test_client()
@@ -370,11 +370,11 @@ a.post("/settings/branding", data={
 print("\n=== 13. Only an admin may change it, but everyone sees it ===")
 a.post("/users/add", data={
     "full_name": "Cash", "username": "cash2", "role": "cashier",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf(a)}, follow_redirects=True)
 
 cashier = app.test_client()
-cashier.post("/login", data={"username": "cash2", "password": "password123"},
+cashier.post("/login", data={"username": "cash2", "password": "Brew-Latte-42"},
              follow_redirects=True)
 
 check("a cashier sees the name the admin chose",

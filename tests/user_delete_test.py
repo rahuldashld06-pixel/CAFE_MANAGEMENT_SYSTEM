@@ -45,21 +45,21 @@ def sign_up(client, cafe, username):
     return client.post("/register", data={
         "cafe_name": cafe, "full_name": username.title() + " Owner",
         "username": username, "phone_number": "",
-        "password": "password123", "confirm_password": "password123",
+        "password": "Brew-Latte-42", "confirm_password": "Brew-Latte-42",
     }, follow_redirects=True)
 
 
 def add_user(client, username, role):
     return client.post("/users/add", data={
         "full_name": username.title(), "username": username, "role": role,
-        "phone_number": "", "password": "password123",
+        "phone_number": "", "password": "Brew-Latte-42",
         "_csrf_token": csrf(client),
     }, follow_redirects=True)
 
 
 def sign_in(client, username):
     return client.post("/login", data={
-        "username": username, "password": "password123",
+        "username": username, "password": "Brew-Latte-42",
     }, follow_redirects=True)
 
 

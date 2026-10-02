@@ -38,7 +38,7 @@ def check(name, condition, detail=""):
           ("" if condition else "\n          -> %s" % detail))
 
 
-def sign_up(client, cafe, user, pw="password123"):
+def sign_up(client, cafe, user, pw="Brew-Latte-42"):
     """Register a café. No phone number, so sign-in skips the OTP step."""
     return client.post("/register", data={
         "cafe_name": cafe, "full_name": "%s Owner" % user, "username": user,

@@ -766,7 +766,14 @@ page at all is a 404 signed in or out - a customer who mistypes one is
 no longer shown the staff's sign-in.
 
 **Getting in.** Passwords are hashed by Werkzeug (scrypt; older ones
-PBKDF2) - slow on purpose. An admin with a mobile number on file is
+PBKDF2) - slow on purpose. An admin's password must have at least 8
+characters, an uppercase and a lowercase letter, a number and a special
+character, and must not be the username or a common password (P@ssw0rd!
+counts as one) - listed under the box as a checklist that ticks itself
+off as it is typed, and checked again on the server wherever an admin's
+password is set: signing up, changing it, resetting it, and in User
+Management (`PASSWORD_RULES`). A teammate's, set by the admin, needs 8
+characters. An admin with a mobile number on file is
 challenged for a one-time code, which expires and gives up after five
 wrong answers. The code is kept as an HMAC under the app's secret key,
 not with the password hash: slowness never protected six digits, the
@@ -978,7 +985,7 @@ python tests/clock_browser_test.py # expect PASSED: 6   FAILED: 0
 python tests/colours_test.py      # expect PASSED: 54   FAILED: 0
 python tests/colour_browser_test.py # expect PASSED: 14  FAILED: 0
 python tests/list_search_test.py  # expect PASSED: 109  FAILED: 0
-python tests/identity_test.py     # expect PASSED: 110  FAILED: 0
+python tests/identity_test.py     # expect PASSED: 129  FAILED: 0
 python tests/security_test.py     # expect PASSED: 146  FAILED: 0
 python tests/page_head_test.py    # expect PASSED: 101   FAILED: 0
 python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
@@ -992,7 +999,7 @@ python tests/review_test.py       # expect PASSED: 46   FAILED: 0
 python tests/menu_marks_test.py   # expect PASSED: 99   FAILED: 0
 python tests/compression_test.py  # expect PASSED: 42   FAILED: 0
 python tests/username_check_test.py # expect PASSED: 34  FAILED: 0
-python tests/account_fields_browser_test.py # expect PASSED: 27  FAILED: 0
+python tests/account_fields_browser_test.py # expect PASSED: 33  FAILED: 0
 python tests/sign_in_cafe_test.py # expect PASSED: 49   FAILED: 0
 python tests/table_order_test.py  # expect PASSED: 41   FAILED: 0
 python tests/tasks_test.py        # expect PASSED: 45   FAILED: 0

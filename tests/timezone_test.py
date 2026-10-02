@@ -55,8 +55,8 @@ def build(cafe, username):
     client = app.test_client()
     client.post("/register", data={
         "cafe_name": cafe, "full_name": username.title(),
-        "username": username, "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "username": username, "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
     client.post("/categories/add", data={
         "category_name": "Coffee", "description": "",
         "_csrf_token": csrf(client)}, follow_redirects=True)
@@ -215,10 +215,10 @@ check("and so is the number it was given",
 print("\n=== 6. Only an owner sets it, and only to a real place ===")
 admin.post("/users/add", data={
     "full_name": "Till One", "username": "till", "role": "cashier",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf(admin)}, follow_redirects=True)
 cashier = app.test_client()
-cashier.post("/login", data={"username": "till", "password": "password123"},
+cashier.post("/login", data={"username": "till", "password": "Brew-Latte-42"},
              follow_redirects=True)
 
 def stored_zone(cafe_id=1):
@@ -320,8 +320,8 @@ print("\n=== Signing in sets it, and only while nobody has ===")
 fresh = app.test_client()
 fresh.post("/register", data={
     "cafe_name": "Fresh Cafe", "full_name": "New Owner", "username": "newbie",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42",
     "timezone": "Asia/Calcutta"}, follow_redirects=True)
 
 new_cafe = mysql_shim._DB.execute(

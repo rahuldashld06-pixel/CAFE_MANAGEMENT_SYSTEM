@@ -61,8 +61,8 @@ def sign_up(cafe, username):
     client = app.test_client()
     client.post("/register", data={
         "cafe_name": cafe, "full_name": username.title(), "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
     return client
 
 
@@ -137,11 +137,11 @@ check("normalize_theme falls back rather than trusting input",
 print("\n=== 5. It is the cafe's colour, not one person's ===")
 admin.post("/users/add", data={
     "full_name": "Cash", "username": "cash", "role": "cashier",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf(admin)}, follow_redirects=True)
 
 cashier = app.test_client()
-cashier.post("/login", data={"username": "cash", "password": "password123"},
+cashier.post("/login", data={"username": "cash", "password": "Brew-Latte-42"},
              follow_redirects=True)
 
 check("a cashier sees the theme the admin chose",

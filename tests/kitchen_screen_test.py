@@ -101,8 +101,8 @@ print("\n=== 0. A cafe, a menu, and an order from a phone ===")
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Kitchen Cafe", "full_name": "Sam Owner", "username": "sam",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def csrf(client):
@@ -211,7 +211,7 @@ try:
         (function () {
             var f = document.querySelector('form');
             f.querySelector('[name=username]').value = 'sam';
-            f.querySelector('[name=password]').value = 'password123';
+            f.querySelector('[name=password]').value = 'Brew-Latte-42';
             f.submit();
         }())
     """)

@@ -87,8 +87,8 @@ print("\n=== 0. A cafe ===")
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Queue Cafe", "full_name": "Quin Owner", "username": "quin",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def csrf():
@@ -101,7 +101,7 @@ for name in ("Coffee", "Snacks", "Soon Gone", "Stays Put"):
                                        "_csrf_token": csrf()})
 seed.post("/users/add", data={"full_name": "Tia Team", "username": "tia",
                               "role": "cashier", "phone_number": "",
-                              "password": "password123", "_csrf_token": csrf()})
+                              "password": "Brew-Latte-42", "_csrf_token": csrf()})
 mysql_shim.skip_tour()
 
 threading.Thread(
@@ -160,7 +160,7 @@ try:
     b.evaluate("""(function(){var f=document.getElementById('signInForm');
         f.querySelector('[name=cafe_name]').value='Queue Cafe';
         f.querySelector('[name=username]').value='quin';
-        f.querySelector('[name=password]').value='password123';
+        f.querySelector('[name=password]').value='Brew-Latte-42';
         f.querySelector('[type=submit]').click(); return 1;}())""")
     wait("!!document.getElementById('page-view')", "the app")
     b.call("Page.navigate", url=BASE + "/categories")

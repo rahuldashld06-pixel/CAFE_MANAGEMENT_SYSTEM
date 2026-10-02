@@ -75,8 +75,8 @@ def _release(exception=None):
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Mobile Cafe", "full_name": "M Owner", "username": "mob",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def csrf():
@@ -233,7 +233,7 @@ try:
     wait("document.readyState==='complete' && !!document.querySelector('form')", "login")
     b.evaluate("""(function(){var f=document.querySelector('form');
         f.querySelector('[name=username]').value='mob';
-        f.querySelector('[name=password]').value='password123';
+        f.querySelector('[name=password]').value='Brew-Latte-42';
         f.submit(); return 1;})()""")
     wait("!!document.getElementById('page-view')", "shell")
     time.sleep(2.5)

@@ -80,13 +80,13 @@ print("\n=== 0. Two cafes ===")
 owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": "Mom's Café", "full_name": "Maya Owner", "username": "maya",
-    "phone_number": "9876543210", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "9876543210", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 other = app.test_client()
 other.post("/register", data={
     "cafe_name": "Dosa Point", "full_name": "Dev Owner", "username": "dev",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 owner.post("/users/add", data={
     "full_name": "Sam Cashier", "username": "sam", "role": "cashier",
     "phone_number": "9123456780", "password": "TillPass-2026",
@@ -145,7 +145,7 @@ for typed in ("Mom's Café", "moms cafe", "  MOM'S   CAFE ", "Mom’s Cafe"):
 db("UPDATE cafes SET brand_name = 'Maya Kitchen' WHERE cafe_name = ?", ("Mom's Café",))
 client, _ = sign_in("Maya Kitchen", "sam", "TillPass-2026")
 check("so does the name the cafe shows in its corner", signed_in(client) == SAM)
-client, _ = sign_in("mom's café", "maya", "password123")
+client, _ = sign_in("mom's café", "maya", "Brew-Latte-42")
 check("and the owner, by the same name", signed_in(client) == MAYA)
 
 client, response = sign_in("Dosa Point", "sam", "TillPass-2026")
@@ -272,7 +272,7 @@ check("and the list says so", re.search(
 
 status, said, _ = reveal(admin, SAM, token=False)
 check("asking without the form token is refused", status == 400)
-dev, _ = sign_in("Dosa Point", "dev", "password123")
+dev, _ = sign_in("Dosa Point", "dev", "Brew-Latte-42")
 status, said, _ = reveal(dev, SAM)
 check("another cafe's admin cannot see it", status == 404
       and "TillPass" not in str(said), (status, said))
@@ -300,7 +300,7 @@ check("and then it is theirs: nothing is kept to show",
 
 admin.post("/users/%d/edit" % MAYA, data={
     "full_name": "Maya Owner", "role": "admin", "is_active": "1",
-    "phone_number": "", "email": "", "password": "Maya-Own-Choice-3",
+    "phone_number": "", "email": "", "password": "Own-Choice-Mx-3",
     "_csrf_token": csrf(admin)})
 check("an admin changing their own password from Edit keeps nothing either",
       db("SELECT password_view FROM users WHERE user_id = ?", (MAYA,)) == [(None,)])

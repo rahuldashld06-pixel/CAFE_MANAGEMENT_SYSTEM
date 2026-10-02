@@ -71,8 +71,8 @@ def open_cafe(name, username, dishes):
     client = app.test_client()
     client.post("/register", data={
         "cafe_name": name, "full_name": name + " Owner", "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
     client.post("/categories/add", data={"category_name": "Menu", "description": "",
                                          "_csrf_token": csrf(client)})
     category = re.search(r'<option value="(\d+)">',
@@ -321,9 +321,9 @@ check("another cafe sees none of it",
 
 owner.post("/users/add", data={
     "full_name": "Sam Staff", "username": "sam_staff", "role": "staff",
-    "phone_number": "", "password": "password123", "_csrf_token": csrf(owner)})
+    "phone_number": "", "password": "Brew-Latte-42", "_csrf_token": csrf(owner)})
 staff = app.test_client()
-staff.post("/login", data={"username": "sam_staff", "password": "password123"})
+staff.post("/login", data={"username": "sam_staff", "password": "Brew-Latte-42"})
 staff_page = staff.get("/reviews")
 check("the staff who serve customers can read them too",
       staff_page.status_code == 200 and "Perfect breakfast" in text(staff_page))

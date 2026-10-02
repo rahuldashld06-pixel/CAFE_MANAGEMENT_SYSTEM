@@ -55,8 +55,8 @@ def open_cafe(cafe, user):
     client = app.test_client()
     client.post("/register", data={
         "cafe_name": cafe, "full_name": user.title(), "username": user,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
     return client
 
 
@@ -238,10 +238,10 @@ print("\n=== 5. Who can read it ===")
 # =====================================================================
 a.post("/users/add", data={"full_name": "Kiran Cashier", "username": "kiran",
                            "role": "cashier", "phone_number": "",
-                           "password": "password123", "_csrf_token": csrf(a)},
+                           "password": "Brew-Latte-42", "_csrf_token": csrf(a)},
        follow_redirects=True)
 staff = app.test_client()
-staff.post("/login", data={"username": "kiran", "password": "password123"},
+staff.post("/login", data={"username": "kiran", "password": "Brew-Latte-42"},
            follow_redirects=True)
 answer = staff.get("/api/dashboard-insights")
 check("a cashier cannot read the owner's figures",

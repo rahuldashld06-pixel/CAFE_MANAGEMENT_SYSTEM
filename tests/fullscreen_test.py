@@ -89,8 +89,8 @@ print("\n=== 0. Seeding a cafe ===")
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Bluebird Coffee House", "full_name": "Sam Owner",
-    "username": "sam", "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "username": "sam", "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 print("  seeded")
 
 
@@ -128,7 +128,7 @@ for size in (192, 512):
           "got HTTP %s, %d bytes" % (icon.status_code, len(icon.data)))
 
 signed_in = app.test_client()
-signed_in.post("/login", data={"username": "sam", "password": "password123"},
+signed_in.post("/login", data={"username": "sam", "password": "Brew-Latte-42"},
                follow_redirects=True)
 mine = json.loads(
     signed_in.get("/manifest.webmanifest").get_data(as_text=True))
@@ -279,7 +279,7 @@ try:
         (function () {
             var f = document.querySelector('form');
             f.querySelector('[name=username]').value = 'sam';
-            f.querySelector('[name=password]').value = 'password123';
+            f.querySelector('[name=password]').value = 'Brew-Latte-42';
             f.submit();
         }())
     """)

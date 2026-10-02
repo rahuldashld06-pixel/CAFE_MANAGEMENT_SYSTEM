@@ -44,8 +44,8 @@ def csrf(client):
 def build_cafe(client, cafe, username, menu):
     client.post("/register", data={
         "cafe_name": cafe, "full_name": username.title(), "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
     for category in sorted({c for _, c in menu}):
         client.post("/categories/add",

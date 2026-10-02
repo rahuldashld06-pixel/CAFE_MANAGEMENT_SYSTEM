@@ -97,8 +97,8 @@ def csrf(client):
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "List Cafe", "full_name": "Sam Owner", "username": "sam",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 for name in ("Coffee", "Bakery"):
     seed.post("/categories/add", data={"category_name": name,
@@ -136,8 +136,8 @@ seed.get("/billing")          # raises the bills
 # The Order Status button belongs to the people on the till, not the
 # owner, so there has to be one of those to sign in as.
 seed.post("/users/add", data={
-    "full_name": "Cash Ier", "username": "cash", "password": "password123",
-    "confirm_password": "password123", "role": "staff",
+    "full_name": "Cash Ier", "username": "cash", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42", "role": "staff",
     "_csrf_token": csrf(seed)}, follow_redirects=True)
 
 mysql_shim.skip_tour()
@@ -240,7 +240,7 @@ try:
         (function () {
             var f = document.querySelector('form');
             f.querySelector('[name=username]').value = 'sam';
-            f.querySelector('[name=password]').value = 'password123';
+            f.querySelector('[name=password]').value = 'Brew-Latte-42';
             f.submit();
         }())
     """)
@@ -667,7 +667,7 @@ try:
         (function () {
             var f = document.querySelector('form');
             f.querySelector('[name=username]').value = 'cash';
-            f.querySelector('[name=password]').value = 'password123';
+            f.querySelector('[name=password]').value = 'Brew-Latte-42';
             f.submit();
         }())
     """)
@@ -1415,7 +1415,7 @@ try:
         (function () {
             var f = document.querySelector('form');
             f.querySelector('[name=username]').value = 'sam';
-            f.querySelector('[name=password]').value = 'password123';
+            f.querySelector('[name=password]').value = 'Brew-Latte-42';
             f.submit();
         }())
     """)

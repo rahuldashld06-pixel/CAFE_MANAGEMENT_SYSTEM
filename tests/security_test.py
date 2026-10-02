@@ -57,7 +57,7 @@ def csrf(client):
         return sess.get("_csrf_token", "")
 
 
-def register(client, cafe, user, password="password123"):
+def register(client, cafe, user, password="Brew-Latte-42"):
     return client.post("/register", data={
         "cafe_name": cafe, "full_name": user.title(), "username": user,
         "phone_number": "", "password": password,
@@ -190,7 +190,7 @@ check("a wrong password never opens the app", opened == 0,
 
 locked = guesser.post("/login",
                       data={"username": "fortboss",
-                            "password": "password123"},
+                            "password": "Brew-Latte-42"},
                       environ_overrides=HERE,
                       follow_redirects=True).get_data(as_text=True)
 
@@ -203,7 +203,7 @@ check("and after enough wrong ones the door shuts",
 # knows an owner's username can shut them out of their own till.
 elsewhere = app.test_client()
 opened_elsewhere = elsewhere.post(
-    "/login", data={"username": "fortboss", "password": "password123"},
+    "/login", data={"username": "fortboss", "password": "Brew-Latte-42"},
     environ_overrides={"REMOTE_ADDR": "203.0.113.55"},
     follow_redirects=True).get_data(as_text=True)
 
@@ -336,7 +336,7 @@ fixer.get("/login")
 with fixer.session_transaction() as sess:
     sess["planted"] = "still here"
 fixer.post("/login", data={"username": "guardboss",
-                           "password": "password123"},
+                           "password": "Brew-Latte-42"},
            environ_overrides={"REMOTE_ADDR": "192.0.2.180"},
            follow_redirects=True)
 with fixer.session_transaction() as sess:
@@ -351,7 +351,7 @@ cookie_header = " ".join(
     str(value) for value in
     app.test_client().post("/login",
                            data={"username": "guardboss",
-                                 "password": "password123"},
+                                 "password": "Brew-Latte-42"},
                            environ_overrides={"REMOTE_ADDR": "192.0.2.181"}
                            ).headers.getlist("Set-Cookie"))
 check("the session cookie is not readable by script",
@@ -384,7 +384,7 @@ check("and is not sent on other sites' requests",
 def sign_in_for(remember, address):
     """One sign-in, and what the browser was told to keep."""
     client = app.test_client()
-    data = {"username": "guardboss", "password": "password123"}
+    data = {"username": "guardboss", "password": "Brew-Latte-42"}
     if remember:
         data["remember"] = "1"
     reply = client.post("/login", data=data,
@@ -554,7 +554,7 @@ check("where only the sign-in pages can read it",
       "attributes: %s" % kept_attrs)
 
 check("and never the password",
-      "password123" not in kept_header and "password123" not in plain_header,
+      "Brew-Latte-42" not in kept_header and "Brew-Latte-42" not in plain_header,
       "the password is in a cookie")
 
 check("an ordinary sign-in keeps no name",
@@ -565,7 +565,7 @@ returning = app.test_client()
 # As the form sends it: the cafe's name first, which is kept with the
 # username, so both are filled in and only the password is left.
 returning.post("/login", data={"cafe_name": "Guard Cafe", "username": "guardboss",
-                               "password": "password123", "remember": "1"},
+                               "password": "Brew-Latte-42", "remember": "1"},
                environ_overrides={"REMOTE_ADDR": "192.0.2.186"})
 returning.get("/logout")
 page = returning.get("/login").get_data(as_text=True)
@@ -580,7 +580,7 @@ check("and the cursor waiting in the password box",
       "the cursor starts in the name field it has already filled")
 
 forgetting = returning.post(
-    "/login", data={"username": "guardboss", "password": "password123"},
+    "/login", data={"username": "guardboss", "password": "Brew-Latte-42"},
     environ_overrides={"REMOTE_ADDR": "192.0.2.187"})
 cleared = " ".join(str(v) for v in forgetting.headers.getlist("Set-Cookie"))
 check("signing in without the box forgets it",
@@ -597,7 +597,7 @@ check("signing in leaves no answer to a save that was never made",
 bounced = app.test_client()
 landing = bounced.post("/login?next=/logout",
                        data={"username": "guardboss",
-                             "password": "password123"},
+                             "password": "Brew-Latte-42"},
                        environ_overrides={"REMOTE_ADDR": "192.0.2.188"})
 check("signing in with next=/logout does not sign straight back out",
       "/logout" not in landing.headers.get("Location", ""),
@@ -616,7 +616,7 @@ for hostile in ("//evil.example.com/", "https://evil.example.com/",
     hopeful = app.test_client()
     landed = hopeful.post("/login?next=%s" % hostile,
                           data={"username": "guardboss",
-                                "password": "password123"},
+                                "password": "Brew-Latte-42"},
                           environ_overrides={"REMOTE_ADDR": "192.0.2.182"})
     check("sign-in will not bounce to %r" % hostile,
           "evil.example.com" not in landed.headers.get("Location", "")
@@ -648,8 +648,8 @@ print("\n=== A flood of orders from one QR code ===")
 flood = app.test_client()
 flood.post("/register", data={
     "cafe_name": "Flood Cafe", "full_name": "Owner", "username": "flood",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 flood.post("/categories/add", data={
     "category_name": "Drinks", "description": "",
     "_csrf_token": csrf(flood)}, follow_redirects=True)
@@ -789,8 +789,8 @@ print("\n=== Nothing changes state on a GET ===")
 audit = app.test_client()
 audit.post("/register", data={
     "cafe_name": "Audit Cafe", "full_name": "Owner", "username": "audit",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 audit.post("/categories/add", data={
     "category_name": "Mains", "description": "",
     "_csrf_token": csrf(audit)}, follow_redirects=True)
@@ -865,8 +865,8 @@ print("\n=== The database does not introduce itself ===")
 _broke = app.test_client()
 _broke.post("/register", data={
     "cafe_name": "Break Cafe", "full_name": "Owner", "username": "breaker",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 # Make the next statement fail the way a real outage would.
 _real_execute = mysql_shim._Cursor.execute
@@ -938,7 +938,7 @@ def open_cafe(name, user, dish, price):
     client.post("/register", data={
         "cafe_name": name, "full_name": name + " Owner",
         "username": user, "phone_number": "",
-        "password": "password123", "confirm_password": "password123"},
+        "password": "Brew-Latte-42", "confirm_password": "Brew-Latte-42"},
         follow_redirects=True)
     client.post("/categories/add", data={
         "category_name": "Mains", "description": "",
@@ -957,7 +957,7 @@ def open_cafe(name, user, dish, price):
     client.get("/billing")
     client.post("/users/add", data={
         "full_name": name + " Till", "username": user + "till",
-        "password": "password123", "confirm_password": "password123",
+        "password": "Brew-Latte-42", "confirm_password": "Brew-Latte-42",
         "role": "staff", "_csrf_token": csrf(client)},
         follow_redirects=True)
     client.get("/settings/qr")
@@ -1444,7 +1444,7 @@ print("\n=== Signing out stays signed out ===")
 # sent it straight on to the dashboard. Replayed here exactly - keep the
 # cookie as it was, sign out, then have that cookie arrive late.
 late = app.test_client()
-late.post("/login", data={"username": "guardboss", "password": "password123"},
+late.post("/login", data={"username": "guardboss", "password": "Brew-Latte-42"},
           environ_overrides={"REMOTE_ADDR": "192.0.2.190"})
 signed_in = late.get_cookie("session")
 check("a signed-in browser holds a binding for its sign-in",
@@ -1471,7 +1471,7 @@ check("and the sign-in page stays the sign-in page",
 # Whoever keeps working is not caught by any of this.
 steady = app.test_client()
 steady.post("/login", data={"username": "guardboss",
-                            "password": "password123"},
+                            "password": "Brew-Latte-42"},
             environ_overrides={"REMOTE_ADDR": "192.0.2.191"})
 check("a sign-in in use stays in across many requests",
       all(steady.get(path).status_code == 200
@@ -1481,7 +1481,7 @@ check("a sign-in in use stays in across many requests",
 # Sign-ins made before they carried an id are bound on their next
 # request, so their next Log out holds as well.
 older = app.test_client()
-older.post("/login", data={"username": "guardboss", "password": "password123"},
+older.post("/login", data={"username": "guardboss", "password": "Brew-Latte-42"},
            environ_overrides={"REMOTE_ADDR": "192.0.2.192"})
 with older.session_transaction() as sess:
     sess.pop("signin_id", None)

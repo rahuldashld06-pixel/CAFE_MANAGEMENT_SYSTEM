@@ -59,8 +59,8 @@ GZIP = {"Accept-Encoding": "gzip, deflate, br"}
 owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": "Zip Cafe", "full_name": "Zara Owner", "username": "zara",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 # =====================================================================
@@ -175,8 +175,8 @@ check("and no token at all", add_category("None", "") == (400, 0))
 other = app.test_client()
 other.post("/register", data={
     "cafe_name": "Other Cafe", "full_name": "Omar Owner", "username": "omar",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 theirs = re.findall(TOKEN, other.get("/categories/add").get_data(as_text=True))[0]
 check("a token from somebody else's page is refused",
       add_category("Theirs", theirs) == (400, 0))

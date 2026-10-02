@@ -55,8 +55,8 @@ def bill_row(bill_id):
 client = app.test_client()
 client.post("/register", data={
     "cafe_name": "Settle Cafe", "full_name": "Boss", "username": "boss",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 client.post("/categories/add", data={"category_name": "Coffee",
                                      "description": "",
@@ -263,8 +263,8 @@ def cell_count(client):
 plain = app.test_client()
 plain.post("/register", data={
     "cafe_name": "Plain Till", "full_name": "Owner", "username": "plainboss",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 plain.post("/settings/tax", data={"tax_percent": "0", "discount_percent": "0",
                                   "_csrf_token": csrf(plain)},
            follow_redirects=True)
@@ -377,8 +377,8 @@ import datetime as _dt
 feeder = app.test_client()
 feeder.post("/register", data={
     "cafe_name": "Popup Cafe", "full_name": "Owner", "username": "popupboss",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 feeder.post("/categories/add", data={"category_name": "Coffee",
                                      "description": "",
                                      "_csrf_token": csrf(feeder)},

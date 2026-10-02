@@ -45,8 +45,8 @@ def build(client, cafe, username, menu):
     """menu: [(name, quantity, minimum_stock)]"""
     client.post("/register", data={
         "cafe_name": cafe, "full_name": username.title(), "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
     client.post("/categories/add",
                 data={"category_name": "Coffee", "description": "",
@@ -247,8 +247,8 @@ print("\n=== What needs ordering is at the top of Inventory ===")
 shelf = app.test_client()
 shelf.post("/register", data={
     "cafe_name": "Shelf Cafe", "full_name": "Owner", "username": "shelfboss",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 shelf.post("/categories/add", data={"category_name": "All", "description": "",
                                     "_csrf_token": csrf(shelf)},
            follow_redirects=True)

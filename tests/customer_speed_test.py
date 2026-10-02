@@ -86,8 +86,8 @@ def trips(fn):
 owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": "Quick Cafe", "full_name": "Quinn Owner", "username": "quinn",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 owner.post("/categories/add", data={"category_name": "Coffee", "description": "",
                                     "_csrf_token": csrf(owner)})
 category = re.search(r'<option value="(\d+)">', text(owner.get("/foods/add"))).group(1)

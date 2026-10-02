@@ -48,16 +48,16 @@ def csrf(client):
 admin = app.test_client()
 admin.post("/register", data={
     "cafe_name": "Role Cafe", "full_name": "Boss", "username": "boss",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 admin.post("/users/add", data={
     "full_name": "Till One", "username": "till", "role": "cashier",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf(admin)}, follow_redirects=True)
 
 staff = app.test_client()
-staff.post("/login", data={"username": "till", "password": "password123"},
+staff.post("/login", data={"username": "till", "password": "Brew-Latte-42"},
            follow_redirects=True)
 
 
@@ -189,7 +189,7 @@ for username, role in [("mgr", "manager"), ("cash2", "cashier"),
                        ("stf", "staff")]:
     admin.post("/users/add", data={
         "full_name": username.title(), "username": username, "role": role,
-        "phone_number": "", "password": "password123",
+        "phone_number": "", "password": "Brew-Latte-42",
         "_csrf_token": csrf(admin)}, follow_redirects=True)
 
 PAGES = ["/orders/add", "/kitchen", "/foods", "/inventory", "/categories",
@@ -199,7 +199,7 @@ for username, role in [("mgr", "manager"), ("cash2", "cashier"),
                        ("stf", "staff")]:
     client = app.test_client()
     client.post("/login", data={"username": username,
-                                "password": "password123"},
+                                "password": "Brew-Latte-42"},
                 follow_redirects=True)
 
     leaks = []
@@ -216,7 +216,7 @@ for username, role in [("mgr", "manager"), ("cash2", "cashier"),
 
 # And the Back links land somewhere the role can actually open.
 cashier = app.test_client()
-cashier.post("/login", data={"username": "cash2", "password": "password123"},
+cashier.post("/login", data={"username": "cash2", "password": "Brew-Latte-42"},
              follow_redirects=True)
 back = re.search(r'href="([^"]+)" class="btn btn--ghost" data-back',
                  cashier.get("/account/photo").get_data(as_text=True))

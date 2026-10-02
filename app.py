@@ -9422,6 +9422,90 @@ def logout():
     return redirect(url_for("login"))
 
 
+# ---------------------------------------------------------------------
+# An admin's password
+#
+# The admin holds the cafe: its takings, its team, its plan. Their
+# password is held to the rules careful services ask for - shown as a
+# checklist while it is typed (templates/_password_rules.html), and
+# checked again here, where it counts. Wherever an admin's password is
+# set: signing up, changing it, resetting it, and in User Management.
+# A teammate's is set by the admin and needs 8 characters, as before.
+# ---------------------------------------------------------------------
+PASSWORD_RULES = [
+    ("length", "At least 8 characters", "at least 8 characters"),
+    ("upper", "An uppercase letter (A-Z)", "an uppercase letter"),
+    ("lower", "A lowercase letter (a-z)", "a lowercase letter"),
+    ("number", "A number (0-9)", "a number"),
+    ("special", "A special character (! @ # $ % & *)", "a special character"),
+    ("guess", "Not your username or a common password", None),
+]
+
+# Letters only, after the usual swaps (P@ssw0rd is password): a password
+# whose letters are one of these is the first thing anybody tries.
+EASY_PASSWORD_WORDS = (
+    "password", "passwd", "pass", "qwerty", "qwertyuiop", "asdf", "asdfgh",
+    "zxcvbn", "letmein", "welcome", "admin", "administrator", "root",
+    "login", "user", "test", "guest", "iloveyou", "abc", "abcd", "abcdef",
+    "abcdefgh", "refero", "cafe", "coffee", "restaurant", "secret",
+    "changeme", "default", "master", "monkey", "dragon", "india",
+)
+# Inside a longer password, these give it away wherever they are.
+EASY_PASSWORD_PARTS = ("password", "passwd", "qwerty", "letmein", "iloveyou",
+                       "welcome", "admin", "changeme")
+_LEET = str.maketrans("@4$501!3|7+", "aassoiieltt")
+
+
+def password_rules_failed(password, username=""):
+    """The keys of PASSWORD_RULES this password does not meet."""
+    password = password or ""
+    failed = []
+    if len(password) < 8:
+        failed.append("length")
+    if not re.search(r"[A-Z]", password):
+        failed.append("upper")
+    if not re.search(r"[a-z]", password):
+        failed.append("lower")
+    if not re.search(r"[0-9]", password):
+        failed.append("number")
+    if not re.search(r"[^A-Za-z0-9]", password):
+        failed.append("special")
+    # The word inside the dressing: the digits and symbols at either end
+    # come off, and the swaps inside are read back (P@ssw0rd! is password).
+    lowered = password.lower()
+    core = re.sub(r"^[^a-z]+|[^a-z]+$", "", lowered)
+    letters = re.sub(r"[^a-z]", "", core.translate(_LEET))
+    name = (username or "").strip().lower()
+    if (not password
+            or letters in EASY_PASSWORD_WORDS
+            or any(part in letters for part in EASY_PASSWORD_PARTS)
+            or (len(name) >= 3 and name in lowered)
+            or len(set(letters)) <= 1):
+        failed.append("guess")
+    return failed
+
+
+def password_rules_message(failed):
+    """What to tell somebody whose password did not pass, in one line."""
+    needs = [spec[2] for spec in PASSWORD_RULES
+             if spec[0] in failed and spec[2]]
+    if needs:
+        said = (needs[0] if len(needs) == 1
+                else ", ".join(needs[:-1]) + " and " + needs[-1])
+        text = "Choose a stronger password. It still needs %s." % said
+        if "guess" in failed:
+            text += " It must not be your username or a common password."
+        return text
+    return ("That password is too easy to guess - it is your username or "
+            "a common password. Choose another.")
+
+
+app.jinja_env.globals.update(
+    password_rules=[{"key": key, "text": text} for key, text, _need in PASSWORD_RULES],
+    easy_password_words=EASY_PASSWORD_WORDS,
+    easy_password_parts=EASY_PASSWORD_PARTS)
+
+
 @app.route('/register', methods=['GET','POST'])
 def register():
     """Public SaaS signup: one new cafe plus its first admin owner."""
@@ -9435,7 +9519,9 @@ def register():
         username=request.form.get('username','').strip(); phone=request.form.get('phone_number','').strip()
         password=request.form.get('password',''); confirm=request.form.get('confirm_password','')
         if not cafe_name or not full_name or not username: flash('Café name, full name and username are required.'); return redirect(url_for('register'))
-        if len(password)<8: flash('Password must be at least 8 characters.'); return redirect(url_for('register'))
+        # The account being made is the cafe's admin.
+        weak = password_rules_failed(password, username)
+        if weak: flash(password_rules_message(weak)); return redirect(url_for('register'))
         # The number is what a forgotten password is reset through, so a
         # mistyped one is found out at the worst possible moment. It is
         # optional here, and checked when it is given.
@@ -9537,7 +9623,7 @@ def forgot_password():
             # in a mood to also remember which of the two they chose.
             user = find_sign_in(
                 cursor, username,
-                "user_id, full_name, is_active, phone_number, role")
+                "user_id, username, full_name, is_active, phone_number, role")
 
             # Username + full name alone was NOT a security check: full names
             # are displayed throughout the UI (order lists, user management),
@@ -9582,6 +9668,11 @@ def forgot_password():
                     "Ask them to set a new one for you from User "
                     "Management - it only takes a moment."
                 )
+                return redirect(url_for("forgot_password"))
+
+            weak = password_rules_failed(new_password, user["username"])
+            if weak:
+                flash(password_rules_message(weak))
                 return redirect(url_for("forgot_password"))
 
             cursor.execute("""
@@ -10124,7 +10215,12 @@ def change_password():
         new_password = request.form.get("new_password", "")
         confirm = request.form.get("confirm_password", "")
 
-        if len(new_password) < 8:
+        if user.get("role") == "admin":
+            weak = password_rules_failed(new_password, user.get("username"))
+            if weak:
+                flash(password_rules_message(weak))
+                return redirect(stay_on('change_password'))
+        elif len(new_password) < 8:
             flash("New password must be at least 8 characters.")
             return redirect(stay_on('change_password'))
 
@@ -10462,7 +10558,13 @@ def edit_user(user_id):
                 return redirect(url_for("edit_user", user_id=user_id))
 
             if new_password:
-                if len(new_password) < 8:
+                weak = (password_rules_failed(new_password, user.get("username"))
+                        if is_admin_account else
+                        (["length"] if len(new_password) < 8 else []))
+                if weak and is_admin_account:
+                    flash(password_rules_message(weak))
+                    return redirect(url_for("edit_user", user_id=user_id))
+                if weak:
                     flash("New password must be at least 8 characters.")
                     return redirect(url_for("edit_user", user_id=user_id))
                 # Kept for reading again only when it is somebody else's:

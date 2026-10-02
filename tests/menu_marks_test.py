@@ -156,8 +156,8 @@ print("\n=== 2. Veg or non-veg, chosen on the form ===")
 owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": "Mark Cafe", "full_name": "Mira Owner", "username": "mira",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 for name in ("Coffee", "Mains"):
     owner.post("/categories/add", data={"category_name": name, "description": "",
                                         "_csrf_token": csrf(owner)})

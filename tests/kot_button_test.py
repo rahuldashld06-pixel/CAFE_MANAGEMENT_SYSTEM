@@ -66,8 +66,8 @@ def check(name, condition, detail=""):
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Ticket Room", "full_name": "Kot Owner",
-    "username": "kot", "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "username": "kot", "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def csrf():
@@ -209,7 +209,7 @@ try:
     b.evaluate("""(function(){var f=document.querySelector('form');
         f.querySelector('[name=cafe_name]').value='Ticket Room';
         f.querySelector('[name=username]').value='kot';
-        f.querySelector('[name=password]').value='password123';
+        f.querySelector('[name=password]').value='Brew-Latte-42';
         f.querySelector('[type=submit]').click(); return 1;}())""")
     wait("location.pathname !== '/login'", "signed in")
     time.sleep(0.8)

@@ -62,12 +62,12 @@ def text(response):
 owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": "Name Cafe", "full_name": "Nina Owner", "username": "nina",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 for taken in ("nina1", "nina_cafe"):
     owner.post("/users/add", data={
         "full_name": "Taken " + taken, "username": taken, "role": "cashier",
-        "phone_number": "", "password": "password123", "_csrf_token": csrf(owner)})
+        "phone_number": "", "password": "Brew-Latte-42", "_csrf_token": csrf(owner)})
 
 
 def ask(client, name, source="10.0.0.1"):
@@ -133,8 +133,8 @@ check("somebody else, elsewhere, is not held up by it",
       status == 200 and said["state"] == "taken")
 registered = stranger.post("/register", data={
     "cafe_name": "Late Cafe", "full_name": "Lee Late", "username": "nina",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, environ_base={"REMOTE_ADDR": "10.0.0.9"})
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, environ_base={"REMOTE_ADDR": "10.0.0.9"})
 check("and the form's own check still refuses a taken name when it is sent",
       mysql_shim._DB.execute("SELECT COUNT(*) FROM users WHERE username = 'nina'")
       .fetchone()[0] == 1)

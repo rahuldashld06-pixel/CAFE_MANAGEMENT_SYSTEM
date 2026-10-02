@@ -73,13 +73,13 @@ def sidebar(page):
 owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": "Task Cafe", "full_name": "Tia Owner", "username": "tia",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def add(username, role, tasks=None):
     data = {"full_name": username.title(), "username": username, "role": role,
-            "phone_number": "", "password": "password123",
+            "phone_number": "", "password": "Brew-Latte-42",
             "_csrf_token": csrf(owner)}
     if tasks is not None:
         data["tasks_sent"] = "1"
@@ -92,7 +92,7 @@ def sign_in(username):
     client = app.test_client()
     response = client.post("/login", data={"cafe_name": "Task Cafe",
                                            "username": username,
-                                           "password": "password123"})
+                                           "password": "Brew-Latte-42"})
     return client, response
 
 

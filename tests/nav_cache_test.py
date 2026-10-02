@@ -110,8 +110,8 @@ def csrf(client):
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Speed Cafe", "full_name": "Sam Owner", "username": "sam",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 seed.post("/categories/add", data={"category_name": "Coffee",
                                    "description": "",
                                    "_csrf_token": csrf(seed)},
@@ -202,7 +202,7 @@ try:
         (function () {
             var f = document.querySelector('form');
             f.querySelector('[name=username]').value = 'sam';
-            f.querySelector('[name=password]').value = 'password123';
+            f.querySelector('[name=password]').value = 'Brew-Latte-42';
             f.submit();
         }())
     """)

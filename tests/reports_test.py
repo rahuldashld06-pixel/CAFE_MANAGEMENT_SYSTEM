@@ -108,8 +108,8 @@ print("\n=== 2. A cafe with two weeks behind it ===")
 a = app.test_client()
 a.post("/register", data={
     "cafe_name": "Report Cafe", "full_name": "Rita Owner", "username": "rita",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 for category in ("Coffee", "Bakes"):
     a.post("/categories/add", data={"category_name": category,
                                     "description": "", "_csrf_token": csrf(a)},
@@ -265,10 +265,10 @@ check("and the payment summary", "UPI,1," in text and "Cash,1," in text)
 
 a.post("/users/add", data={"full_name": "Cal Cashier", "username": "calc",
                            "role": "cashier", "phone_number": "",
-                           "password": "password123", "_csrf_token": csrf(a)},
+                           "password": "Brew-Latte-42", "_csrf_token": csrf(a)},
        follow_redirects=True)
 staff = app.test_client()
-staff.post("/login", data={"username": "calc", "password": "password123"},
+staff.post("/login", data={"username": "calc", "password": "Brew-Latte-42"},
            follow_redirects=True)
 for path in ("/reports", "/reports/export"):
     reply = staff.get(path)
@@ -280,8 +280,8 @@ for path in ("/reports", "/reports/export"):
 b = app.test_client()
 b.post("/register", data={
     "cafe_name": "Other Cafe", "full_name": "Otto", "username": "otto",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 other = report(b, period="all")
 check("another cafe's report starts from nothing",
       other["kpis"]["sales"]["value"] == 0 and not other["items"]

@@ -1,5 +1,5 @@
 /*
- * Two helps for anyone choosing a username or a password.
+ * Three helps for anyone choosing a username or a password.
  *
  *  - input[data-username-check]: says, as it is typed, whether that
  *    username is already taken - and offers a free one - rather than
@@ -7,6 +7,8 @@
  *    the form being sent.
  *  - input[data-strength]: says how hard the password would be to guess:
  *    Weak, Medium or Strong, with what would make it stronger.
+ *  - .pw-rules: the checklist an admin's password must meet, ticked off
+ *    as it is typed; the form does not go with a rule unmet.
  *
  * Runs on the sign-in screens and inside the app alike, so it brings its
  * own few styles; colours are the theme's where there is one. Rescans
@@ -156,13 +158,91 @@
         show();
     }
 
+    // ---- an admin's password: the rules, ticked off ----
+    // The same tests as password_rules_failed() in app.py, which checks
+    // them again when the form arrives; the words to avoid are the
+    // server's own, carried on the list (data-easy).
+    var LEET = {"@": "a", "4": "a", "$": "s", "5": "s", "0": "o", "1": "i",
+                "!": "i", "3": "e", "|": "l", "7": "t", "+": "t"};
+
+    function easyToGuess(value, name, easy, parts) {
+        if (!value) return true;
+        var lowered = value.toLowerCase();
+        var core = lowered.replace(/^[^a-z]+|[^a-z]+$/g, "");
+        var letters = core.replace(/[@4$501!3|7+]/g, function (c) { return LEET[c]; })
+                          .replace(/[^a-z]/g, "");
+        var seen = {};
+        for (var i = 0; i < letters.length; i++) seen[letters.charAt(i)] = 1;
+        name = (name || "").trim().toLowerCase();
+        return easy.indexOf(letters) > -1
+            || (parts || []).some(function (part) { return part && letters.indexOf(part) > -1; })
+            || (name.length >= 3 && lowered.indexOf(name) > -1)
+            || Object.keys(seen).length <= 1;
+    }
+
+    var RULES = {
+        length: function (v) { return v.length >= 8; },
+        upper: function (v) { return /[A-Z]/.test(v); },
+        lower: function (v) { return /[a-z]/.test(v); },
+        number: function (v) { return /[0-9]/.test(v); },
+        special: function (v) { return /[^A-Za-z0-9]/.test(v); },
+        guess: function (v, name, easy, parts) { return !easyToGuess(v, name, easy, parts); }
+    };
+
+    function wireRules(box) {
+        if (box.dataset.rulesWired) return;
+        var input = document.getElementById(box.getAttribute("data-rules-for"));
+        if (!input) return;
+        box.dataset.rulesWired = "1";
+        var easy = (box.getAttribute("data-easy") || "").split(",");
+        var parts = (box.getAttribute("data-easy-parts") || "").split(",");
+        var nameBox = document.getElementById(box.getAttribute("data-username-field") || "");
+        var items = box.querySelectorAll("[data-rule]");
+        input.setAttribute("aria-describedby",
+            ((input.getAttribute("aria-describedby") || "") + " " + box.id).trim());
+
+        function check() {
+            var value = input.value;
+            var name = nameBox ? nameBox.value : (box.getAttribute("data-username") || "");
+            var all = true;
+            for (var i = 0; i < items.length; i++) {
+                var test = RULES[items[i].getAttribute("data-rule")];
+                var met = test ? test(value, name, easy, parts) : true;
+                items[i].setAttribute("data-met", met ? "true" : "false");
+                if (!met) all = false;
+            }
+            box.setAttribute("data-all", all ? "true" : "false");
+            if (all) box.classList.remove("pw-rules--shout");
+            return all;
+        }
+
+        input.addEventListener("input", check);
+        if (nameBox) nameBox.addEventListener("input", check);
+
+        // Captured, so it is first: before a "save this?" question opens
+        // and before the page's own sending. A password left blank where
+        // blank keeps the old one is not being set, and is let through.
+        if (input.form) {
+            input.form.addEventListener("submit", function (event) {
+                if (!input.value && !input.required) return;
+                if (check()) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                box.classList.add("pw-rules--shout");
+                input.focus();
+            }, true);
+        }
+        check();
+    }
+
     function scan(root) {
         addStyle();
         [].forEach.call((root || document).querySelectorAll("input[data-username-check]"), wireUsername);
         [].forEach.call((root || document).querySelectorAll("input[data-strength]"), wireStrength);
+        [].forEach.call((root || document).querySelectorAll(".pw-rules[data-rules-for]"), wireRules);
     }
 
-    window.CafeAccountFields = {scan: scan, grade: grade};
+    window.CafeAccountFields = {scan: scan, grade: grade, easyToGuess: easyToGuess};
 
     // Registered as shell code: this file runs once per real page load,
     // after the first page's scope has opened, so a listener added plainly

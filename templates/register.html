@@ -1,5 +1,6 @@
 {% from "_brand_mark.html" import coffee_mark, coffee_glyph, refero_lockup %}
 {% from "_auth_photo.html" import auth_photo %}
+{% from "_password_rules.html" import password_rules_box %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -131,7 +132,7 @@
                 <div class="field">
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password"
-                           placeholder="At least 8 characters"
+                           placeholder="Create a strong password"
                            autocomplete="new-password" minlength="8" required
                            data-strength>
                 </div>
@@ -144,6 +145,8 @@
                            autocomplete="new-password" minlength="8" required>
                 </div>
             </div>
+
+            {{ password_rules_box("password", username_field="username") }}
 
             <button type="submit" class="auth-button" data-busy="Creating your café…">
                 {{ coffee_glyph('brand-glyph--btn') }}

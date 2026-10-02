@@ -38,7 +38,7 @@ def csrf(client):
         return s.get("_csrf_token", "")
 
 
-def register(client, cafe, user, pw="password123", phone="+919999900001"):
+def register(client, cafe, user, pw="Brew-Latte-42", phone="+919999900001"):
     return client.post("/register", data={
         "cafe_name": cafe, "full_name": f"{user} Owner", "username": user,
         "phone_number": phone, "password": pw,
@@ -119,7 +119,7 @@ check("Inventory lists the new item", b"Masala Chai" in r.data, r.data[:300])
 print("\n=== 3. Café A adds staff (previously always failed) ===")
 r = a.post("/users/add", data={
     "username": "alpha_cashier", "full_name": "Alpha Cashier",
-    "password": "password123", "role": "cashier",
+    "password": "Brew-Latte-42", "role": "cashier",
     "phone_number": "", "_csrf_token": csrf(a)}, follow_redirects=True)
 check("Creating a staff user succeeds (add_user SQL was malformed)",
       b"alpha_cashier" in r.data, r.data[:400])
@@ -152,7 +152,7 @@ target = min(ids) if ids else 1
 
 r = b.post(f"/users/{target}/edit", data={
     "full_name": "HACKED", "role": "admin", "is_active": "1",
-    "password": "attackerpass1", "phone_number": "",
+    "password": "Attacker-Pass-1", "phone_number": "",
     "_csrf_token": csrf(b)}, follow_redirects=True)
 check("Café B cannot edit café A's user (edit_user had no cafe filter)",
       b"User not found" in r.data or b"HACKED" not in r.data, r.data[:400])
@@ -215,8 +215,8 @@ r = b.get("/logout", follow_redirects=True)
 anon = app.test_client()
 r = anon.post("/forgot-password", data={
     "username": "alpha_admin", "full_name": "alpha_admin Owner",
-    "phone_number": "", "new_password": "takenover1",
-    "confirm_password": "takenover1"}, follow_redirects=True)
+    "phone_number": "", "new_password": "Taken-Over-1",
+    "confirm_password": "Taken-Over-1"}, follow_redirects=True)
 # Either refusal is fine, and neither says whether the account exists.
 # "couldn't verify" is the answer once there is a number to check
 # against; asking for the number comes first now, so an empty one is
@@ -230,7 +230,7 @@ check("and the refusal does not say whether the account exists",
       "the page confirms who banks here")
 
 r = anon.post("/login", data={
-    "username": "alpha_admin", "password": "takenover1"},
+    "username": "alpha_admin", "password": "Taken-Over-1"},
     follow_redirects=True)
 check("The attacker's password does not work",
       b"Invalid username or password" in r.data, r.data[:300])
@@ -248,7 +248,7 @@ check("A session with no valid café redirects to login instead of 500ing",
 
 print("\n=== 10. Order and billing lifecycle ===")
 # Café B was signed out during the password-reset checks; sign back in.
-b.post("/login", data={"username": "beta_admin", "password": "password123"},
+b.post("/login", data={"username": "beta_admin", "password": "Brew-Latte-42"},
        follow_redirects=True)
 _r = b.get("/dashboard")
 check("Admin without a phone number signs in without an OTP step",

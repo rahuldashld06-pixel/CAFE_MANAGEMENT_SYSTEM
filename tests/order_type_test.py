@@ -77,8 +77,8 @@ print("\n=== 0. A cafe with a menu ===")
 owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": "Packed Cafe", "full_name": "Pia Owner", "username": "pia",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 owner.post("/categories/add", data={"category_name": "Coffee", "description": "",
                                     "_csrf_token": csrf(owner)})
 category = re.search(r'<option value="(\d+)">',
@@ -320,9 +320,9 @@ print("\n=== 7. Only the owner sets the charges ===")
 # =====================================================================
 owner.post("/users/add", data={
     "full_name": "Cara Cashier", "username": "cara", "role": "cashier",
-    "phone_number": "", "password": "password123", "_csrf_token": csrf(owner)})
+    "phone_number": "", "password": "Brew-Latte-42", "_csrf_token": csrf(owner)})
 cashier = app.test_client()
-cashier.post("/login", data={"username": "cara", "password": "password123"})
+cashier.post("/login", data={"username": "cara", "password": "Brew-Latte-42"})
 flashes(cashier)
 check("a cashier cannot open the page",
       cashier.get("/settings/packing").status_code in (302, 403))

@@ -256,7 +256,7 @@ owner.post("/register", data={
     "cafe_name": "Identity Cafe", "full_name": "Ida Owner",
     "username": "ida", "email": "Ida@Cafe.COM",
     "phone_country": "India", "phone_number": "9876500001",
-    "password": "password123", "confirm_password": "password123"},
+    "password": "Brew-Latte-42", "confirm_password": "Brew-Latte-42"},
     follow_redirects=True)
 mysql_shim.skip_tour()
 
@@ -275,7 +275,7 @@ check("and the number in one international piece",
 for typed in ("ida", "ida@cafe.com", "IDA@CAFE.COM", "  ida@cafe.com  "):
     attempt = app.test_client()
     attempt.post("/login", data={"username": typed,
-                                 "password": "password123"},
+                                 "password": "Brew-Latte-42"},
                  follow_redirects=True)
     check("signing in as %r works" % typed, signed_in(attempt),
           "that spelling was not accepted")
@@ -289,7 +289,7 @@ check("but not with the wrong password",
       "an email address let somebody in without the password")
 
 check("an address nobody has is refused",
-      not signs_in_as("nobody@nowhere.com", "password123"),
+      not signs_in_as("nobody@nowhere.com", "Brew-Latte-42"),
       "an unknown address signed in")
 
 
@@ -308,7 +308,7 @@ for _ in range(application.LOGIN_MAX_FAILURES):
                            follow_redirects=True)
 
 locked = app.test_client().post(
-    "/login", data={"username": "ida", "password": "password123"},
+    "/login", data={"username": "ida", "password": "Brew-Latte-42"},
     follow_redirects=True).get_data(as_text=True)
 
 check("the username is locked after enough wrong answers",
@@ -317,7 +317,7 @@ check("the username is locked after enough wrong answers",
 
 by_email = app.test_client()
 by_email.post("/login", data={"username": "ida@cafe.com",
-                              "password": "password123"},
+                              "password": "Brew-Latte-42"},
               follow_redirects=True)
 
 check("and the email address is locked with it",
@@ -336,7 +336,7 @@ owner.post("/users/add", data={
     "full_name": "Tess Till", "username": "tess",
     "email": "tess@cafe.com",
     "phone_country": "United Kingdom", "phone_number": "07911 123456",
-    "password": "password123", "confirm_password": "password123",
+    "password": "Brew-Latte-42", "confirm_password": "Brew-Latte-42",
     "role": "staff", "_csrf_token": csrf(owner)}, follow_redirects=True)
 
 tess = mysql_shim._DB.execute(
@@ -353,7 +353,7 @@ check("and their number is read as a British one",
 
 staff = app.test_client()
 staff.post("/login", data={"username": "tess@cafe.com",
-                           "password": "password123"},
+                           "password": "Brew-Latte-42"},
            follow_redirects=True)
 check("they can sign in with it",
       signed_in(staff), "staff could not sign in by email")
@@ -361,7 +361,7 @@ check("they can sign in with it",
 short = owner.post("/users/add", data={
     "full_name": "Wrong Number", "username": "wrongnum",
     "phone_country": "India", "phone_number": "12345",
-    "password": "password123", "confirm_password": "password123",
+    "password": "Brew-Latte-42", "confirm_password": "Brew-Latte-42",
     "role": "staff", "_csrf_token": csrf(owner)}, follow_redirects=True)
 
 check("a staff number of the wrong length is refused",
@@ -395,7 +395,7 @@ check("and a one-letter name does not give itself away",
 
 otp = app.test_client()
 otp.post("/login", data={"username": "ida@cafe.com",
-                         "password": "password123"},
+                         "password": "Brew-Latte-42"},
          follow_redirects=True)
 
 with otp.session_transaction() as sess:
@@ -418,7 +418,7 @@ check("the code screen names the address",
 # can still sign in. That is the development fallback the SMS path has.
 again = app.test_client()
 body = again.post("/login", data={"username": "ida",
-                                  "password": "password123"},
+                                  "password": "Brew-Latte-42"},
                   follow_redirects=True).get_data(as_text=True)
 found = re.search(r"code:\s*(\d{6})", body)
 
@@ -438,7 +438,7 @@ check("password and then the code signs in",
 # end of the shift however hard they ticked it.
 for ticked in (True, False):
     asking = app.test_client()
-    form = {"username": "ida", "password": "password123"}
+    form = {"username": "ida", "password": "Brew-Latte-42"}
     if ticked:
         form["remember"] = "1"
     sent = asking.post("/login", data=form,
@@ -466,7 +466,7 @@ for ticked in (True, False):
 
 wrong_code = app.test_client()
 wrong_code.post("/login", data={"username": "ida",
-                                "password": "password123"},
+                                "password": "Brew-Latte-42"},
                 follow_redirects=True)
 wrong_code.post("/login/verify", data={"otp_code": "000000"},
                 follow_redirects=True)
@@ -478,7 +478,7 @@ check("but a wrong code does not",
 # to keep it and again to check it. Six digits were never protected by slowness; the expiry and the
 # attempt limit protect them. It is kept as an HMAC under the app's key.
 keyed = app.test_client()
-sent = keyed.post("/login", data={"username": "ida", "password": "password123"},
+sent = keyed.post("/login", data={"username": "ida", "password": "Brew-Latte-42"},
                   follow_redirects=True).get_data(as_text=True)
 code = re.search(r"code:\s*(\d{6})", sent).group(1)
 kept = mysql_shim._DB.execute(
@@ -497,7 +497,7 @@ check("and the right code still signs in", all_the_way_in(keyed))
 # A code sent a minute before the change was kept the old way; it works
 # for the minutes it has left.
 older = app.test_client()
-sent = older.post("/login", data={"username": "ida", "password": "password123"},
+sent = older.post("/login", data={"username": "ida", "password": "Brew-Latte-42"},
                   follow_redirects=True).get_data(as_text=True)
 code = re.search(r"code:\s*(\d{6})", sent).group(1)
 mysql_shim._DB.execute("UPDATE login_otp_codes SET code_hash = ?",
@@ -549,12 +549,12 @@ owner.post("/users/add", data={
     "full_name": "Cass Ier", "username": "cass",
     "email": "cass@cafe.com",
     "phone_country": "India", "phone_number": "9876500055",
-    "password": "password123", "confirm_password": "password123",
+    "password": "Brew-Latte-42", "confirm_password": "Brew-Latte-42",
     "role": "staff", "_csrf_token": csrf(owner)}, follow_redirects=True)
 
 till = app.test_client()
 till_body = till.post("/login", data={"username": "cass",
-                                      "password": "password123"},
+                                      "password": "Brew-Latte-42"},
                       follow_redirects=True).get_data(as_text=True)
 
 check("a cashier is asked for a code too",
@@ -580,12 +580,12 @@ check("landing them somewhere they are allowed",
 owner.post("/users/add", data={
     "full_name": "No Contact", "username": "nocontact",
     "phone_country": "India", "phone_number": "",
-    "password": "password123", "confirm_password": "password123",
+    "password": "Brew-Latte-42", "confirm_password": "Brew-Latte-42",
     "role": "staff", "_csrf_token": csrf(owner)}, follow_redirects=True)
 
 stranded = app.test_client()
 stranded.post("/login", data={"username": "nocontact",
-                              "password": "password123"},
+                              "password": "Brew-Latte-42"},
               follow_redirects=True)
 
 check("but somebody with no address and no number is not locked out",
@@ -594,7 +594,7 @@ check("but somebody with no address and no number is not locked out",
 
 # A code that has run out is refused, and the resend gives a new one.
 expired = app.test_client()
-expired.post("/login", data={"username": "cass", "password": "password123"},
+expired.post("/login", data={"username": "cass", "password": "Brew-Latte-42"},
              follow_redirects=True)
 mysql_shim._DB.execute(
     "UPDATE login_otp_codes SET expires_at = datetime(NOW(), '-1 seconds')")
@@ -1039,6 +1039,121 @@ check("and the health endpoint says which one is in use",
       "cache" in (app.test_client().get("/healthz").get_json() or {}),
       "setting REDIS_URL and having it quietly not connect looks "
       "exactly like it working, until two workers disagree")
+
+
+# ==========================================================
+print("\n=== 11. An admin's password is a strong one ===")
+# ==========================================================
+# The admin holds the cafe. Their password meets the rules careful
+# services ask for - listed under the box while it is typed, and checked
+# again on the server wherever an admin's password is set.
+RULE_WORDS = ("At least 8 characters", "An uppercase letter (A-Z)",
+              "A lowercase letter (a-z)", "A number (0-9)",
+              "A special character", "Not your username or a common password")
+
+
+def exists(username):
+    return mysql_shim._DB.execute(
+        "SELECT COUNT(*) FROM users WHERE username = ?", (username,)).fetchone()[0] == 1
+
+
+fresh = app.test_client()
+page = fresh.get("/register").get_data(as_text=True)
+check("the sign-up form lists what an admin's password must have",
+      all(words in page for words in RULE_WORDS) and 'class="pw-rules"' in page)
+
+
+def sign_up(password, username="strongboss"):
+    return fresh.post("/register", data={
+        "cafe_name": "Strong Cafe", "full_name": "Strong Owner",
+        "username": username, "phone_number": "", "password": password,
+        "confirm_password": password}, follow_redirects=True).get_data(as_text=True)
+
+
+said = sign_up("password123")
+check("password123 is refused, saying what it still needs",
+      "It still needs an uppercase letter and a special character" in said
+      and not exists("strongboss"), said[:0])
+said = sign_up("Strongboss-2026!")
+check("so is one with the username in it",
+      "too easy to guess" in said and not exists("strongboss"))
+said = sign_up("P@ssw0rd!")
+check("and a common one dressed up - P@ssw0rd! is password",
+      "too easy to guess" in said and not exists("strongboss"))
+check("short is said as short", "at least 8 characters" in sign_up("Ab1-xyz"))
+sign_up("Brew-Latte-42")
+check("one that meets every rule makes the cafe", exists("strongboss"))
+
+boss = app.test_client()
+boss.post("/login", data={"username": "strongboss", "password": "Brew-Latte-42"},
+          follow_redirects=True)
+check("(its admin signs in with it)", all_the_way_in(boss))
+page = boss.get("/account/password").get_data(as_text=True)
+check("Change Password shows the admin the same list",
+      all(words in page for words in RULE_WORDS))
+said = boss.post("/account/password", data={
+    "current_password": "Brew-Latte-42", "new_password": "latteslatte1",
+    "confirm_password": "latteslatte1", "_csrf_token": csrf(boss)},
+    follow_redirects=True).get_data(as_text=True)
+check("and refuses a weak new one",
+      "It still needs an uppercase letter and a special character" in said)
+check("leaving the old one in place",
+      signs_in_as("strongboss", "Brew-Latte-42"))
+boss.post("/account/password", data={
+    "current_password": "Brew-Latte-42", "new_password": "Mocha-Moon-77",
+    "confirm_password": "Mocha-Moon-77", "_csrf_token": csrf(boss)},
+    follow_redirects=True)
+check("a strong one is taken", signs_in_as("strongboss", "Mocha-Moon-77"))
+
+# A teammate's password is set by the admin, and needs 8 characters.
+boss.post("/users/add", data={
+    "full_name": "Tilly Till", "username": "tilly", "role": "staff",
+    "phone_number": "", "password": "tillpass1", "_csrf_token": csrf(boss)},
+    follow_redirects=True)
+check("a teammate's needs only its 8 characters", exists("tilly"))
+page = boss.get("/users/add").get_data(as_text=True)
+check("and their form does not ask for the admin's rules",
+      'class="pw-rules"' not in page and "Use at least 8 characters." in page)
+teammate = app.test_client()
+teammate.post("/login", data={"username": "tilly", "password": "tillpass1"},
+              follow_redirects=True)
+page = teammate.get("/account/password").get_data(as_text=True)
+check("nor does their own Change Password",
+      all_the_way_in(teammate) and 'class="pw-rules"' not in page)
+
+# The admin's own account in User Management is held to the rules too.
+owner_id = mysql_shim._DB.execute(
+    "SELECT user_id FROM users WHERE username = 'strongboss'").fetchone()[0]
+page = boss.get("/users/%d/edit" % owner_id).get_data(as_text=True)
+check("editing the admin's own account lists the rules", 'class="pw-rules"' in page)
+said = boss.post("/users/%d/edit" % owner_id, data={
+    "full_name": "Strong Owner", "role": "admin", "is_active": "1",
+    "phone_number": "", "email": "", "password": "strongboss99",
+    "_csrf_token": csrf(boss)}, follow_redirects=True).get_data(as_text=True)
+check("and refuses a weak one there", "Choose a stronger password" in said
+      and signs_in_as("strongboss", "Mocha-Moon-77"))
+
+# The reset: only an admin resets here, so the admin's rules.
+mysql_shim._DB.execute("UPDATE users SET phone_number = '9876501234' WHERE username = 'strongboss'")
+mysql_shim._DB.commit()
+application.cache_clear()
+reset = app.test_client()
+reset.get("/forgot-password")
+page = reset.get("/forgot-password").get_data(as_text=True)
+check("the password reset lists the rules", all(words in page for words in RULE_WORDS))
+said = reset.post("/forgot-password", data={
+    "username": "strongboss", "full_name": "Strong Owner", "phone_country": "India",
+    "phone_number": "9876501234", "new_password": "resetreset1",
+    "confirm_password": "resetreset1", "_csrf_token": csrf(reset)},
+    follow_redirects=True).get_data(as_text=True)
+check("and a weak one is refused there too", "Choose a stronger password" in said
+      and signs_in_as("strongboss", "Mocha-Moon-77"))
+reset.post("/forgot-password", data={
+    "username": "strongboss", "full_name": "Strong Owner", "phone_country": "India",
+    "phone_number": "9876501234", "new_password": "Reset-Rain-55",
+    "confirm_password": "Reset-Rain-55", "_csrf_token": csrf(reset)},
+    follow_redirects=True)
+check("while a strong one resets it", signs_in_as("strongboss", "Reset-Rain-55"))
 
 
 print("\n" + "=" * 62)

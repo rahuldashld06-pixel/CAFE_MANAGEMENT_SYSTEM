@@ -83,8 +83,8 @@ print("\n=== 0. Seeding a cafe with a menu ===")
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Palette Cafe", "full_name": "Pat Owner", "username": "pat",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42",
 }, follow_redirects=True)
 
 
@@ -178,7 +178,7 @@ try:
         (function () {
             var f = document.querySelector('form');
             f.querySelector('[name=username]').value = 'pat';
-            f.querySelector('[name=password]').value = 'password123';
+            f.querySelector('[name=password]').value = 'Brew-Latte-42';
             f.submit();
         }())
     """)

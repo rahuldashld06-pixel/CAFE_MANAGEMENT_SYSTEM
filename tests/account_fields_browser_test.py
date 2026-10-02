@@ -63,8 +63,8 @@ print("\n=== 0. A cafe whose owner is called robin ===")
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Field Cafe", "full_name": "Robin Owner", "username": "robin",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 mysql_shim.skip_tour()
 
 threading.Thread(
@@ -192,12 +192,58 @@ try:
           meter(field).get("level") == "0" and not meter(field).get("word"))
 
     # =================================================================
+    print("\n=== 2b. What an admin's password must have ===")
+    # =================================================================
+    def rules():
+        return json.loads(b.evaluate("""JSON.stringify((function () {
+            var box = document.querySelector('.pw-rules'), out = {};
+            [].forEach.call(box.querySelectorAll('[data-rule]'), function (li) {
+                out[li.getAttribute('data-rule')] = li.getAttribute('data-met') === 'true';
+            });
+            out.all = box.getAttribute('data-all') === 'true';
+            out.shout = box.classList.contains('pw-rules--shout');
+            return out;
+        }()))"""))
+
+    type_into("#username", "robin2")
+    type_into(field, "abc")
+    got = rules()
+    check("as it is typed, each rule met is ticked and the rest are not",
+          got["lower"] and not got["length"] and not got["upper"]
+          and not got["number"] and not got["special"] and not got["all"], got)
+    type_into(field, "Robin2-Coffee")
+    got = rules()
+    check("the username inside it is caught as easy to guess",
+          not got["guess"] and got["upper"] and got["special"], got)
+    type_into(field, "Brew-Latte-42")
+    got = rules()
+    check("a password meeting all six is ticked off whole", got["all"], got)
+    look = b.evaluate("getComputedStyle(document.querySelector('.pw-rules [data-rule=length]')).color")
+    check("each ticked rule turns green", look == "rgb(143, 187, 153)", look)
+
+    type_into(field, "password123")
+    type_into("#confirm_password", "password123")
+    b.evaluate("""(function(){var f=document.getElementById('password').form;
+        f.querySelector('[name=cafe_name]').value='Weak Cafe';
+        f.querySelector('[name=full_name]').value='Weak Owner';
+        f.querySelector('button[type=submit]').click(); return 1;}())""")
+    time.sleep(0.6)
+    got = rules()
+    check("pressing Create with a rule unmet keeps the form here, the unmet rules in red",
+          b.evaluate("location.pathname") == "/register" and got["shout"]
+          and b.evaluate("document.activeElement.id") == "password", got)
+    check("and nothing was made",
+          mysql_shim._DB.execute("SELECT COUNT(*) FROM users WHERE username = 'robin2'")
+          .fetchone()[0] == 0)
+    type_into(field, "")
+
+    # =================================================================
     print("\n=== 3. Inside the app ===")
     # =================================================================
     open_page("/login", "!!document.querySelector('form')")
     b.evaluate("""(function(){var f=document.querySelector('form');
         f.querySelector('[name=username]').value='robin';
-        f.querySelector('[name=password]').value='password123';
+        f.querySelector('[name=password]').value='Brew-Latte-42';
         f.submit(); return 1;})()""")
     wait("!!document.getElementById('page-view')", "the app")
     open_page("/users/add", "!!document.querySelector('[data-username-check]')")

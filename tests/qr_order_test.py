@@ -59,8 +59,8 @@ def build_cafe(cafe, username, foods):
     client = app.test_client()
     client.post("/register", data={
         "cafe_name": cafe, "full_name": username.title(), "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
     client.post("/categories/add", data={
         "category_name": "Coffee", "description": "",
@@ -293,10 +293,10 @@ check("it is offered in the profile menu",
 
 admin.post("/users/add", data={
     "full_name": "Cash", "username": "cash", "role": "cashier",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf(admin)}, follow_redirects=True)
 cashier = app.test_client()
-cashier.post("/login", data={"username": "cash", "password": "password123"},
+cashier.post("/login", data={"username": "cash", "password": "Brew-Latte-42"},
              follow_redirects=True)
 
 check("a cashier is not offered it",
@@ -954,8 +954,8 @@ print("\n=== Renaming the cafe reaches the people outside it ===")
 renamer = app.test_client()
 renamer.post("/register", data={
     "cafe_name": "Name On Day One", "full_name": "Owner",
-    "username": "renamer", "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "username": "renamer", "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 renamer.get("/settings/qr")          # mints the public token
 
 renamer.post("/settings/branding",

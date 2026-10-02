@@ -68,16 +68,16 @@ def seen_flag(username):
 admin = app.test_client()
 admin.post("/register", data={
     "cafe_name": "Tour Cafe", "full_name": "Boss", "username": "boss",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 admin.post("/users/add", data={
     "full_name": "Till One", "username": "till", "role": "cashier",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf(admin)}, follow_redirects=True)
 
 cashier = app.test_client()
-cashier.post("/login", data={"username": "till", "password": "password123"},
+cashier.post("/login", data={"username": "till", "password": "Brew-Latte-42"},
              follow_redirects=True)
 
 

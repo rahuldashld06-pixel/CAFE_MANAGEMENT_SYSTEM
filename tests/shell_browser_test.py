@@ -55,8 +55,8 @@ def check(name, condition, detail=""):
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Rail Cafe", "full_name": "Rae Owner", "username": "rae",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def csrf():
@@ -166,7 +166,7 @@ try:
     open_page("/login")
     b.evaluate("""(function(){var f=document.querySelector('form');
         f.querySelector('[name=username]').value='rae';
-        f.querySelector('[name=password]').value='password123';
+        f.querySelector('[name=password]').value='Brew-Latte-42';
         f.submit(); return 1;}())""")
     wait("location.pathname !== '/login'")
     b.evaluate("try { localStorage.removeItem('cafora.guide'); "
@@ -354,7 +354,7 @@ try:
                              ("Mona Manager", "mona", "manager")):
         seed.post("/users/add", data={
             "full_name": full, "username": user, "role": role,
-            "phone_number": "", "password": "password123",
+            "phone_number": "", "password": "Brew-Latte-42",
             "_csrf_token": csrf()}, follow_redirects=True)
     open_page("/users")
 

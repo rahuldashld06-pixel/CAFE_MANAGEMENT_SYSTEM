@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_password_rules.html" import password_rules_box %}
 
 {% block title %}{{ "Edit User" if user else "Add User" }}{% endblock %}
 
@@ -132,12 +133,17 @@
                 <input
                     type="password"
                     name="password"
+                    id="userPassword"
                     placeholder="{{ '••••••••' if user else 'Create a password' }}"
                     minlength="8"
                     autocomplete="new-password"
                     data-strength
                     {% if not user %}required{% endif %}>
+                {% if is_admin_account %}
+                {{ password_rules_box("userPassword", username=user.username) }}
+                {% else %}
                 <small>Use at least 8 characters.</small>
+                {% endif %}
             </div>
 
             <!-- Active toggle: not for the admin, who stays switched on -->

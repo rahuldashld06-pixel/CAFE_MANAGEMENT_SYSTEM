@@ -78,8 +78,8 @@ print("\n=== 0. A cafe with a table QR ===")
 owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": "Table Cafe", "full_name": "Tara Owner", "username": "tara",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 owner.post("/categories/add", data={"category_name": "Coffee", "description": "",
                                     "_csrf_token": csrf(owner)})
 category = re.search(r'<option value="(\d+)">', text(owner.get("/foods/add"))).group(1)
@@ -96,7 +96,7 @@ owner.post("/settings/packing", data={
     "_csrf_token": csrf(owner)})
 owner.post("/users/add", data={
     "full_name": "Cal Cashier", "username": "cal", "role": "cashier",
-    "phone_number": "", "password": "password123", "_csrf_token": csrf(owner)})
+    "phone_number": "", "password": "Brew-Latte-42", "_csrf_token": csrf(owner)})
 flashes(owner)
 with owner.session_transaction() as sess:
     CAFE = sess["cafe_id"]
@@ -174,7 +174,7 @@ check("a takeaway is billed what it was placed with, even if the charge "
 print("\n=== 2. Pausing table ordering ===")
 # =====================================================================
 cashier = app.test_client()
-cashier.post("/login", data={"username": "cal", "password": "password123"})
+cashier.post("/login", data={"username": "cal", "password": "Brew-Latte-42"})
 page = text(cashier.get("/orders/add"))
 check("everyone on the team is offered the switch",
       'id="qrSwitch"' in page and 'aria-checked="true"' in page

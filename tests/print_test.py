@@ -50,8 +50,8 @@ def csrf(client):
 def build(client, cafe, username, menu, price="120"):
     client.post("/register", data={
         "cafe_name": cafe, "full_name": username.title(), "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
     client.post("/categories/add",
                 data={"category_name": "Coffee", "description": "",
                       "_csrf_token": csrf(client)}, follow_redirects=True)
@@ -140,11 +140,11 @@ check("and no totals section",
 print("\n=== 4. Staff can print, not just admins ===")
 a.post("/users/add", data={
     "full_name": "Till One", "username": "till1", "role": "cashier",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf(a)}, follow_redirects=True)
 
 staff = app.test_client()
-staff.post("/login", data={"username": "till1", "password": "password123"},
+staff.post("/login", data={"username": "till1", "password": "Brew-Latte-42"},
            follow_redirects=True)
 
 check("a cashier can print the bill",

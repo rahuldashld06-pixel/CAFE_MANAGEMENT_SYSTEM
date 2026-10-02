@@ -101,8 +101,8 @@ def csrf(client):
 owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": "Error Cafe", "full_name": "Ena Owner", "username": "ena",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 with owner.session_transaction() as sess:
     CAFE = sess["cafe_id"]
 TOKEN = application.get_public_token(CAFE)

@@ -58,8 +58,8 @@ def csrf(client):
 def register(client, cafe, user):
     return client.post("/register", data={
         "cafe_name": cafe, "full_name": user.title(), "username": user,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def rates_on_page(client=None):
@@ -286,12 +286,12 @@ print("\n=== 9. Only an admin, and only their own cafe ===")
 # =====================================================================
 
 admin.post("/users/add", data={
-    "full_name": "Cash Ier", "username": "cash", "password": "password123",
-    "confirm_password": "password123", "role": "staff",
+    "full_name": "Cash Ier", "username": "cash", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42", "role": "staff",
     "_csrf_token": csrf(admin)}, follow_redirects=True)
 
 cashier = app.test_client()
-cashier.post("/login", data={"username": "cash", "password": "password123"},
+cashier.post("/login", data={"username": "cash", "password": "Brew-Latte-42"},
              follow_redirects=True)
 
 check("a cashier is not offered the page",

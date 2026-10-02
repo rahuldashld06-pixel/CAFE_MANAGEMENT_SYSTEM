@@ -90,8 +90,8 @@ def register(cafe, username):
     client = app.test_client()
     client.post("/register", data={
         "cafe_name": cafe, "full_name": cafe + " Admin", "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
     cafe_id = db("SELECT cafe_id FROM cafes WHERE cafe_name = ?", (cafe,))[0][0]
     return client, cafe_id
 
@@ -99,7 +99,7 @@ def register(cafe, username):
 def sign_in(cafe, username):
     client = app.test_client()
     client.post("/login", data={"cafe_name": cafe, "username": username,
-                                "password": "password123"})
+                                "password": "Brew-Latte-42"})
     return client
 
 
@@ -148,7 +148,7 @@ check("which runs fifteen days",
 with admin.session_transaction() as _sess:
     _token = _sess.get("_csrf_token", "")
 admin.post("/users/add", data={"full_name": "Cara Staff", "username": "cara",
-                               "role": "staff", "phone_number": "", "password": "password123",
+                               "role": "staff", "phone_number": "", "password": "Brew-Latte-42",
                                "_csrf_token": _token})
 cashier = sign_in("Plan Cafe", "cara")
 check("(a teammate on the team, as staff - the trial's one role)",
@@ -426,7 +426,7 @@ with admin.session_transaction() as _sess:
     _token = _sess.get("_csrf_token", "")
 response = admin.post("/users/add", data={"full_name": "Second Person", "username": "second1",
                                           "role": "staff", "phone_number": "",
-                                          "password": "password123", "_csrf_token": _token})
+                                          "password": "Brew-Latte-42", "_csrf_token": _token})
 check("Free has room for one teammate - a second is sent to unlock the team",
       response.headers.get("Location", "").endswith("feature=team#unlocks")
       and db("SELECT COUNT(*) FROM users WHERE username = 'second1'")[0][0] == 0)
@@ -435,7 +435,7 @@ db("DELETE FROM users WHERE username = 'cara'")
 application.cache_clear()
 response = admin.post("/users/add", data={"full_name": "Cash Ier", "username": "cashier9",
                                           "role": "cashier", "phone_number": "",
-                                          "password": "password123", "_csrf_token": _token})
+                                          "password": "Brew-Latte-42", "_csrf_token": _token})
 check("with the room free, a cashier is still refused - a Pro role",
       db("SELECT COUNT(*) FROM users WHERE username = 'cashier9'")[0][0] == 0)
 form = text(admin.get("/users/add"))
@@ -443,7 +443,7 @@ check("the form offers Manager and Cashier only as Pro",
       "Manager - Refero Pro" in form and "Cashier - Refero Pro" in form)
 admin.post("/users/add", data={"full_name": "Stef Staff", "username": "stef",
                                "role": "staff", "phone_number": "",
-                               "password": "password123", "_csrf_token": _token})
+                               "password": "Brew-Latte-42", "_csrf_token": _token})
 check("and one teammate as staff is welcome",
       db("SELECT role FROM users WHERE username = 'stef'") == [("staff",)])
 cashier = sign_in("Plan Cafe", "stef")

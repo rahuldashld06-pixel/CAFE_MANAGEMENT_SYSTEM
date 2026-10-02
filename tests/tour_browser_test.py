@@ -70,12 +70,12 @@ def csrf(client):
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Tour Cafe", "full_name": "Sam Owner", "username": "sam",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 seed.post("/users/add", data={
     "full_name": "Ravi Till", "username": "ravi", "role": "cashier",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf(seed)}, follow_redirects=True)
 
 threading.Thread(target=lambda: app.run(host="127.0.0.1", port=PORT,
@@ -128,7 +128,7 @@ def sign_in(username):
         (function () {
             var f = document.querySelector('form');
             f.querySelector('[name=username]').value = '%s';
-            f.querySelector('[name=password]').value = 'password123';
+            f.querySelector('[name=password]').value = 'Brew-Latte-42';
             f.submit();
         }())
     """ % username)

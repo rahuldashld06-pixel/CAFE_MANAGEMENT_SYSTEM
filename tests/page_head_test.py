@@ -63,7 +63,7 @@ owner = app.test_client()
 owner.post("/register", data={
     "cafe_name": CAFE, "full_name": "Owner", "username": "owner",
     "phone_country": "India", "phone_number": "9876500001",
-    "password": "password123", "confirm_password": "password123",
+    "password": "Brew-Latte-42", "confirm_password": "Brew-Latte-42",
 }, follow_redirects=True)
 mysql_shim.skip_tour()
 landed = owner.get("/dashboard").status_code

@@ -79,8 +79,8 @@ def _release(exception=None):
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Draft Cafe", "full_name": "Dana Owner", "username": "dana",
-    "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def csrf():
@@ -104,7 +104,7 @@ for food, price in (("Filter Coffee", "60"), ("Idli", "50")):
 # A second person on the same till.
 seed.post("/users/add", data={
     "full_name": "Rio Manager", "username": "rio", "role": "manager",
-    "phone_number": "", "password": "password123",
+    "phone_number": "", "password": "Brew-Latte-42",
     "_csrf_token": csrf()}, follow_redirects=True)
 
 
@@ -170,7 +170,7 @@ def sign_in(user):
             var f = document.querySelector('form');
             f.querySelector('[name=cafe_name]').value = 'Draft Cafe';
             f.querySelector('[name=username]').value = %s;
-            f.querySelector('[name=password]').value = 'password123';
+            f.querySelector('[name=password]').value = 'Brew-Latte-42';
             f.querySelector('[type=submit]').click();
             return true;
         }())

@@ -74,8 +74,8 @@ def _release(exception=None):
 seed = app.test_client()
 seed.post("/register", data={
     "cafe_name": "Green Door", "full_name": "Menu Owner",
-    "username": "greendoor", "phone_number": "", "password": "password123",
-    "confirm_password": "password123"}, follow_redirects=True)
+    "username": "greendoor", "phone_number": "", "password": "Brew-Latte-42",
+    "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
 
 
 def csrf():

@@ -87,8 +87,8 @@ def register(cafe, username):
     client = app.test_client()
     client.post("/register", data={
         "cafe_name": cafe, "full_name": cafe + " Admin", "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
     return client, db("SELECT cafe_id FROM cafes WHERE cafe_name = ?", (cafe,))[0][0]
 
 
@@ -222,10 +222,10 @@ check("a slow page is noted, with how long it took",
 with owner.session_transaction() as sess:
     sess_token = sess.get("_csrf_token", "")
 owner.post("/users/add", data={"full_name": "Kim Kitchen", "username": "kimk", "role": "staff",
-                               "phone_number": "", "password": "password123",
+                               "phone_number": "", "password": "Brew-Latte-42",
                                "_csrf_token": sess_token})
 staff = app.test_client()
-staff.post("/login", data={"cafe_name": "Watched Cafe", "username": "kimk", "password": "password123"})
+staff.post("/login", data={"cafe_name": "Watched Cafe", "username": "kimk", "password": "Brew-Latte-42"})
 check("anybody on the team can open Report a problem",
       staff.get("/report-problem").status_code == 200)
 response = staff.post("/report-problem", data={"what": "The kitchen screen froze at lunch.",

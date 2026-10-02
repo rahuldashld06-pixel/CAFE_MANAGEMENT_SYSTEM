@@ -60,8 +60,8 @@ def build_cafe(cafe, username):
     client = app.test_client()
     client.post("/register", data={
         "cafe_name": cafe, "full_name": username.title(), "username": username,
-        "phone_number": "", "password": "password123",
-        "confirm_password": "password123"}, follow_redirects=True)
+        "phone_number": "", "password": "Brew-Latte-42",
+        "confirm_password": "Brew-Latte-42"}, follow_redirects=True)
     client.post("/categories/add", data={
         "category_name": "Coffee", "description": "",
         "_csrf_token": csrf(client)}, follow_redirects=True)
