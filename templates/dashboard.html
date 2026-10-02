@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "_stars.html" import stars %}
 {% from "_food_art.html" import food_art %}
-{% from "_plan_lock.html" import lock_veil, locked_kpi %}
+{% from "_plan_lock.html" import lock_veil, locked_kpi, opening_lock %}
 
 {% block title %}Dashboard{% endblock %}
 
@@ -43,6 +43,7 @@
     {{ locked_kpi("kpiSales", "Sales today", "revenue") }}
     {% elif user_can('dashboard') %}
     <article class="kpi" id="kpiSales">
+        {% if plan_unlocking %}{{ opening_lock("card") }}{% endif %}
         <div class="kpi__top">
             <span class="kpi__label" data-kpi-label="Sales">Sales today</span>
             <span class="kpi__icon"><i class="bi bi-currency-rupee"></i></span>
@@ -72,6 +73,7 @@
     {{ locked_kpi("kpiAverage", "Average bill today", "revenue") }}
     {% elif user_can('dashboard') %}
     <article class="kpi" id="kpiAverage">
+        {% if plan_unlocking %}{{ opening_lock("card") }}{% endif %}
         <div class="kpi__top">
             <span class="kpi__label" data-kpi-label="Average bill">Average bill today</span>
             <span class="kpi__icon"><i class="bi bi-graph-up-arrow"></i></span>
@@ -85,6 +87,7 @@
     {{ locked_kpi("kpiStock", "Stock to check", "stock_alerts") }}
     {% else %}
     <article class="kpi kpi--warn" id="kpiStock">
+        {% if plan_unlocking %}{{ opening_lock("card") }}{% endif %}
         <div class="kpi__top">
             <span class="kpi__label">Stock to check</span>
             <span class="kpi__icon"><i class="bi bi-exclamation-lg"></i></span>

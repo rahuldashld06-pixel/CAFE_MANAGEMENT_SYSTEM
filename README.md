@@ -32,7 +32,18 @@ branding, fully isolated from the others.
 - **Refero Pro: 15 days free, then Monthly or Yearly.** Rs 750 a month,
   or Rs 7,800 a year (Rs 650 a month - Rs 1,200 less than twelve
   months). Amounts are grouped the Indian way (Rs 1,23,456), and a
-  payment started but not yet paid asks the current price. Plan & billing, under Subscription
+  payment started but not yet paid asks the current price. A plan bought
+  while one is running - Monthly with days left, then Yearly - waits its
+  turn and continues automatically from the end of the current one: the
+  billing page and the pay page say so before paying, and the plan is
+  shown in order (Now, Next, Being checked). Plan & billing is drawn in
+  the app's own panels and the cafe's chosen colours.
+- **The locks open.** A locked option wears a round badge (the sidebar's
+  sits on the icon's corner). The first time somebody sees a page after
+  the plan is bought, every lock that was on it is drawn opening - a key
+  goes in and turns, the shackle lifts, and it is gone - once per device
+  (`/api/plan/unlocked`). Locks in the closed profile menu or drawer wait
+  until it is opened. Plan & billing, under Subscription
   in the profile menu: where the plan stands and when it ends, the two
   plans side by side with a Monthly/Yearly switch, "What's included?" -
   the cafe's plan beside Pro, row by row, built from the plan rules so it
@@ -1011,7 +1022,7 @@ python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
 python tests/customer_menu_browser_test.py # expect PASSED: 69  FAILED: 0
 python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
 python tests/error_pages_test.py  # expect PASSED: 36  FAILED: 0
-python tests/subscription_test.py # expect PASSED: 117 FAILED: 0
+python tests/subscription_test.py # expect PASSED: 126 FAILED: 0
 python tests/console_test.py      # expect PASSED: 50  FAILED: 0
 ```
 

@@ -6688,22 +6688,52 @@ div.food-art {
    ========================================================== */
 .nav-link { position: relative; }
 
-.nav-lock {
+/* A round badge, like a notification's: the theme's colour, its lock
+   centred, and a ring of the sidebar's own colour cut round it so it
+   sits on the icon rather than over it. At the right of the line when
+   the guide is open or a drawer; on the icon's top corner in the rail.
+   Named with its link, so the drawer's ".nav-link span" (every word
+   inline) does not take its grid away and leave the lock off-centre. */
+.nav-link .nav-lock {
     position: absolute;
-    top: 7px;
-    right: 9px;
+    top: 50%;
+    right: 12px;
     display: grid;
     place-items: center;
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: rgba(var(--copper-rgb), .2);
-    color: var(--copper-light);
+    background: linear-gradient(145deg, var(--copper-light), var(--copper));
+    color: var(--espresso-950);
+    box-shadow: 0 0 0 2.5px var(--espresso-950), 0 4px 10px -3px rgba(0, 0, 0, .7);
+    transform: translateY(-50%);
+    pointer-events: none;
 }
 
-.nav-link .nav-lock i { width: auto; font-size: 9.5px; color: inherit; }
+.nav-link .nav-lock i {
+    display: block;
+    width: auto;
+    height: auto;
+    margin: 0;
+    font-size: 9px;
+    line-height: 1;
+    color: inherit;
+}
 
-:root.guide-full .nav-lock { top: 50%; transform: translateY(-50%); right: 12px; }
+/* The icon font sets its glyph a little low on the line, and the
+   drawer's icons are given a height of their own: either pushes the lock
+   off the middle of its circle. */
+.nav-link .nav-lock i::before { display: block; line-height: 1; vertical-align: 0; }
+
+@media (min-width: 1401px),
+       (min-width: 1025px) and (pointer: fine) {
+    :root:not(.guide-full) .nav-lock {
+        top: 7px;
+        right: auto;
+        left: calc(50% + 4px);
+        transform: none;
+    }
+}
 
 .nav-link--locked { opacity: .78; }
 .nav-link--locked:hover { opacity: 1; }
@@ -6782,4 +6812,96 @@ div.food-art {
     background: rgba(var(--copper-rgb), .2);
     color: var(--copper-light);
     font-size: 17px;
+}
+
+
+/* ==========================================================
+   The locks opening, once, after the plan is bought: a key slides
+   into the lock and turns, the shackle lifts, and it is gone.
+   Drawn where the lock was (_plan_lock.html opening_lock); base.html
+   removes it when it has played and tells the server it was seen.
+   ========================================================== */
+.lock-opening {
+    --lock-key: #F2C94C;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 26px;
+    color: var(--copper);
+    pointer-events: none;
+    animation: lock-opening-life 2.2s ease forwards;
+}
+.lock-opening svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.lock-opening__hole { fill: var(--espresso-950); }
+.lock-opening__key { stroke: var(--lock-key); transform-box: view-box; transform-origin: 22px 21.5px;
+                     animation: lock-opening-key 2.2s ease forwards; }
+.lock-opening__shackle { transform-box: view-box; transform-origin: 17px 15px;
+                         animation: lock-opening-shackle 2.2s ease forwards; }
+.lock-opening__body { filter: drop-shadow(0 0 0 rgba(242, 201, 76, 0));
+                      animation: lock-opening-glow 2.2s ease forwards; }
+
+.lock-opening--nav {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    width: 30px;
+    height: 26px;
+    margin-top: -13px;
+}
+@media (min-width: 1401px),
+       (min-width: 1025px) and (pointer: fine) {
+    :root:not(.guide-full) .lock-opening--nav {
+        top: -6px;
+        right: auto;
+        left: calc(50% + 1px);
+        margin-top: 0;
+    }
+}
+.lock-opening--item { margin-left: auto; }
+.lock-opening--card { position: absolute; top: 12px; right: 12px; width: 40px; height: 34px; z-index: 2; }
+.lock-opening--inline { width: 24px; height: 20px; margin-left: 4px; color: currentColor; }
+.kpi { position: relative; }
+
+@keyframes lock-opening-life {
+    0%   { opacity: 0; transform: scale(.6); }
+    10%  { opacity: 1; transform: scale(1); }
+    72%  { opacity: 1; transform: scale(1); }
+    80%  { opacity: 1; transform: scale(1.18); }
+    100% { opacity: 0; transform: scale(.7); }
+}
+@keyframes lock-opening-key {
+    0%, 8% { opacity: 0; transform: translateX(-10px); }
+    30%    { opacity: 1; transform: translateX(0) scaleY(1); }
+    40%    { transform: translateX(0) scaleY(.25); }
+    50%    { transform: translateX(0) scaleY(1); }
+    80%    { opacity: 1; }
+    100%   { opacity: 0; transform: translateX(0); }
+}
+@keyframes lock-opening-shackle {
+    0%, 50% { transform: none; }
+    60%     { transform: translateY(-4px); }
+    72%, 100% { transform: translateY(-4px) rotate(-38deg); }
+}
+@keyframes lock-opening-glow {
+    0%, 55% { filter: drop-shadow(0 0 0 rgba(242, 201, 76, 0)); }
+    68%     { filter: drop-shadow(0 0 5px rgba(242, 201, 76, .85)); }
+    100%    { filter: drop-shadow(0 0 0 rgba(242, 201, 76, 0)); }
+}
+
+/* Out of sight - in the profile menu while it is shut, in the drawer
+   while it is closed - they wait, and play when they are opened. */
+.profile-menu:not(.open) .lock-opening,
+.profile-menu:not(.open) .lock-opening * { animation-play-state: paused; }
+@media (max-width: 1024px),
+       (max-width: 1400px) and (pointer: coarse) {
+    .app-shell:not(.nav-open) .lock-opening--nav,
+    .app-shell:not(.nav-open) .lock-opening--nav * { animation-play-state: paused; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lock-opening, .lock-opening__key, .lock-opening__shackle, .lock-opening__body {
+        animation-duration: 1.2s;
+    }
+    .lock-opening__key, .lock-opening__shackle { animation-name: none; }
 }

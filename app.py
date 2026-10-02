@@ -13364,6 +13364,69 @@ def approve_plan_payment(cursor, payment_id, now=None):
     return end
 
 
+def plan_next_start(cursor, cafe_id, cafe, now=None):
+    """
+    When a plan bought now begins: where what is already paid for ends -
+    the current plan or trial, then each payment still being checked, in
+    turn - or now, if nothing runs on. Buying early loses no day: a
+    Monthly with a week left, and a Yearly bought today, runs the week
+    out and then the year.
+    """
+    now = now or utc_now()
+    until = _moment(cafe.get("plan_until"))
+    start = until if (until and until > now and cafe.get("plan") != "lifetime") else now
+    cursor.execute(
+        "SELECT plan FROM plan_payments WHERE cafe_id = %s AND status = 'pending' "
+        "ORDER BY payment_id", (cafe_id,))
+    for row in cursor.fetchall():
+        if row["plan"] in PLANS:
+            start = add_months(start, PLANS[row["plan"]]["months"])
+    return start
+
+
+def plan_timeline(cursor, cafe_id, cafe, now=None):
+    """
+    The plan, in order: what runs now, and what follows on its own -
+    periods paid for that have not begun, then payments still being
+    checked, placed where they will fall. Each is
+    {label, start, end, when: now | next | checking}.
+    """
+    now = now or utc_now()
+    if cafe.get("plan") == "lifetime":
+        return []
+    cursor.execute(
+        "SELECT plan, status, period_start, period_end FROM plan_payments "
+        "WHERE cafe_id = %s AND status IN ('paid', 'pending') ORDER BY payment_id",
+        (cafe_id,))
+    payments = cursor.fetchall()
+    rows = []
+    for row in payments:
+        start, end = _moment(row["period_start"]), _moment(row["period_end"])
+        if row["status"] != "paid" or not end or end <= now or row["plan"] not in PLANS:
+            continue
+        rows.append({"label": PLANS[row["plan"]]["name"], "start": start, "end": end,
+                     "when": "now" if start and start <= now else "next"})
+    rows.sort(key=lambda r: r["start"] or now)
+    # Nothing paid covers today, but something paid is to come: today is
+    # the trial's, which it follows.
+    if rows and rows[0]["when"] == "next":
+        rows.insert(0, {"label": PLAN_LABELS["trial"], "start": None,
+                        "end": rows[0]["start"], "when": "now"})
+    if not rows:
+        until = _moment(cafe.get("plan_until"))
+        if until and until > now:
+            rows.append({"label": PLAN_LABELS.get(cafe.get("plan"), "Your plan"),
+                         "start": None, "end": until, "when": "now"})
+    start = rows[-1]["end"] if rows else now
+    for row in payments:
+        if row["status"] == "pending" and row["plan"] in PLANS:
+            end = add_months(start, PLANS[row["plan"]]["months"])
+            rows.append({"label": PLANS[row["plan"]]["name"], "start": start,
+                         "end": end, "when": "checking"})
+            start = end
+    return rows
+
+
 def reject_plan_payment(cursor, payment_id, note, now=None):
     """A payment that could not be found in the account, with why."""
     cursor.execute(
@@ -13388,7 +13451,18 @@ def inject_plan():
     """
     state = g.get("cafe_plan") if has_request_context() else None
     if not state or not session.get("user_id"):
-        return {"plan_notice": None, "plan_badge": None}
+        return {"plan_notice": None, "plan_badge": None, "plan_unlocking": False}
+
+    # The locks open, once, after paying: the plan this person last saw
+    # was not Pro and now it is, so every lock that was on the page is
+    # drawn opening and then gone. Seen (the page says so, by script,
+    # once it has played), it is not drawn again on this device. First
+    # seen, or a plan that fell back to locks, is just noted.
+    tier = plan_tier(state)
+    seen = session.get("seen_tier")
+    unlocking = tier == "pro" and seen in ("trial", "free")
+    if seen is None or (tier != "pro" and seen != tier):
+        session["seen_tier"] = tier
 
     admin = session.get("role") == "admin"
     cafe_id = session.get("cafe_id")
@@ -13432,8 +13506,8 @@ def inject_plan():
         elif admin and (request.endpoint or "") in ("home", "dashboard"):
             notice = {"tone": "info", "icon": "bi-lock",
                       "text": "You are on Refero Free until %s. Sales figures, "
-                              "stock alerts, reviews, reports and your own "
-                              "branding come with Refero Pro." % pause_day,
+                              "stock alerts, reviews, reports, the table QR and "
+                              "your own branding come with Refero Pro." % pause_day,
                       "action": url_for("subscription", _anchor="unlocks"),
                       "action_label": "See what Pro unlocks"}
         elif not admin and state["free_left"] <= 3:
@@ -13462,7 +13536,17 @@ def inject_plan():
             badge = {"text": "Free", "tone": "warn" if state["free_left"] <= PLAN_REMIND_DAYS else "info"}
         elif status == "paused":
             badge = {"text": "Paused", "tone": "bad"}
-    return {"plan_notice": notice, "plan_badge": badge}
+    return {"plan_notice": notice, "plan_badge": badge, "plan_unlocking": unlocking}
+
+
+@app.route("/api/plan/unlocked", methods=["POST"])
+def plan_unlocked_seen():
+    """The locks have been seen opening: not again on this device."""
+    if not session.get("user_id"):
+        return jsonify({"ok": False}), 403
+    state = g.get("cafe_plan")
+    session["seen_tier"] = plan_tier(state) if state else "pro"
+    return jsonify({"ok": True})
 
 
 def _subscription_payments(cursor, cafe_id):
@@ -13511,6 +13595,8 @@ def subscription():
             "WHERE cafe_id = %s AND status = 'awaiting' "
             "ORDER BY payment_id DESC LIMIT 1", (cafe_id,))
         awaiting = cursor.fetchone()
+        timeline = plan_timeline(cursor, cafe_id, cafe)
+        next_start = plan_next_start(cursor, cafe_id, cafe)
     finally:
         if cursor:
             cursor.close()
@@ -13527,6 +13613,15 @@ def subscription():
         tier_label=TIER_LABELS[tier],
         compare=compare,
         base_label=TIER_LABELS[base],
+        timeline=[dict(row, start_day=plan_day(row["start"], cafe_id) if row["start"] else "",
+                       end_day=plan_day(row["end"], cafe_id)) for row in timeline],
+        # The plan paid for, first in line - not the trial it follows.
+        current_label=next((row["label"] for row in timeline
+                            if row["label"] != PLAN_LABELS["trial"]), state["label"]),
+        # A plan bought now starts here - later than today when what is
+        # paid for runs on: it continues by itself from the end of it.
+        next_start_day=(plan_day(next_start, cafe_id)
+                        if next_start > utc_now() + timedelta(minutes=5) else ""),
         chips=plan_chips(tier),
         trial_days=PLAN_TRIAL_DAYS,
         state=state,
@@ -13676,6 +13771,18 @@ def subscription_pay(reference):
         return redirect(url_for("subscription"))
 
     plan = PLANS[payment["plan"]]
+    # When it will run: from the end of what is already paid for. Read
+    # again, briefly, because the page that asks is the one that says.
+    starts = ends = None
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT plan, plan_until FROM cafes WHERE cafe_id = %s", (cafe_id,))
+        starts = plan_next_start(cursor, cafe_id, cursor.fetchone() or {})
+        ends = add_months(starts, plan["months"])
+    finally:
+        cursor.close()
+        connection.close()
     note = "%s %s %s" % (PLAN_PRODUCT, plan["name"], payment["reference"])
     link = upi_link(payment["amount"], note)
     return render_template(
@@ -13683,6 +13790,9 @@ def subscription_pay(reference):
         payment=payment,
         plan=plan,
         price=rupees(payment["amount"]),
+        later=starts > utc_now() + timedelta(minutes=5),
+        starts_day=plan_day(starts, cafe_id),
+        ends_day=plan_day(ends, cafe_id),
         payee=PLATFORM_UPI_NAME or DEFAULT_BRAND_NAME,
         upi_id=PLATFORM_UPI_ID,
         upi_link=link,

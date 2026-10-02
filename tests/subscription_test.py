@@ -180,7 +180,7 @@ def row(html, key):
 
 
 check("what's included compares the free trial with Refero Pro",
-      re.search(r'<th scope="col">Free trial</th>\s*<th scope="col">Refero Pro</th>', page))
+      re.search(r'<th scope="col"[^>]*>Free trial</th>\s*<th scope="col"[^>]*>Refero Pro</th>', page))
 check("the trial's column locks reviews, reports, sales figures and the table QR",
       all("bill-locked" in row(page, key) and "bill-yes" in row(page, key)
           for key in ("reviews", "reports", "revenue", "stock_alerts", "table_qr")))
@@ -323,6 +323,27 @@ check("from the day its trial ended - no free day lost",
 check("and nothing is waiting any more", pending is None)
 check("approving it twice does nothing", approve(payment_id) is None)
 
+
+def session_token(client):
+    with client.session_transaction() as sess:
+        return sess.get("_csrf_token", "")
+
+
+# Paid: the locks that were on the page open, once, and are gone.
+dash = text(admin.get("/dashboard"))
+check("paid, the sidebar's locks are drawn opening",
+      dash.count('class="lock-opening lock-opening--nav"') == 2)
+check("and so are the dashboard's",
+      dash.count('class="lock-opening lock-opening--card"') == 3)
+seen = admin.post("/api/plan/unlocked", headers={"X-CSRFToken": session_token(admin),
+                                                 "X-Requested-With": "XMLHttpRequest"})
+check("seen, the page says so", seen.status_code == 200 and (seen.get_json() or {}).get("ok"))
+check("and they are not drawn again", 'class="lock-opening' not in text(admin.get("/dashboard")))
+fresh = sign_in("Plan Cafe", "cara")
+check("someone signing in after it, who never saw the locks, is not shown them opening",
+      'class="lock-opening' not in text(fresh.get("/orders/add"))
+      and 'class="lock-opening' not in text(fresh.get("/orders/add")))
+
 page = text(admin.get("/subscription"))
 check("the invoice is listed as paid, to download", "Paid" in page and "Download PDF" in page)
 invoice = admin.get("/subscription/invoice/%d" % payment_id)
@@ -334,8 +355,17 @@ check("the invoice is numbered and says who paid whom, how much",
 check("another cafe's admin cannot open it", other.get("/subscription/invoice/%d" % payment_id).status_code == 404)
 check("nor can a cashier", cashier.get("/subscription/invoice/%d" % payment_id).status_code in (302, 303))
 
-# Yearly, paid while Monthly still runs: added to the end of it.
+# Yearly, paid while Monthly still runs: added to the end of it - and
+# said so before paying.
+page = text(admin.get("/subscription"))
+check("with a plan running, the page says one bought now continues from its end",
+      "You're covered until" in page and application.plan_day(moment(until)) in page
+      and "continues automatically" in page)
 loc = choose(admin, "yearly").headers["Location"]
+pay_page = text(admin.get(loc))
+check("the yearly plan's page says it starts when the month ends, and runs a year from then",
+      "This plan starts on" in pay_page and application.plan_day(moment(until)) in pay_page
+      and application.plan_day(application.add_months(moment(until), 12)) in pay_page)
 pay(admin, loc, "427800000001")
 monthly_end = moment(until)
 yearly_id = db("SELECT payment_id FROM plan_payments WHERE utr = '427800000001'")[0][0]
@@ -343,6 +373,12 @@ approve(yearly_id)
 plan, until = db("SELECT plan, plan_until FROM cafes WHERE cafe_id = ?", (CAFE,))[0]
 check("a year bought early is added to the end of the month already paid",
       plan == "yearly" and moment(until) == application.add_months(monthly_end, 12), (plan, until))
+page = text(admin.get("/subscription"))
+check("the plan, in order: the trial now, then the month, then the year, each on its own",
+      page.index("Now · Free trial") < page.index("Next · Monthly") < page.index("Next · Yearly")
+      and "starts automatically" in page)
+check("and the pill names the plan paid for first, not the trial",
+      "Refero Pro · Monthly" in page)
 
 # Turned down: said, and the cafe is not left waiting.
 loc = choose(other, "monthly").headers["Location"]
@@ -433,7 +469,7 @@ page = text(admin.get("/subscription?feature=reviews"))
 check("which opens on what it unlocks, the asked-for line picked out",
       re.search(r'id="unlock-reviews" class="bill-row--asked"', page) is not None)
 check("on Free the first column is Refero Free, with room for one teammate",
-      '<th scope="col">Refero Free</th>' in page and "1 teammate" in row(page, "team"))
+      re.search(r'<th scope="col"[^>]*>Refero Free</th>', page) and "1 teammate" in row(page, "team"))
 check("the sidebar shows Reviews and Reports locked",
       dash.count('class="nav-lock"') >= 2 and 'href="/subscription?feature=reviews#unlocks"' in dash)
 

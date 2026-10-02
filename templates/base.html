@@ -1,4 +1,5 @@
 {% from "_brand_mark.html" import coffee_mark, coffee_glyph %}
+{% from "_plan_lock.html" import opening_lock %}
 {% from "_food_art.html" import food_sprite %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ cafe_theme }}"{% if cafe_colour_style %} style="{{ cafe_colour_style }}"{% endif %}>
@@ -325,6 +326,7 @@
                                     id="qrSwitch">
                                 <i class="bi bi-qr-code-scan"></i>
                                 <span>Table QR ordering</span>
+                                {% if plan_unlocking %}{{ opening_lock() }}{% endif %}
                                 <span class="qr-switch__state {{ 'is-on' if qr_on }}">{{ "On" if qr_on else "Off" }}</span>
                             </button>
                         </form>
@@ -338,6 +340,7 @@
                         {% if plan_allows('branding') %}
                         <a href="{{ url_for('branding') }}" class="profile-dropdown__item">
                             <i class="bi bi-bookmark-star"></i><span>Name &amp; Symbol</span>
+                            {% if plan_unlocking %}{{ opening_lock() }}{% endif %}
                         </a>
                         {% else %}
                         <a href="{{ unlock_url('branding') }}" class="profile-dropdown__item" data-locked>
@@ -373,6 +376,7 @@
                         {% if plan_allows('table_qr') %}
                         <a href="{{ url_for('qr_settings') }}" class="profile-dropdown__item">
                             <i class="bi bi-qr-code"></i><span>Table QR Code</span>
+                            {% if plan_unlocking %}{{ opening_lock() }}{% endif %}
                         </a>
                         {% else %}
                         <a href="{{ unlock_url('table_qr') }}" class="profile-dropdown__item" data-locked>
@@ -476,7 +480,7 @@
                 <a href="{{ url_for('reviews') if plan_allows('reviews') else unlock_url('reviews') }}"
                    class="nav-link {{ 'active' if request.endpoint in ['reviews'] else '' }}{{ ' nav-link--locked' if not plan_allows('reviews') }}">
                     <i class="bi bi-star"></i><span>Reviews</span>
-                    {% if not plan_allows('reviews') %}<span class="nav-lock" title="Comes with Refero Pro"><i class="bi bi-lock-fill" aria-hidden="true"></i><span class="sr-only">Locked - Refero Pro</span></span>{% endif %}
+                    {% if not plan_allows('reviews') %}<span class="nav-lock" title="Comes with Refero Pro"><i class="bi bi-lock-fill" aria-hidden="true"></i><span class="sr-only">Locked - Refero Pro</span></span>{% elif plan_unlocking %}{{ opening_lock("nav") }}{% endif %}
                 </a>
                 {% endif %}
 
@@ -517,7 +521,7 @@
                    class="nav-link {{ 'active' if request.endpoint in ['reports'] else '' }}{{ ' nav-link--locked' if not plan_allows('reports') }}">
                     <i class="bi bi-bar-chart-line"></i>
                     <span>Reports</span>
-                    {% if not plan_allows('reports') %}<span class="nav-lock" title="Comes with Refero Pro"><i class="bi bi-lock-fill" aria-hidden="true"></i><span class="sr-only">Locked - Refero Pro</span></span>{% endif %}
+                    {% if not plan_allows('reports') %}<span class="nav-lock" title="Comes with Refero Pro"><i class="bi bi-lock-fill" aria-hidden="true"></i><span class="sr-only">Locked - Refero Pro</span></span>{% elif plan_unlocking %}{{ opening_lock("nav") }}{% endif %}
                 </a>
                 {% endif %}
                 {# Not a task: whoever manages the team can make admins. #}
@@ -847,6 +851,43 @@ window.CafeShell = {
             }
         });
     }
+
+    // ---- The locks opening, once, after the plan is bought ----
+    // The server draws them where the locks were (opening_lock). Each
+    // plays, then is taken away, and the server is told they were seen,
+    // so they are not drawn again. Any that arrive after that - a page
+    // kept from before - are taken away at once.
+    let unlockTold = false;
+    function playUnlocks(root) {
+        const locks = (root || document).querySelectorAll(".lock-opening:not([data-played])");
+        if (!locks.length) return;
+        locks.forEach(function (lock) {
+            lock.setAttribute("data-played", "1");
+            if (unlockTold) {
+                lock.remove();
+                return;
+            }
+            lock.addEventListener("animationend", function (event) {
+                if (event.target === lock) lock.remove();
+            });
+        });
+        if (unlockTold) return;
+        unlockTold = true;
+        window.setTimeout(function () {
+            fetch("{{ url_for('plan_unlocked_seen') }}", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRFToken": (window.CafeShell && window.CafeShell.csrfToken) || ""
+                }
+            }).catch(function () { });
+        }, 2400);
+    }
+    playUnlocks(document);
+    document.addEventListener("instant:load", function () {
+        playUnlocks(document);
+    });
 
     // ---- Table cells carry their own column name ----
     // On a small screen every table becomes a stack of cards, one per

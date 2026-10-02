@@ -18,6 +18,20 @@
     .pay-sum dt { color: var(--cream-faint); font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
     .pay-sum dd { margin: 4px 0 0; color: var(--cream); font-size: 16px; font-weight: 800; word-break: break-all; }
     .pay-sum dd.pay-amount { font-family: "Fraunces", Georgia, serif; font-size: 26px; }
+    .pay-when {
+        display: flex;
+        gap: 10px;
+        margin: 14px 0 0;
+        padding: 12px 14px;
+        border: 1px solid rgba(var(--copper-rgb), .4);
+        border-radius: var(--radius-md);
+        background: rgba(var(--copper-rgb), .08);
+        color: var(--cream-dim);
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    .pay-when i { color: var(--copper-light); font-size: 17px; }
+    .pay-when strong { color: var(--cream); }
 
     .pay-step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
     .pay-step + .pay-step { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--espresso-700); }
@@ -101,6 +115,20 @@
             <div><dt>Paid to</dt><dd>{{ payee }}</dd></div>
             <div><dt>Reference</dt><dd>{{ payment.reference }}</dd></div>
         </dl>
+        {# When it runs. Bought while a plan or the trial still runs, it
+           waits its turn and carries on from the end - said here, before
+           paying, so nobody fears losing the days they have left. #}
+        <p class="pay-when" role="note">
+            <i class="bi bi-calendar-check" aria-hidden="true"></i>
+            {% if later %}
+            <span>This plan starts on <strong>{{ starts_day }}</strong>, when your current one
+                ends, and runs to <strong>{{ ends_day }}</strong>. It continues automatically -
+                nothing to do on the day, and no day is lost.</span>
+            {% else %}
+            <span>This plan starts as soon as your payment is confirmed, and runs for a
+                {{ plan.per }} from then.</span>
+            {% endif %}
+        </p>
     </section>
 
     <section class="pay-card">
