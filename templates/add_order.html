@@ -819,7 +819,9 @@
     </div>
 
 
-    <div class="toast-success" id="orderPlacedToast" style="display:none;">
+    {# Keeps its own time - three seconds, or until the next order
+       takes it over - so the shell's sweep leaves it be. #}
+    <div class="toast-success" id="orderPlacedToast" data-own-timer style="display:none;">
         <i class="bi bi-check-circle-fill"></i>
         <span id="orderPlacedToastText">Order has been placed.</span>
         {# The kitchen ticket for the order that just went, if one is
@@ -2122,9 +2124,24 @@ document.addEventListener('draft:restored', syncHotMirrors);
             const toastKot = document.getElementById("orderPlacedKot");
             if (toastKot && !keepFor) toastKot.hidden = true;
 
+            hidePageToastIn(keepFor || TOAST_SECONDS);
+        }
+
+        /* Three seconds, then gone - unless the next order comes first, in
+           which case this same notice becomes the next order's (its
+           number, and its ticket). A hand on it - the pointer over it,
+           or the KOT button in focus - holds it there until let go. */
+        const TOAST_SECONDS = 3000;
+        function hidePageToastIn(after) {
+            if (pageToastHideTimer) clearTimeout(pageToastHideTimer);
             pageToastHideTimer = setTimeout(function () {
+                pageToastHideTimer = null;
+                if (pageToast.matches(":hover") || pageToast.contains(document.activeElement)) {
+                    hidePageToastIn(800);
+                    return;
+                }
                 pageToast.style.display = "none";
-            }, keepFor || 5000);
+            }, after);
         }
 
         /* The ticket for the order that has just gone: in the notice,
@@ -2143,7 +2160,7 @@ document.addEventListener('draft:restored', syncHotMirrors);
             if (toastKot) {
                 toastKot.onclick = function () { print(toastKot); };
             }
-            showPageToast("Order #" + number + " is in the kitchen.", 9000);
+            showPageToast("Order #" + number + " is in the kitchen.", TOAST_SECONDS);
             if (toastKot) toastKot.hidden = false;
 
             const last = document.getElementById("receiptLast");

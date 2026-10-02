@@ -25,6 +25,7 @@ one. No network and no database - the app runs on the SQLite stand-in.
 
 Run with:  python tests/kot_button_test.py
 """
+import json
 import os
 import re
 import sys
@@ -348,6 +349,58 @@ try:
               "document.getElementById('receiptLastKot').textContent") or ""),
           "the button reads %r" % b.evaluate(
               "document.getElementById('receiptLastKot').textContent"))
+
+    # =================================================================
+    print("\n=== 3b. The notice: three seconds, or the next order ===")
+    # =================================================================
+    def toast():
+        return b.evaluate("""(function () {
+            var t = document.getElementById('orderPlacedToast');
+            return (t.style.display !== 'none' ? 'shown|' : 'gone|') +
+                   document.getElementById('orderPlacedToastText').textContent;
+        }())""")
+
+    def send():
+        b.evaluate("""
+            (function () {
+                document.querySelector('.food-card:not(.food-card--mirror) .quantity-plus').click();
+                document.getElementById('orderForm').requestSubmit();
+                return true;
+            }())
+        """)
+
+    def numbered(other=""):
+        return ("document.getElementById('orderPlacedToastText').textContent.indexOf('#') > -1"
+                " && document.getElementById('orderPlacedToastText').textContent !== %s"
+                % json.dumps(other))
+
+    open_page("/orders/add")
+    send()
+    wait(numbered(), "the first order's number", 15)
+    first = toast()
+    time.sleep(1.2)
+    send()
+    wait(numbered(first.split("|", 1)[1]), "the next order's number", 15)
+    second = toast()
+    check("a next order within the three seconds turns the notice into its number",
+          second.startswith("shown|") and second != first, (first, second))
+    check("with its ticket a press away",
+          b.evaluate("!document.getElementById('orderPlacedKot').hidden"))
+    time.sleep(3.4)
+    check("then, left alone, it is gone after three seconds", toast().startswith("gone|"), toast())
+
+    send()
+    wait(numbered(second.split("|", 1)[1]) +
+         " && document.getElementById('orderPlacedToast').style.display !== 'none'", "a third", 15)
+    box = json.loads(b.evaluate(
+        "JSON.stringify(document.getElementById('orderPlacedToast').getBoundingClientRect())"))
+    b.call("Input.dispatchMouseEvent", type="mouseMoved",
+           x=box["x"] + box["width"] / 2, y=box["y"] + box["height"] / 2)
+    time.sleep(3.6)
+    check("a pointer on it holds it there, to press its KOT", toast().startswith("shown|"), toast())
+    b.call("Input.dispatchMouseEvent", type="mouseMoved", x=5, y=5)
+    time.sleep(1.3)
+    check("and let go, it goes", toast().startswith("gone|"), toast())
 
     # =================================================================
     print("\n=== 4. On a phone too ===")

@@ -37,6 +37,10 @@ branding, fully isolated from the others.
   billing page and the pay page say so before paying, and the plan is
   shown in order (Now, Next, Being checked). Plan & billing is drawn in
   the app's own panels and the cafe's chosen colours.
+- **New Order's notice.** "Order #12 is in the kitchen", with its Print KOT,
+  for three seconds - or until the next order, which takes the same
+  notice over with its own number and ticket. A pointer on it holds it
+  there. The order panel keeps the last order's Print KOT until the next.
 - **The locks open.** A locked option wears a round badge (the sidebar's
   sits on the icon's corner). The first time somebody sees a page after
   the plan is bought, every lock that was on it is drawn opening - a key
@@ -964,6 +968,11 @@ that were already right.
 
 ## Tests
 
+The suites run on the server's clock, as Render's is: UTC. Between
+midnight and 5:30 in India a laptop's date is a day ahead of the bills'
+(stamped in UTC), so today's Billing list is empty and the Billing
+checks fail - run them with `TZ=UTC0` set, as Render runs.
+
 ```bash
 python tests/smoke_test.py        # expect PASSED: 43   FAILED: 0
 python tests/upgrade_test.py      # expect PASSED: 19   FAILED: 0
@@ -1002,7 +1011,7 @@ python tests/security_test.py     # expect PASSED: 146  FAILED: 0
 python tests/page_head_test.py    # expect PASSED: 101   FAILED: 0
 python tests/qr_hold_test.py      # expect PASSED: 24   FAILED: 0
 python tests/draft_restore_test.py # expect PASSED: 36  FAILED: 0
-python tests/kot_button_test.py   # expect PASSED: 26   FAILED: 0
+python tests/kot_button_test.py   # expect PASSED: 31   FAILED: 0
 python tests/dashboard_feed_test.py # expect PASSED: 43  FAILED: 0
 python tests/reports_test.py      # expect PASSED: 39   FAILED: 0
 python tests/shell_browser_test.py # expect PASSED: 71  FAILED: 0

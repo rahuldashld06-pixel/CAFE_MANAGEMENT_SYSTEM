@@ -1327,8 +1327,12 @@ window.CafeShell = {
                     host.appendChild(lifted[j]);
                 }
             }
+            // A notice that keeps its own time (data-own-timer) is left
+            // to it: New Order's is one, reused for every order. Swept,
+            // it was gone a second after the first and never came back.
             var notices = document.querySelectorAll(
-                ".flash-stack .alert, .toast-host .toast, .toast-success, .toast-error");
+                ".flash-stack .alert, .toast-host .toast, " +
+                ".toast-success:not([data-own-timer]), .toast-error:not([data-own-timer])");
             for (var i = 0; i < notices.length; i++) {
                 dismiss(notices[i]);
             }
