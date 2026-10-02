@@ -69,13 +69,18 @@
                 <label>Role</label>
                 <select name="role" required id="userRoleSelect">
                     {% for role in team_roles %}
-                    <option value="{{ role }}" {% if user and user.role == role %}selected{% endif %}>
-                        {{ role|capitalize }}
+                    <option value="{{ role }}" {% if user and user.role == role %}selected{% endif %}
+                            {% if role not in roles_open %}disabled{% endif %}>
+                        {{ role|capitalize }}{% if role not in roles_open %} - Refero Pro{% endif %}
                     </option>
                     {% endfor %}
                 </select>
                 <small>Tick the pages they can open below. User Management, the
                     settings and the subscription stay with the café's admin.</small>
+                {% if roles_open|length < team_roles|length %}
+                <small><i class="bi bi-lock-fill"></i> Managers and cashiers come with Refero Pro -
+                    <a href="{{ unlock_url('team') }}">see what it unlocks</a>.</small>
+                {% endif %}
             </div>
             {% endif %}
 

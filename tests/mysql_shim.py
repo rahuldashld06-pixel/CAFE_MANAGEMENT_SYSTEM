@@ -483,6 +483,10 @@ def install():
     # a test that would be a query arriving in the middle of somebody
     # else's count of queries; here it writes only when asked to.
     os.environ.setdefault("MONITOR_BACKGROUND", "0")
+    # A test's cafes are there to test orders, kitchens and bills, so they
+    # start on Refero Pro with nothing locked. The suites about plans set
+    # NEW_CAFE_PLAN=trial before importing the app.
+    os.environ.setdefault("NEW_CAFE_PLAN", "lifetime")
     mysql = types.ModuleType("mysql")
     connector = types.ModuleType("mysql.connector")
     connector.connect = connect

@@ -233,7 +233,7 @@
                 <tr data-find="{{ (c.cafe_name ~ ' ' ~ (c.full_name or '') ~ ' ' ~ (c.username or '') ~ ' ' ~ (c.email or '') ~ ' ' ~ (c.phone_number or ''))|lower }}">
                     <td><b>{{ c.cafe_name }}</b><small>#{{ c.cafe_id }} · {{ c.team }} on the team</small></td>
                     <td>{{ c.full_name or "-" }}<small>@{{ c.username or "-" }}{% if c.phone_number %} · {{ c.phone_number }}{% endif %}</small></td>
-                    <td><span class="con-chip con-chip--{{ st }}">{{ {'trial': 'Trial', 'active': c.state.label, 'lifetime': 'Lifetime', 'grace': 'Ended · grace', 'checking': 'Being checked', 'paused': 'Paused', 'open': 'No plan'}.get(st, st) }}</span></td>
+                    <td><span class="con-chip con-chip--{{ st }}">{{ {'trial': 'Trial', 'active': c.state.label, 'lifetime': 'Lifetime', 'grace': 'Ended · grace', 'checking': 'Being checked', 'free': 'Free', 'open': 'No plan'}.get(st, st) }}</span></td>
                     <td>{% if st == 'lifetime' %}never{% else %}{{ c.until_day }}{% if c.state.days_left %}<small>{{ c.state.days_left }} days left</small>{% endif %}{% endif %}</td>
                     <td>{{ c.paid_text }}</td>
                     <td class="con-actions">

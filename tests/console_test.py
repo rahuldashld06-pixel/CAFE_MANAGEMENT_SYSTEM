@@ -29,6 +29,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ["APP_ENV"] = "development"
 os.environ["SECRET_KEY"] = "console-secret"
 os.environ["SESSION_COOKIE_SECURE"] = "0"
+# Plans are what this suite is about: its cafes start on the trial.
+os.environ["NEW_CAFE_PLAN"] = "trial"
 os.environ["PLATFORM_UPI_ID"] = "refero.dev@okaxis"
 os.environ["PLATFORM_UPI_NAME"] = "Rahul Dash"
 os.environ["PLATFORM_PASSWORD"] = "the-developers-own-password"

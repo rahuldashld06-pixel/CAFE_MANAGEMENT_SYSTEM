@@ -1662,10 +1662,6 @@ TABLE_ORDERING_PAUSED = (
 
 
 def table_ordering_open(cafe):
-    # A cafe whose plan has ended takes no orders from the table either:
-    # customers get the same kind word to order at the counter.
-    if cafe and plan_state(cafe)["paused"]:
-        return False
     value = (cafe or {}).get("qr_ordering")
     return True if value is None else bool(value)
 
@@ -3920,7 +3916,7 @@ def _shape_current_user(row, cafe_id):
             # query per page load, on every page.
             version = row["branding_version"] or 1
             g.cafe_branding_id = cafe_id
-            g.cafe_branding = {
+            g.cafe_branding = plan_branding({
                 "qr_ordering": row["qr_ordering"] is None or bool(row["qr_ordering"]),
                 "cafe_name": row["cafe_name"] or app.config["CAFE_NAME"],
                 "brand_name": ((row["brand_name"] or "").strip()
@@ -3937,7 +3933,7 @@ def _shape_current_user(row, cafe_id):
                             v=version)
                     if row["has_login_photo"] else ""
                 ),
-            }
+            }, plan_tier(g.cafe_plan))
 
         # Only cache a settled answer. A missing owner still has to go
         # through get_cafe_owner_id(), which adopts the oldest admin and
@@ -4014,6 +4010,9 @@ EVERYONE_ENDPOINTS = {
     "table_ordering_switch", "food_image",
     # Telling the developer something is wrong, by hand or by the page.
     "report_problem", "client_error",
+    # What Refero Pro unlocks - where every lock leads. Paying is the
+    # admin's alone; the page shows the rest of the team who can.
+    "subscription",
 }
 
 
@@ -4801,17 +4800,22 @@ def home():
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
 
+        # On Free the figures that are Pro's are not worked out at all, so
+        # they cannot reach the page - not hidden by a style, not there.
+        revenue_open = plan_allows("revenue")
         counts = dashboard_counts(
-            cursor, scope_user_id(), user_can("dashboard"))
+            cursor, scope_user_id(), user_can("dashboard") and revenue_open)
         total_foods = counts["total_foods"]
         total_categories = counts["total_categories"]
         total_orders = counts["total_orders"]
         total_inventory = counts["total_inventory"]
         today_orders = counts["today_orders"]
-        today_revenue = counts["today_revenue"]
+        today_revenue = counts["today_revenue"] if revenue_open else 0
 
-        alerts = stock_alerts(cursor, scope_user_id())
-        rated = dish_ratings(cursor, scope_user_id())
+        alerts = (stock_alerts(cursor, scope_user_id()) if plan_allows("stock_alerts")
+                  else {"low_stock": 0, "unavailable": 0,
+                        "low_stock_items": [], "unavailable_items": []})
+        rated = dish_ratings(cursor, scope_user_id()) if plan_allows("reviews") else []
 
         return render_template(
             "dashboard.html",
@@ -8377,13 +8381,28 @@ def dashboard_stats():
         # Same single statement the page itself uses. This endpoint is polled
         # continuously, so it is the one place where trimming round trips
         # matters most.
-        counts = dashboard_counts(cursor, uid, user_can("dashboard"))
+        revenue_open = plan_allows("revenue")
+        counts = dashboard_counts(cursor, uid, user_can("dashboard") and revenue_open)
         total_foods = counts["total_foods"]
         total_categories = counts["total_categories"]
         total_orders = counts["total_orders"]
         total_inventory = counts["total_inventory"]
         today_orders = counts["today_orders"]
-        today_revenue = counts["today_revenue"]
+        today_revenue = counts["today_revenue"] if revenue_open else None
+
+        if not plan_allows("stock_alerts"):
+            # Locked: the figures are not sent, and the page leaves its
+            # locked card alone.
+            return {
+                "total_foods": total_foods,
+                "total_categories": total_categories,
+                "total_orders": total_orders,
+                "total_inventory": total_inventory,
+                "weekday": today_weekday(),
+                "today_orders": today_orders,
+                "today_revenue": None,
+                "locked": ["revenue", "stock_alerts"],
+            }
 
         alerts = stock_alerts(cursor, uid)
 
@@ -8420,8 +8439,17 @@ def dashboard_insights_feed():
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        return jsonify(dashboard_insights(
-            cursor, scope_user_id(), request.args.get("period", "today")))
+        found = dashboard_insights(
+            cursor, scope_user_id(), request.args.get("period", "today"))
+        if not plan_allows("revenue"):
+            # Orders as they come in are everybody's; what they came to,
+            # how it compares and what sold best are Pro's.
+            for row in found.get("live") or []:
+                row["total"] = None
+            found = {"locked": True, "live": found.get("live") or [],
+                     "waiting": found.get("waiting") or 0,
+                     "orders": {"value": (found.get("orders") or {}).get("value")}}
+        return jsonify(found)
     except mysql.connector.Error as error:
         return jsonify({"error": database_error(error, "the dashboard")}), 500
     finally:
@@ -9397,8 +9425,9 @@ def register():
                          VALUES(%s,%s,%s,'admin',1,%s,%s,%s)""",(username,generate_password_hash(password),full_name,phone or None,email or None,cid))
             uid=cur.lastrowid
             # Its admin, and a month free to see whether it suits them.
+            plan, until = new_cafe_plan()
             cur.execute('UPDATE cafes SET owner_user_id=%s, plan=%s, plan_until=%s WHERE cafe_id=%s',
-                        (uid, 'trial', add_months(utc_now(), PLAN_TRIAL_MONTHS), cid)); c.commit()
+                        (uid, plan, until, cid)); c.commit()
             session.clear(); session.permanent=True; session['user_id']=uid; session['username']=username; session['role']='admin'; session['cafe_id']=cid
             # Signing up is not a sign-in anybody asked to be remembered:
             # it gets the same shift-long window a plain sign-in gets.
@@ -9964,16 +9993,14 @@ def require_login():
             return jsonify({"error": "Not one of your pages."}), 403
         return redirect(landing_url(user))
 
-    # The plan has ended and its grace run out: the cafe rests. Its admin
-    # is taken to Subscription, where renewing brings everything back at
-    # once; everybody else is told, kindly, who can. Nothing is deleted.
-    plan = g.get("cafe_plan")
-    if plan and plan["paused"] and request.endpoint not in PLAN_OPEN_ENDPOINTS:
+    # A page that is a Pro feature, on a plan without it: the Subscription
+    # page, at that feature's line, says what it holds and how to have it.
+    locked = PLAN_LOCKED_ENDPOINTS.get(request.endpoint)
+    if locked and not plan_allows(locked):
         if wants_json_response() or request.path.startswith("/api/"):
-            return jsonify({"error": ERROR_WORDS["paused"]["said"]}), 402
-        if user.get("role") == "admin":
-            return redirect(url_for("subscription"))
-        return error_page(402, "paused")
+            return jsonify({"error": "This comes with Refero Pro.",
+                            "locked": locked}), 402
+        return redirect(unlock_url(locked))
 
     return None
 
@@ -10132,9 +10159,11 @@ def users():
         # The admin first, then everyone else as they were added.
         user_list.sort(key=lambda p: (not p["is_owner"],))
 
+        teammates = sum(1 for person in user_list if not person["is_owner"])
         return render_template(
             "users.html",
             users=user_list,
+            team_full=(current_tier() == "free" and teammates >= FREE_TEAM_LIMIT),
             # The admin account cannot be deleted; the template uses this to
             # leave the button off that row rather than offer an action that
             # would just come back refused.
@@ -10148,6 +10177,23 @@ def users():
             cursor.close()
         if connection:
             connection.close()
+
+
+def team_is_full(cafe_id=None):
+    """On Free, whether the one teammate it has room for is taken."""
+    if current_tier() != "free":
+        return False
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT COUNT(*) FROM users WHERE cafe_id = %s AND role <> 'admin'",
+                       (cafe_id or require_cafe_session(),))
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+        connection.close()
+    count = row[0] if not isinstance(row, dict) else list(row.values())[0]
+    return int(count or 0) >= FREE_TEAM_LIMIT
 
 
 @app.route("/users/add", methods=["GET", "POST"])
@@ -10182,6 +10228,14 @@ def add_user():
         if role not in TEAM_ROLES:
             flash("Invalid role.")
             return redirect(url_for("add_user"))
+        if role not in team_roles_open():
+            flash("%s is a Refero Pro role. On your plan a teammate joins as "
+                  "staff." % role.capitalize())
+            return redirect(url_for("add_user"))
+        if team_is_full():
+            flash("Refero Free has room for one teammate. Subscribe to add "
+                  "your whole team.")
+            return redirect(unlock_url("team"))
 
         # The form marks that it sent the task boxes; one that did not
         # (a script, an older page) gives the role's usual pages.
@@ -10228,10 +10282,13 @@ def add_user():
             if connection:
                 connection.close()
 
+    if team_is_full():
+        return redirect(unlock_url("team"))
     return render_template("user_form.html", user=None, tasks=TASKS,
                            chosen=list(DEFAULT_TASKS),
                            default_tasks=list(DEFAULT_TASKS),
-                           is_admin_account=False, team_roles=TEAM_ROLES)
+                           is_admin_account=False, team_roles=TEAM_ROLES,
+                           roles_open=team_roles_open())
 
 
 @app.route("/users/<int:user_id>/password", methods=["POST"])
@@ -10326,6 +10383,9 @@ def edit_user(user_id):
             elif role == "admin":
                 flash(ONE_ADMIN)
                 return redirect(url_for("edit_user", user_id=user_id))
+            elif role != user["role"] and role not in team_roles_open():
+                flash("%s is a Refero Pro role." % role.capitalize())
+                return redirect(url_for("edit_user", user_id=user_id))
 
             if not full_name or role not in ("admin",) + TEAM_ROLES:
                 flash("Please provide valid user details.")
@@ -10405,7 +10465,9 @@ def edit_user(user_id):
                                        else tasks_of(user)),
                                default_tasks=list(DEFAULT_TASKS),
                                is_admin_account=is_admin_account,
-                               team_roles=TEAM_ROLES)
+                               team_roles=TEAM_ROLES,
+                               roles_open=team_roles_open() + ((user["role"],)
+                                                              if user["role"] in TEAM_ROLES else ()))
 
     finally:
         if cursor:
@@ -10655,6 +10717,7 @@ def get_cafe_branding(cafe_id):
                    brand_name,
                    brand_tagline,
                    branding_version,
+                   plan, plan_until, plan_pending_at,
                    (logo_blob IS NOT NULL) AS has_logo,
                    (login_photo_blob IS NOT NULL) AS has_login_photo
             FROM cafes
@@ -10676,7 +10739,7 @@ def get_cafe_branding(cafe_id):
         return defaults
 
     version = row["branding_version"] or 1
-    found = {
+    found = plan_branding({
         "cafe_name": row["cafe_name"] or defaults["cafe_name"],
         "brand_name": (row["brand_name"] or "").strip() or DEFAULT_BRAND_NAME,
         "brand_tagline": ((row["brand_tagline"] or "").strip()
@@ -10689,7 +10752,7 @@ def get_cafe_branding(cafe_id):
             url_for("cafe_media", cafe_id=cafe_id, kind="login", v=version)
             if row["has_login_photo"] else ""
         ),
-    }
+    }, plan_tier(plan_state(row)))
     cache_put("brand:%s" % cafe_id, found)
     return found
 
@@ -12754,11 +12817,17 @@ def ai_catalog():
 #
 # Prepaid: nothing is taken again by itself. Reminders from a
 # week before the end; three days' grace after it; then the
-# cafe rests - staff are told to ask the admin, the table QR
-# sends customers to the counter, and the admin can still sign
-# in and renew. Nothing is deleted, and paying brings it all
-# back at once. A payment being checked keeps a cafe working
-# for three days meanwhile.
+# cafe is on Refero Free - it keeps taking orders, at the
+# counter and from the tables, with the Pro parts locked
+# (PLAN_FEATURES). Nothing is deleted, and paying unlocks it
+# all at once. A payment being checked counts as Pro for three
+# days meanwhile.
+#
+#   Free   orders, kitchen, billing, menu, stock, table QR; one
+#          teammate, as staff. Locked: sales figures, stock
+#          alerts, reviews, reports, other roles, own branding.
+#   Trial  everything but other roles and own branding.
+#   Pro    everything.
 # ==========================================================
 
 PLAN_TRIAL_MONTHS = 1
@@ -12779,14 +12848,47 @@ PLAN_LABELS = {"trial": "Free trial", "monthly": "Monthly", "yearly": "Yearly",
 # ID": twelve digits.
 UTR_SHAPE = re.compile(r"^\d{12}$")
 
-# What a paused cafe's people can still open: the way to pay, their own
-# account, and signing out.
-PLAN_OPEN_ENDPOINTS = {
-    "subscription", "subscription_choose", "subscription_pay",
-    "subscription_invoice", "logout", "change_password", "account_photo",
-    "user_media", "order_status_feed", "tutorial_seen", "timezone_guess",
-    "report_problem", "client_error",
+# What each plan opens. (key, title, what it gives, icon, the tiers it
+# is open to.) The Subscription page lists these as what Pro unlocks,
+# and every lock in the app leads there, to its own line.
+PLAN_FEATURES = [
+    ("revenue", "Sales and revenue figures",
+     "Today's takings, the average bill, the sales chart and what sold best "
+     "on the dashboard - each against the period before.",
+     "bi-graph-up-arrow", ("trial", "pro")),
+    ("stock_alerts", "Stock alerts",
+     "What has run out and what is running low, by name, the moment it "
+     "happens - before a customer orders it.",
+     "bi-exclamation-triangle", ("trial", "pro")),
+    ("reviews", "Reviews and dish ratings",
+     "What customers say about every dish from the table - stars, comments, "
+     "names - and the chart of your best and worst rated.",
+     "bi-star", ("trial", "pro")),
+    ("reports", "Reports",
+     "Sales, orders, dishes and stock over any period, to read on screen or "
+     "download for your accountant.",
+     "bi-bar-chart-line", ("trial", "pro")),
+    ("team", "Your whole team, in any role",
+     "Managers and cashiers as well as staff, as many as you need, each with "
+     "the pages you choose. Free has room for one teammate, as staff.",
+     "bi-people", ("pro",)),
+    ("branding", "Your own name and logo",
+     "Your cafe's own name, symbol and sign-in photo on every page, receipt "
+     "and table QR menu - in place of Refero's.",
+     "bi-bookmark-star", ("pro",)),
+]
+PLAN_FEATURE_KEYS = dict((spec[0], spec) for spec in PLAN_FEATURES)
+
+# Pages that are a feature of their own: opened without it, they lead to
+# that feature's line on the Subscription page.
+PLAN_LOCKED_ENDPOINTS = {
+    "reviews": "reviews", "reports": "reports", "export_report": "reports",
+    "branding": "branding",
 }
+
+# Teammates a Free cafe can have besides its admin.
+FREE_TEAM_LIMIT = 1
+TIER_LABELS = {"free": "Refero Free", "trial": "Free trial", "pro": "Refero Pro"}
 
 PLAN_NOT_READY = ("Paying online is being set up. Please try again a "
                   "little later.")
@@ -12820,9 +12922,9 @@ def plan_state(row, now=None):
     plan_pending_at.
 
     status is one of trial, active, lifetime, grace (ended, still
-    working), checking (past grace but a payment is being checked),
-    paused - or open, for a cafe from before plans that has not yet been
-    given its trial, which works as it always did.
+    working as before), checking (past grace but a payment is being
+    checked), free - or open, for a cafe from before plans that has not
+    yet been given its trial, which counts as a trial.
     """
     now = now or utc_now()
     row = row or {}
@@ -12832,8 +12934,7 @@ def plan_state(row, now=None):
 
     state = {"plan": plan or None, "label": PLAN_LABELS.get(plan, plan),
              "until": until, "pause_at": None, "days_left": None,
-             "pending": pending_at is not None, "paused": False,
-             "remind": False}
+             "pending": pending_at is not None, "remind": False}
 
     if plan == "lifetime":
         state["status"] = "lifetime"
@@ -12852,18 +12953,86 @@ def plan_state(row, now=None):
     elif checking:
         status = "checking"
     else:
-        status = "paused"
+        status = "free"
 
     days_left = (max(1, math.ceil((until - now).total_seconds() / 86400))
                  if now < until else 0)
     state.update({
         "status": status, "pause_at": pause_at, "days_left": days_left,
-        "paused": status == "paused",
         "remind": (status in ("grace", "checking")
                    or (status in ("trial", "active")
                        and days_left <= PLAN_REMIND_DAYS)),
     })
     return state
+
+
+def new_cafe_plan():
+    """
+    What a newly registered cafe starts on: the month's free trial.
+
+    NEW_CAFE_PLAN=lifetime starts every new cafe on Pro instead - for the
+    test suite, whose cafes are there to test orders and kitchens, not
+    plans. Never on the live site: there it is ignored.
+    """
+    if not IS_PRODUCTION and os.environ.get("NEW_CAFE_PLAN") == "lifetime":
+        return "lifetime", PLATFORM_LIFETIME_UNTIL
+    return "trial", add_months(utc_now(), PLAN_TRIAL_MONTHS)
+
+
+def plan_tier(state):
+    """free, trial or pro: which of PLAN_FEATURES a plan state opens."""
+    if not state:
+        return "pro"
+    status = state.get("status")
+    if status in ("active", "lifetime", "checking"):
+        return "pro"
+    if status == "grace":
+        return "pro" if state.get("plan") in PLANS else "trial"
+    if status in ("trial", "open"):
+        return "trial"
+    return "free"
+
+
+def current_tier():
+    """The signed-in cafe's tier; nothing known (no cafe) locks nothing."""
+    state = g.get("cafe_plan") if has_request_context() else None
+    return plan_tier(state) if state else "pro"
+
+
+def plan_allows(feature, tier=None):
+    """Whether this cafe's plan opens one of PLAN_FEATURES."""
+    spec = PLAN_FEATURE_KEYS.get(feature)
+    return True if spec is None else (tier or current_tier()) in spec[4]
+
+
+def team_roles_open(tier=None):
+    """The roles a teammate can be given on this plan."""
+    return TEAM_ROLES if (tier or current_tier()) == "pro" else ("staff",)
+
+
+def unlock_url(feature):
+    """Where a lock leads: that feature's line on the Subscription page."""
+    return url_for("subscription", feature=feature, _anchor="unlocks")
+
+
+def plan_branding(found, tier):
+    """
+    A cafe's own name and logo are Pro's. On Free or a trial the product's
+    are shown instead - kept, not lost, and back the moment it subscribes.
+    The cafe's registered name stays: it is who the customer is ordering
+    from, not branding.
+    """
+    if tier == "pro":
+        return found
+    found = dict(found)
+    found.update({"brand_name": DEFAULT_BRAND_NAME,
+                  "brand_tagline": DEFAULT_BRAND_TAGLINE,
+                  "logo": "", "login_photo": ""})
+    return found
+
+
+app.jinja_env.globals.update(plan_allows=plan_allows, plan_tier=current_tier,
+                             unlock_url=unlock_url, tier_labels=TIER_LABELS)
 
 
 def plan_day(moment, cafe_id=None):
@@ -13005,6 +13174,13 @@ def inject_plan():
         notice = {"tone": "info", "icon": "bi-hourglass-split",
                   "text": "Your payment is being checked. Everything stays on "
                           "while it is.", "action": None}
+    elif status == "free" and admin and (request.endpoint or "") in ("home", "dashboard"):
+        notice = {"tone": "info", "icon": "bi-lock",
+                  "text": "You are on Refero Free. Sales figures, stock alerts, "
+                          "reviews, reports and your own branding come with "
+                          "Refero Pro.",
+                  "action": url_for("subscription", _anchor="unlocks"),
+                  "action_label": "See what Pro unlocks"}
 
     # Not on the page that is all about the plan already.
     if (request.endpoint or "").startswith("subscription"):
@@ -13022,8 +13198,8 @@ def inject_plan():
                      "tone": "warn" if state["remind"] else "good"}
         elif status in ("grace", "checking"):
             badge = {"text": "Renew", "tone": "warn"}
-        elif status == "paused":
-            badge = {"text": "Paused", "tone": "bad"}
+        elif status == "free":
+            badge = {"text": "Free", "tone": "info"}
     return {"plan_notice": notice, "plan_badge": badge}
 
 
@@ -13051,13 +13227,12 @@ def _subscription_payments(cursor, cafe_id):
 @app.route("/subscription")
 def subscription():
     """
-    The admin's plan, how it is paid, and every invoice - the page a
-    reminder leads to, and the one a paused cafe's admin is brought to.
+    The plan, what Refero Pro unlocks, how it is paid, and every invoice -
+    where every reminder and every lock leads. The whole team can read
+    what Pro unlocks; choosing, paying and the invoices are the admin's.
     """
-    denied = require_role("admin")
-    if denied:
-        return denied
     cafe_id = require_cafe_session()
+    admin = session.get("role") == "admin"
 
     connection = None
     cursor = None
@@ -13068,7 +13243,7 @@ def subscription():
             "SELECT cafe_name, plan, plan_until, plan_pending_at FROM cafes "
             "WHERE cafe_id = %s", (cafe_id,))
         cafe = cursor.fetchone() or {}
-        payments = _subscription_payments(cursor, cafe_id)
+        payments = _subscription_payments(cursor, cafe_id) if admin else []
         cursor.execute(
             "SELECT reference, plan FROM plan_payments "
             "WHERE cafe_id = %s AND status = 'awaiting' "
@@ -13081,8 +13256,22 @@ def subscription():
             connection.close()
 
     state = plan_state(cafe)
+    tier = plan_tier(state)
+    wanted = request.args.get("feature", "")
+    unlocks = []
+    for key, title, gives, icon, tiers in PLAN_FEATURES:
+        unlocks.append({
+            "key": key, "title": title, "gives": gives, "icon": icon,
+            "open": tier in tiers,
+            "in_trial": "trial" in tiers,
+            "asked": key == wanted,
+        })
     return render_template(
         "subscription.html",
+        admin=admin,
+        tier=tier,
+        tier_label=TIER_LABELS[tier],
+        unlocks=unlocks,
         state=state,
         cafe_name=cafe.get("cafe_name") or "",
         until_day=plan_day(state["until"], cafe_id),
@@ -13805,7 +13994,7 @@ def platform_home():
             "trial": states.count("trial"),
             "paying": states.count("active"),
             "lifetime": states.count("lifetime"),
-            "attention": sum(states.count(k) for k in ("grace", "checking", "paused")),
+            "attention": sum(states.count(k) for k in ("grace", "checking", "free")),
             "revenue": rupees(revenue),
         },
         errors_open=errors_open,
@@ -14080,12 +14269,6 @@ ERROR_WORDS = {
                    "the developer. Please try again in a moment.",
           "said": "Something went wrong on our side and that was not "
                   "saved. Please try again."},
-    "paused": {"title": "Plan ended",
-               "heading": "This café's plan has ended",
-               "words": "Nothing has been lost - the menu, orders and figures "
-                        "are all kept. Your café's admin can renew it from "
-                        "Subscription, and everything comes back at once.",
-               "said": "This café's plan has ended. Ask your admin to renew it."},
     503: {"title": "Briefly unavailable",
           "heading": "We are briefly unavailable",
           "words": "Please try again in a minute.",
@@ -14132,10 +14315,6 @@ def error_page(status, kind=None):
         home, home_label = _error_way_out()
     except Exception:
         home, home_label = "/", "Home"
-    if kind == "paused":
-        # Every page is resting, so "back to the app" would only come
-        # back here.
-        home, home_label = url_for("logout"), "Sign out"
 
     try:
         html = app.jinja_env.get_template("error.html").render(

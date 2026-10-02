@@ -13,9 +13,14 @@ What has to hold:
     twice;
   * a confirmed payment runs on from the day the current plan ends, and
     its invoice is the cafe's alone;
-  * reminders from a week before; three days' grace; then the cafe rests
-    - staff are told who can renew, the admin is taken to pay, the table
-    QR sends customers to the counter - and paying brings it all back;
+  * reminders from a week before; three days' grace; then the cafe is on
+    Refero Free - it keeps taking orders, with Pro's parts locked - and
+    paying unlocks them all at once;
+  * Free locks sales figures, stock alerts, reviews, reports, other roles
+    and the cafe's own branding, and has room for one teammate as staff;
+    a trial has everything but other roles and own branding; every lock
+    leads to its line on the Subscription page, and the figures behind
+    one are never sent;
   * a lifetime plan never ends.
 
 Run with:  python tests/subscription_test.py
@@ -32,6 +37,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ["APP_ENV"] = "development"
 os.environ["SECRET_KEY"] = "subscription-secret"
 os.environ["SESSION_COOKIE_SECURE"] = "0"
+# Plans are what this suite is about: its cafes start on the trial.
+os.environ["NEW_CAFE_PLAN"] = "trial"
 os.environ["PLATFORM_UPI_ID"] = "refero.dev@okaxis"
 os.environ["PLATFORM_UPI_NAME"] = "Rahul Dash"
 os.environ["PLATFORM_PASSWORD"] = "console-pass-for-tests"
@@ -138,12 +145,12 @@ check("which runs a calendar month", moment(until).date() == application.add_mon
 
 with admin.session_transaction() as _sess:
     _token = _sess.get("_csrf_token", "")
-admin.post("/users/add", data={"full_name": "Cara Cashier", "username": "cara",
-                               "role": "cashier", "phone_number": "", "password": "password123",
+admin.post("/users/add", data={"full_name": "Cara Staff", "username": "cara",
+                               "role": "staff", "phone_number": "", "password": "password123",
                                "_csrf_token": _token})
 cashier = sign_in("Plan Cafe", "cara")
-check("(a cashier on the team)",
-      db("SELECT role FROM users WHERE username = 'cara'") == [("cashier",)])
+check("(a teammate on the team, as staff - the trial's one role)",
+      db("SELECT role FROM users WHERE username = 'cara'") == [("staff",)])
 
 page = text(admin.get("/subscription"))
 check("the admin's Subscription page says when the trial ends",
@@ -155,10 +162,14 @@ check("and showing who is paid", "Paid to Rahul Dash" in page)
 dash = text(admin.get("/dashboard"))
 check("the profile menu carries Subscription, with the trial's days left",
       'href="/subscription"' in dash and re.search(r"Trial · \d+ days left", dash))
-check("a cashier is not offered it", 'href="/subscription"' not in text(cashier.get("/dashboard")))
-check("nor can they open it",
-      cashier.get("/subscription").status_code in (302, 303)
-      and "/subscription" not in (cashier.get("/subscription").headers.get("Location") or ""))
+check("a teammate is not offered it in the profile menu",
+      'class="profile-dropdown__item">\n                            <i class="bi bi-gem">' not in text(cashier.get("/dashboard")))
+staff_view = text(cashier.get("/subscription"))
+check("but can read what Refero Pro unlocks - where every lock leads",
+      "What Refero Pro unlocks" in staff_view)
+check("not choose, pay or see the invoices - that is the admin's",
+      "Pay \u20b9650" not in staff_view and "Invoices" not in staff_view
+      and "Only your café's admin can subscribe" in staff_view)
 
 # A cafe from before plans: its trial starts when this arrives.
 db("UPDATE cafes SET plan = NULL, plan_until = NULL WHERE cafe_id = ?", (CAFE,))
@@ -191,14 +202,14 @@ check("reminded from a week before",
       and not state({"plan": "monthly", "plan_until": t + timedelta(days=9)}, t)["remind"])
 check("ended, three days' grace",
       state({"plan": "monthly", "plan_until": t - timedelta(days=2)}, t)["status"] == "grace")
-check("then it rests",
-      state({"plan": "monthly", "plan_until": t - timedelta(days=4)}, t)["paused"])
+check("then it is Refero Free",
+      state({"plan": "monthly", "plan_until": t - timedelta(days=4)}, t)["status"] == "free")
 check("unless a payment is being checked",
       state({"plan": "monthly", "plan_until": t - timedelta(days=4),
              "plan_pending_at": t - timedelta(days=1)}, t)["status"] == "checking")
 check("for three days, not for ever",
       state({"plan": "monthly", "plan_until": t - timedelta(days=9),
-             "plan_pending_at": t - timedelta(days=4)}, t)["paused"])
+             "plan_pending_at": t - timedelta(days=4)}, t)["status"] == "free")
 check("a lifetime plan never ends",
       state({"plan": "lifetime", "plan_until": t - timedelta(days=900)}, t)["status"] == "lifetime")
 
@@ -303,7 +314,7 @@ check("and the cafe is not left marked as waiting",
       db("SELECT plan_pending_at FROM cafes WHERE cafe_id = ?", (OTHER,))[0][0] is None)
 
 # =====================================================================
-print("\n=== 5. Reminders, grace, and resting ===")
+print("\n=== 5. Reminders, grace, and then Refero Free ===")
 # =====================================================================
 now = application.utc_now()
 set_until(OTHER, now + timedelta(days=5), plan="trial")
@@ -313,38 +324,121 @@ check("five days from the end of the trial, the admin is reminded on every page"
       "Your free trial ends in 5 days" in dash and "See plans" in dash)
 
 set_until(CAFE, now - timedelta(days=1), plan="monthly")
-check("ended a day ago, the admin is told when it will rest",
+check("ended a day ago, the admin is told how long everything keeps working",
       "Everything keeps working until" in text(admin.get("/dashboard")))
 check("the cashier is told to let the admin know - and still works",
       "please let your admin know" in text(cashier.get("/orders/add"))
       and cashier.get("/orders/add").status_code == 200)
 
 set_until(CAFE, now - timedelta(days=4), plan="monthly")
-staff_page = cashier.get("/orders/add")
-check("past its grace, a cashier gets the plan-ended page, not the till",
-      staff_page.status_code == 402 and "This café&#39;s plan has ended" in text(staff_page)
-      or "This café's plan has ended" in text(staff_page), staff_page.status_code)
-check("which says nothing has been lost, and offers to sign out",
-      "Nothing has been lost" in text(staff_page) and 'href="/logout"' in text(staff_page))
-check("the cafe's script requests are answered 402 too",
-      cashier.get("/api/order-status", headers={"X-Requested-With": "XMLHttpRequest"}).status_code in (200, 402)
-      and cashier.get("/api/kitchen/board").status_code == 402)
-check("the admin is taken to Subscription",
-      admin.get("/dashboard").headers.get("Location", "").endswith("/subscription"))
+check("past its grace the cafe is on Refero Free - and still works",
+      cashier.get("/orders/add").status_code == 200
+      and admin.get("/dashboard").status_code == 200
+      and cashier.get("/api/kitchen/board").status_code == 200)
 page = text(admin.get("/subscription"))
-check("which says it is resting and that nothing is lost",
-      "resting since" in page and "Nothing has been lost" in page)
-check("and can still be paid from", choose(admin, "monthly").status_code == 302)
+check("its page says so, and what still works", "Refero Free" in page
+      and "keep working" in page)
+check("and can be paid from", choose(admin, "monthly").status_code == 302)
+check("its profile menu says Free",
+      re.search(r'plan-chip--info">Free<', text(admin.get("/dashboard"))) is not None)
 
 token = db("SELECT public_token FROM cafes WHERE cafe_id = ?", (CAFE,))[0][0] or \
     application.get_public_token(CAFE)
-menu = text(app.test_client().get("/m/%s" % token))
-check("customers at the tables are sent kindly to the counter",
-      "taking a little break" in menu or "counter" in menu)
+menu_page = app.test_client().get("/m/%s" % token)
+check("customers can still order from the tables - nothing is paused",
+      menu_page.status_code == 200 and "taking a little break" not in text(menu_page))
 
 set_until(CAFE, now - timedelta(days=4), plan="monthly", pending=now - timedelta(hours=2))
-check("with a payment being checked, it works again meanwhile",
-      cashier.get("/orders/add").status_code == 200)
+check("with a payment being checked, Pro's parts open meanwhile",
+      admin.get("/reviews").status_code == 200)
+
+# =====================================================================
+print("\n=== 5b. What Free, a trial and Pro each open ===")
+# =====================================================================
+set_until(CAFE, now - timedelta(days=9), plan="monthly")      # Free
+dash = text(admin.get("/dashboard"))
+check("on Free the dashboard keeps today's orders and the live list",
+      'id="today-orders"' in dash and 'id="liveList"' in dash)
+check("and locks sales, the average bill and stock to check, with a way to unlock",
+      dash.count("kpi--locked") == 3 and "Unlock with Refero Pro" in dash)
+check("the sales chart, best sellers, stock list and dish ratings are veiled",
+      dash.count("panel--locked") == 4 and 'id="curveSvg"' not in dash
+      and 'id="stock-alert-content"' not in dash)
+stats = admin.get("/api/dashboard-stats").get_json()
+check("the live figures are not sent at all - not hidden, absent",
+      stats.get("today_revenue") is None and "low_stock" not in stats
+      and "low_stock_items" not in stats, stats)
+feed = admin.get("/api/dashboard-insights?period=week").get_json()
+check("nor are the period's takings, comparisons or best sellers",
+      feed.get("locked") is True and "sales" not in feed and "popular" not in feed
+      and "curve" not in feed, sorted(feed))
+check("Reviews leads to its line on the Subscription page",
+      admin.get("/reviews").headers.get("Location", "").endswith("/subscription?feature=reviews#unlocks"))
+check("so do Reports, and their download",
+      admin.get("/reports").headers.get("Location", "").endswith("/subscription?feature=reports#unlocks")
+      and admin.get("/reports/export").headers.get("Location", "").endswith("feature=reports#unlocks"))
+check("and Name & Symbol",
+      admin.get("/settings/branding").headers.get("Location", "").endswith("feature=branding#unlocks"))
+check("a teammate is sent there too", cashier.get("/reviews").headers.get("Location", "")
+      .endswith("/subscription?feature=reviews#unlocks"))
+page = text(admin.get("/subscription?feature=reviews"))
+check("which opens on what it unlocks, the asked-for line picked out",
+      re.search(r'sub-unlock--asked"\s+id="unlock-reviews"', page) is not None)
+check("the sidebar shows Reviews and Reports locked",
+      dash.count('class="nav-lock"') >= 2 and 'href="/subscription?feature=reviews#unlocks"' in dash)
+
+# One teammate, as staff.
+with admin.session_transaction() as _sess:
+    _token = _sess.get("_csrf_token", "")
+response = admin.post("/users/add", data={"full_name": "Second Person", "username": "second1",
+                                          "role": "staff", "phone_number": "",
+                                          "password": "password123", "_csrf_token": _token})
+check("Free has room for one teammate - a second is sent to unlock the team",
+      response.headers.get("Location", "").endswith("feature=team#unlocks")
+      and db("SELECT COUNT(*) FROM users WHERE username = 'second1'")[0][0] == 0)
+check("and Add teammate wears a lock", "bi-lock-fill\"></i> Add teammate" in text(admin.get("/users")))
+db("DELETE FROM users WHERE username = 'cara'")
+application.cache_clear()
+response = admin.post("/users/add", data={"full_name": "Cash Ier", "username": "cashier9",
+                                          "role": "cashier", "phone_number": "",
+                                          "password": "password123", "_csrf_token": _token})
+check("with the room free, a cashier is still refused - a Pro role",
+      db("SELECT COUNT(*) FROM users WHERE username = 'cashier9'")[0][0] == 0)
+form = text(admin.get("/users/add"))
+check("the form offers Manager and Cashier only as Pro",
+      "Manager - Refero Pro" in form and "Cashier - Refero Pro" in form)
+admin.post("/users/add", data={"full_name": "Stef Staff", "username": "stef",
+                               "role": "staff", "phone_number": "",
+                               "password": "password123", "_csrf_token": _token})
+check("and one teammate as staff is welcome",
+      db("SELECT role FROM users WHERE username = 'stef'") == [("staff",)])
+cashier = sign_in("Plan Cafe", "stef")
+
+# Own branding: kept, not shown, until Pro.
+db("UPDATE cafes SET brand_name = 'Plan Cafe Brand', brand_tagline = 'Our own words' WHERE cafe_id = ?",
+   (CAFE,))
+application.cache_clear()
+dash = text(admin.get("/dashboard"))
+check("on Free the sidebar carries Refero's name, not the cafe's own",
+      "Plan Cafe Brand" not in dash and "Refero" in dash)
+
+# A trial: everything but other roles and own branding.
+set_until(CAFE, now + timedelta(days=20), plan="trial")
+dash = text(admin.get("/dashboard"))
+check("on a trial the figures are all there", "kpi--locked" not in dash and "panel--locked" not in dash)
+check("Reviews and Reports open", admin.get("/reviews").status_code == 200
+      and admin.get("/reports").status_code == 200)
+check("own branding is still Pro's", "Plan Cafe Brand" not in dash
+      and admin.get("/settings/branding").status_code == 302)
+check("and so are other roles", "Cashier - Refero Pro" in text(admin.get("/users/add")))
+
+# Pro: all of it, the saved branding back at once.
+set_until(CAFE, now + timedelta(days=20), plan="monthly")
+dash = text(admin.get("/dashboard"))
+check("on Pro the cafe's own name comes back - it was kept", "Plan Cafe Brand" in dash)
+check("Name & Symbol opens", admin.get("/settings/branding").status_code == 200)
+check("and any role can be added",
+      "Refero Pro" not in text(admin.get("/users/add")).split('id="userRoleSelect"')[1].split("</select>")[0])
 
 # =====================================================================
 print("\n=== 6. Free for life ===")

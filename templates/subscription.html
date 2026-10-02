@@ -151,6 +151,40 @@
     .sub-tag--rejected { background: rgba(225, 97, 79, .18); color: #F0A193; }
 
     .sub-link { color: var(--copper-light); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+    .sub-unlocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .sub-unlock {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        gap: 12px;
+        padding: 16px;
+        border: 1px solid var(--espresso-700);
+        border-radius: var(--radius-lg);
+        background: var(--espresso-900);
+        scroll-margin-top: 90px;
+    }
+    .sub-unlock__icon {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: rgba(var(--copper-rgb), .16);
+        color: var(--copper-light);
+        font-size: 17px;
+    }
+    .sub-unlock h3 { margin: 2px 0 4px; font-size: 15.5px; }
+    .sub-unlock p { margin: 0; color: var(--cream-dim); font-size: 13px; line-height: 1.5; }
+    .sub-unlock__state { margin-top: 8px; }
+    .sub-unlock--locked .sub-unlock__icon { background: rgba(242, 201, 76, .14); color: #F2C94C; }
+    .sub-unlock--asked {
+        border-color: rgba(var(--copper-rgb), .8);
+        background: var(--glass-on), rgba(var(--copper-rgb), .12);
+        box-shadow: var(--glass-on-edges), 0 0 0 3px rgba(var(--copper-rgb), .22);
+    }
+    .sub-tag--open { background: rgba(143, 187, 153, .18); color: #8FBB99; }
+    .sub-tag--locked { background: rgba(242, 201, 76, .16); color: #F2C94C; }
+    .sub-ask { margin: 0; padding: 12px 14px; border-radius: var(--radius-md); background: var(--espresso-900); color: var(--cream-dim); font-size: 13.5px; }
     .sub-empty { margin: 0; color: var(--cream-faint); font-size: 14px; }
 
     @media (max-width: 760px) {
@@ -184,15 +218,18 @@
                 {% elif state.plan in ('monthly', 'yearly') %}
                 <h2 id="planTitle">{{ product }}</h2>
                 <p>{{ state.label }}</p>
+                {% elif state.status == 'free' %}
+                <h2 id="planTitle">Refero Free</h2>
+                <p>The essentials, free for good</p>
                 {% elif state.plan == 'trial' %}
                 <h2 id="planTitle">{{ product }} · Free trial</h2>
-                <p>A month free, everything included</p>
+                <p>A month free - all but other roles and your own branding</p>
                 {% else %}
                 <h2 id="planTitle">{{ product }}</h2>
                 <p>{{ cafe_name }}</p>
                 {% endif %}
             </div>
-            {% if state.status != 'lifetime' %}
+            {% if state.status != 'lifetime' and admin %}
             <a class="btn btn--ghost" href="#plans" data-no-instant>
                 {{ "Adjust plan" if state.plan in ('monthly', 'yearly') else "Choose a plan" }}
             </a>
@@ -212,13 +249,15 @@
                 early adds to the end of it.
                 {% elif state.status == 'grace' %}
                 Your plan ended on {{ until_day }}. Everything keeps working until
-                {{ pause_day }} - renew before then to carry on without a break.
+                {{ pause_day }}; after that the café is on Refero Free - renew before then
+                to keep it all.
                 {% elif state.status == 'checking' %}
                 Your plan ended on {{ until_day }}, and your payment is being checked.
                 Everything stays on while it is.
-                {% elif state.status == 'paused' %}
-                Your café is resting since {{ pause_day }}. Nothing has been lost - choose
-                a plan below and everything comes back as soon as it is confirmed.
+                {% elif state.status == 'free' %}
+                You are on Refero Free. Orders at the counter and from the tables, the
+                kitchen, billing, the menu and stock all keep working. What is below comes
+                with Refero Pro, the moment it is paid for.
                 {% else %}
                 Your café is on Refero. Choose a plan below whenever you are ready.
                 {% endif %}
@@ -243,8 +282,41 @@
         {% endif %}
     </section>
 
-    {# ---- The plans ---- #}
-    {% if state.status != 'lifetime' %}
+    {# ---- What Refero Pro unlocks: where every lock leads ---- #}
+    <section class="sub-section" id="unlocks" aria-labelledby="unlocksTitle">
+        <h2 id="unlocksTitle">What Refero Pro unlocks</h2>
+        <p>{% if tier == 'pro' %}All of it is yours.{% elif tier == 'trial' %}Your free trial
+            has most of it already; your own branding and other roles come with Pro.{% else %}On
+            Refero Free these are locked. Subscribe and they open at once - nothing to set up
+            again.{% endif %}</p>
+        <div class="sub-unlocks">
+            {% for item in unlocks %}
+            <article class="sub-unlock{% if not item.open %} sub-unlock--locked{% endif %}{% if item.asked %} sub-unlock--asked{% endif %}"
+                     id="unlock-{{ item.key }}">
+                <span class="sub-unlock__icon" aria-hidden="true">
+                    <i class="bi {{ 'bi-lock-fill' if not item.open else item.icon }}"></i>
+                </span>
+                <div>
+                    <h3>{{ item.title }}</h3>
+                    <p>{{ item.gives }}</p>
+                    <div class="sub-unlock__state">
+                        {% if item.open and tier == 'trial' %}<span class="sub-tag sub-tag--open">In your free trial</span>
+                        {% elif item.open %}<span class="sub-tag sub-tag--open">Unlocked</span>
+                        {% else %}<span class="sub-tag sub-tag--locked"><i class="bi bi-lock-fill"></i> Refero Pro</span>{% endif %}
+                    </div>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% if not admin and tier != 'pro' %}
+        <p class="sub-ask" style="margin-top:14px;"><i class="bi bi-info-circle"></i>
+            Only your café's admin can subscribe - ask them, and everything above opens for the
+            whole team.</p>
+        {% endif %}
+    </section>
+
+    {# ---- The plans: the admin's ---- #}
+    {% if state.status != 'lifetime' and admin %}
     <section class="sub-section" id="plans" aria-labelledby="plansTitle">
         <h2 id="plansTitle">Plans</h2>
         <p>Everything in Refero, for your whole team. Paid in advance by UPI - nothing is
@@ -282,6 +354,7 @@
     </section>
     {% endif %}
 
+    {% if admin %}
     {# ---- How it is paid ---- #}
     <section class="sub-section" aria-labelledby="payTitle">
         <h2 id="payTitle">Payment</h2>
@@ -333,6 +406,14 @@
         <p class="sub-empty">No payments yet. Each one you make is listed here, with its invoice.</p>
         {% endif %}
     </section>
+    {% endif %}
 
 </div>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    var asked = document.querySelector(".sub-unlock--asked");
+    if (asked && asked.scrollIntoView) asked.scrollIntoView({block: "center"});
+}());
+</script>
 {% endblock %}

@@ -328,9 +328,16 @@
 
                         {# Admin only: this is the name every member of the
                            cafe sees on every page. #}
+                        {% if plan_allows('branding') %}
                         <a href="{{ url_for('branding') }}" class="profile-dropdown__item">
                             <i class="bi bi-bookmark-star"></i><span>Name &amp; Symbol</span>
                         </a>
+                        {% else %}
+                        <a href="{{ unlock_url('branding') }}" class="profile-dropdown__item" data-locked>
+                            <i class="bi bi-bookmark-star"></i><span>Name &amp; Symbol</span>
+                            <i class="bi bi-lock-fill plan-lock" title="Comes with Refero Pro" aria-label="Locked - Refero Pro"></i>
+                        </a>
+                        {% endif %}
 
                         {# Admin only: the rate decides what every future bill
                            charges, so it is not a cashier's to move. #}
@@ -452,9 +459,10 @@
 
                 {# What customers said. #}
                 {% if user_can('reviews') %}
-                <a href="{{ url_for('reviews') }}"
-                   class="nav-link {{ 'active' if request.endpoint in ['reviews'] else '' }}">
+                <a href="{{ url_for('reviews') if plan_allows('reviews') else unlock_url('reviews') }}"
+                   class="nav-link {{ 'active' if request.endpoint in ['reviews'] else '' }}{{ ' nav-link--locked' if not plan_allows('reviews') }}">
                     <i class="bi bi-star"></i><span>Reviews</span>
+                    {% if not plan_allows('reviews') %}<span class="nav-lock" title="Comes with Refero Pro"><i class="bi bi-lock-fill" aria-hidden="true"></i><span class="sr-only">Locked - Refero Pro</span></span>{% endif %}
                 </a>
                 {% endif %}
 
@@ -490,11 +498,12 @@
                 {% endif %}
 
                 {% if user_can('reports') %}
-                <a href="{{ url_for('reports') }}"
+                <a href="{{ url_for('reports') if plan_allows('reports') else unlock_url('reports') }}"
                    data-tour="reports"
-                   class="nav-link {{ 'active' if request.endpoint in ['reports'] else '' }}">
+                   class="nav-link {{ 'active' if request.endpoint in ['reports'] else '' }}{{ ' nav-link--locked' if not plan_allows('reports') }}">
                     <i class="bi bi-bar-chart-line"></i>
                     <span>Reports</span>
+                    {% if not plan_allows('reports') %}<span class="nav-lock" title="Comes with Refero Pro"><i class="bi bi-lock-fill" aria-hidden="true"></i><span class="sr-only">Locked - Refero Pro</span></span>{% endif %}
                 </a>
                 {% endif %}
                 {# Not a task: whoever manages the team can make admins. #}
@@ -1107,7 +1116,8 @@ window.CafeShell = {
 
         function mark() {
             menu.querySelectorAll("a.profile-dropdown__item[href]").forEach(function (item) {
-                const here = new URL(item.href, location.href).pathname === location.pathname;
+                const here = !item.hasAttribute("data-locked")
+                    && new URL(item.href, location.href).pathname === location.pathname;
                 item.classList.toggle("is-current", here);
                 if (here) item.setAttribute("aria-current", "page");
                 else item.removeAttribute("aria-current");

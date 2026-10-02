@@ -352,9 +352,15 @@
         <a href="#roles" class="btn btn--ghost" data-no-instant>
             <i class="bi bi-shield-check"></i> Roles &amp; access
         </a>
+        {% if team_full %}
+        <a href="{{ unlock_url('team') }}" class="btn btn--primary" title="Refero Free has room for one teammate">
+            <i class="bi bi-lock-fill"></i> Add teammate
+        </a>
+        {% else %}
         <a href="{{ url_for('add_user') }}" class="btn btn--primary">
             <i class="bi bi-person-plus"></i> Add teammate
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -510,9 +516,15 @@
             <li><i class="bi bi-check2-circle"></i> Deactivate rather than delete when somebody leaves for a while.</li>
             <li><i class="bi bi-check2-circle"></i> Keep admin for the people who run the café.</li>
         </ul>
+        {% if team_full %}
+        <a href="{{ unlock_url('team') }}" class="btn btn--primary" title="Refero Free has room for one teammate">
+            <i class="bi bi-lock-fill"></i> Add a teammate
+        </a>
+        {% else %}
         <a href="{{ url_for('add_user') }}" class="btn btn--primary">
             <i class="bi bi-person-plus"></i> Add a teammate
         </a>
+        {% endif %}
     </section>
 
 </div>

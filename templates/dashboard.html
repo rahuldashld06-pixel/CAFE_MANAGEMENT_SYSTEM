@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_stars.html" import stars %}
 {% from "_food_art.html" import food_art %}
+{% from "_plan_lock.html" import lock_veil, locked_kpi %}
 
 {% block title %}Dashboard{% endblock %}
 
@@ -38,7 +39,9 @@
      ========================================== -->
 <section class="kpi-grid" aria-label="Figures">
 
-    {% if user_can('dashboard') %}
+    {% if user_can('dashboard') and not plan_allows('revenue') %}
+    {{ locked_kpi("kpiSales", "Sales today", "revenue") }}
+    {% elif user_can('dashboard') %}
     <article class="kpi" id="kpiSales">
         <div class="kpi__top">
             <span class="kpi__label" data-kpi-label="Sales">Sales today</span>
@@ -65,7 +68,9 @@
         <div class="kpi__foot" data-kpi-foot>&nbsp;</div>
     </article>
 
-    {% if user_can('dashboard') %}
+    {% if user_can('dashboard') and not plan_allows('revenue') %}
+    {{ locked_kpi("kpiAverage", "Average bill today", "revenue") }}
+    {% elif user_can('dashboard') %}
     <article class="kpi" id="kpiAverage">
         <div class="kpi__top">
             <span class="kpi__label" data-kpi-label="Average bill">Average bill today</span>
@@ -76,6 +81,9 @@
     </article>
     {% endif %}
 
+    {% if not plan_allows('stock_alerts') %}
+    {{ locked_kpi("kpiStock", "Stock to check", "stock_alerts") }}
+    {% else %}
     <article class="kpi kpi--warn" id="kpiStock">
         <div class="kpi__top">
             <span class="kpi__label">Stock to check</span>
@@ -94,6 +102,7 @@
             </span>
         </div>
     </article>
+    {% endif %}
 
 </section>
 
@@ -103,6 +112,17 @@
      ========================================== -->
 <div class="dash-row">
 
+    {% if not plan_allows('revenue') %}
+    <section class="panel panel--locked" aria-labelledby="curveTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="curveTitle">Sales overview</h2>
+                <p>Your takings over the day, the week or the month</p>
+            </div>
+        </div>
+        {{ lock_veil("revenue", "The sales chart - takings over any period, against the one before - comes with Refero Pro.") }}
+    </section>
+    {% else %}
     <section class="panel" aria-labelledby="curveTitle">
         <div class="dash-panel__head">
             <div>
@@ -121,6 +141,7 @@
             <div class="curve__empty" id="curveEmpty" hidden>No paid bills in this period yet</div>
         </div>
     </section>
+    {% endif %}
 
     <section class="panel" aria-labelledby="liveTitle">
         <div class="dash-panel__head">
@@ -143,6 +164,17 @@
      ========================================== -->
 <div class="dash-row">
 
+    {% if not plan_allows('revenue') %}
+    <section class="panel panel--locked" aria-labelledby="popularTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="popularTitle">Popular today</h2>
+                <p>What sold most, by how many and for how much</p>
+            </div>
+        </div>
+        {{ lock_veil("revenue", "Your best sellers and what they took come with Refero Pro.") }}
+    </section>
+    {% else %}
     <section class="panel" aria-labelledby="popularTitle">
         <div class="dash-panel__head">
             <div>
@@ -167,9 +199,21 @@
             </table>
         </div>
     </section>
+    {% endif %}
 
     {# The stock that needs somebody, by name. Counts alone said something
        was wrong without saying what to reorder. #}
+    {% if not plan_allows('stock_alerts') %}
+    <section class="panel panel--locked" aria-labelledby="stockTitle">
+        <div class="dash-panel__head">
+            <div>
+                <h2 id="stockTitle">Stock to check</h2>
+                <p>Out of stock first, then the fewest left</p>
+            </div>
+        </div>
+        {{ lock_veil("stock_alerts", "Alerts for what has run out and what is running low come with Refero Pro.") }}
+    </section>
+    {% else %}
     <section class="panel stock-panel" id="stock-alert-panel" aria-labelledby="stockTitle">
         <div class="dash-panel__head">
             <div>
@@ -184,6 +228,7 @@
             {% include "_stock_list.html" %}
         </div>
     </section>
+    {% endif %}
 
 </div>
 
@@ -195,6 +240,17 @@
      be proud of and the one to fix are the first things read. What they
      wrote is on the Reviews page.
      ========================================== -->
+{% if not plan_allows('reviews') %}
+<section class="panel panel--locked" aria-labelledby="ratingsTitle">
+    <div class="dash-panel__head">
+        <div>
+            <h2 id="ratingsTitle">Dish ratings</h2>
+            <p>Every dish customers rated, best to worst</p>
+        </div>
+    </div>
+    {{ lock_veil("reviews", "Dish ratings from your customers' reviews come with Refero Pro.") }}
+</section>
+{% else %}
 <section class="panel dish-chart" aria-labelledby="ratingsTitle">
     <div class="dash-panel__head">
         <div>
@@ -257,6 +313,7 @@
     <div class="dash-empty">No ratings yet. Customers rate each dish from their phone once a table-QR order is ready.</div>
     {% endif %}
 </section>
+{% endif %}
 
 <script nonce="{{ csp_nonce() }}" src="{{ asset_url('js/charts.js') }}"></script>
 <script nonce="{{ csp_nonce() }}">
@@ -314,6 +371,7 @@
 
     // ---- The curve: drawn by charts.js, shared with Reports ----
     function drawCurve(points) {
+        if (!document.getElementById("curve")) return;
         lastCurve = points || [];
         window.CafeCharts.curve({
             box: document.getElementById("curve"),
@@ -345,7 +403,8 @@
                    '<span><strong>#' + esc(row.number) + '</strong><small>' +
                    row.items + (row.items === 1 ? " item" : " items") + " &middot; " +
                    esc(row.source) + '</small></span>' + statusPill(row.status) +
-                   '<span class="live-row__total">₹' + money.format(row.total) + '</span></a></li>';
+                   (row.total === null || row.total === undefined ? '' :
+                    '<span class="live-row__total">₹' + money.format(row.total) + '</span>') + '</a></li>';
         }).join("");
     }
 
@@ -443,6 +502,14 @@
             .then(function (data) {
                 // A slower answer to an older question is thrown away.
                 if (mine !== asked || data.error) return;
+                if (data.locked) {
+                    // Refero Free: orders and the live list only.
+                    if (period === "today" && data.orders) {
+                        document.getElementById("today-orders").textContent = data.orders.value;
+                    }
+                    drawLive(data.live || [], data.waiting || 0);
+                    return;
+                }
                 setKpi("kpiSales", money.format(data.sales.value),
                        data.sales.change, data.versus);
                 setKpi("kpiOrders", period === "today" ? null : data.orders.value,
@@ -496,7 +563,7 @@
                         revenue.textContent = money.format(data.today_revenue);
                     }
                 }
-                drawStock(data);
+                if (!data.locked) drawStock(data);
             })
             .catch(function (error) { console.error("Live dashboard update failed:", error); });
     }

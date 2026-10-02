@@ -1,0 +1,32 @@
+{# ------------------------------------------------------------------
+   A Refero Pro feature, locked: what it would show, veiled, with the
+   way to it. The figures behind a lock are never sent to the page -
+   the veil is drawn over a shape, not over the real numbers.
+   ------------------------------------------------------------------ #}
+{% macro lock_veil(feature, words) %}
+<div class="lock-veil">
+    <div class="lock-veil__ghost" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <div class="lock-veil__card">
+        <span class="lock-veil__icon" aria-hidden="true"><i class="bi bi-lock-fill"></i></span>
+        <p>{{ words }}</p>
+        <a class="btn btn--primary btn--sm" href="{{ unlock_url(feature) }}">
+            <i class="bi bi-gem"></i> Unlock with Refero Pro
+        </a>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro locked_kpi(id, label, feature) %}
+<article class="kpi kpi--locked" id="{{ id }}">
+    <div class="kpi__top">
+        <span class="kpi__label">{{ label }}</span>
+        <span class="kpi__icon"><i class="bi bi-lock-fill"></i></span>
+    </div>
+    <div class="kpi__value kpi__value--veiled" aria-hidden="true">&#8377; &bull;&bull;,&bull;&bull;&bull;</div>
+    <a class="kpi__unlock" href="{{ unlock_url(feature) }}">
+        <i class="bi bi-lock-fill"></i> Unlock with Refero Pro
+    </a>
+</article>
+{% endmacro %}

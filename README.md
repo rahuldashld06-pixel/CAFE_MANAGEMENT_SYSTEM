@@ -40,12 +40,33 @@ branding, fully isolated from the others.
   trial) ends, so paying early loses nothing. A UPI reference can be
   used once. Prepaid - nothing is taken again by itself: a reminder on
   every page from a week before the end, three days' grace after it,
-  and then the cafe rests - its staff are told to ask the admin, the
-  table QR sends customers to the counter, and the admin can still sign
-  in and pay. Nothing is deleted, and a payment being checked keeps a
-  cafe working for three days meanwhile. Cards cannot be taken this way:
-  a UPI app can, and the app cannot tell on its own that money arrived,
-  which is why a person confirms it.
+  and then the cafe is on Refero Free. Nothing is deleted, and a payment
+  being checked counts as Pro for three days meanwhile. Cards cannot be
+  taken this way: a UPI app can, and the app cannot tell on its own that
+  money arrived, which is why a person confirms it.
+- **Free, trial and Pro.** What each plan opens is `PLAN_FEATURES` in
+  app.py, one list:
+
+  | | Free | Free trial | Refero Pro |
+  |---|---|---|---|
+  | Orders (counter and table QR), kitchen, billing, menu, stock | yes | yes | yes |
+  | Sales figures, the sales chart, best sellers | locked | yes | yes |
+  | Stock alerts | locked | yes | yes |
+  | Reviews and dish ratings | locked | yes | yes |
+  | Reports and their download | locked | yes | yes |
+  | Teammates | one, as staff | staff only | any role, any number |
+  | The cafe's own name, symbol and sign-in photo | Refero's shown | Refero's shown | yes |
+
+  A locked option wears a lock - in the sidebar, the profile menu, on a
+  dashboard card - and leads to its own line under "What Refero Pro
+  unlocks" on the Subscription page, picked out. The whole team can read
+  that page; choosing, paying and the invoices are the admin's. The
+  figures behind a lock are never worked out or sent - the dashboard
+  and its feeds leave them out, and the veil is drawn over a shape, not
+  over the numbers. A cafe's own branding is kept while it is locked,
+  and comes back the moment it subscribes; teammates it already has
+  keep working. Tests start every new cafe on Pro (`NEW_CAFE_PLAN`,
+  ignored on the live site) except the suites about plans.
 - **The developer's console (`/platform`).** Behind its own password
   (`PLATFORM_PASSWORD`; unset, it does not exist), five wrong guesses
   lock that address out for fifteen minutes, and it asks again after
@@ -960,7 +981,7 @@ python tests/save_queue_browser_test.py # expect PASSED: 22  FAILED: 0
 python tests/customer_menu_browser_test.py # expect PASSED: 69  FAILED: 0
 python tests/find_order_test.py   # expect PASSED: 34  FAILED: 0
 python tests/error_pages_test.py  # expect PASSED: 36  FAILED: 0
-python tests/subscription_test.py # expect PASSED: 60  FAILED: 0
+python tests/subscription_test.py # expect PASSED: 83  FAILED: 0
 python tests/console_test.py      # expect PASSED: 50  FAILED: 0
 ```
 

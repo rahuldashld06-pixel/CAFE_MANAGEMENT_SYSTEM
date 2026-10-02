@@ -6650,3 +6650,106 @@ div.food-art {
     border-radius: 50%;
     background: transparent;
 }
+
+/* ==========================================================
+   Refero Pro, locked: the lock in the sidebar and the profile
+   menu, and the veil over a dashboard card or panel. Every lock
+   leads to its line on the Subscription page.
+   ========================================================== */
+.nav-link { position: relative; }
+
+.nav-lock {
+    position: absolute;
+    top: 7px;
+    right: 9px;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(var(--copper-rgb), .2);
+    color: var(--copper-light);
+}
+
+.nav-link .nav-lock i { width: auto; font-size: 9.5px; color: inherit; }
+
+:root.guide-full .nav-lock { top: 50%; transform: translateY(-50%); right: 12px; }
+
+.nav-link--locked { opacity: .78; }
+.nav-link--locked:hover { opacity: 1; }
+
+.plan-lock { margin-left: auto; color: var(--copper-light); font-size: 12px; }
+
+.kpi--locked { position: relative; }
+.kpi__value--veiled {
+    filter: blur(7px);
+    opacity: .55;
+    user-select: none;
+}
+.kpi__unlock {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    color: var(--copper-light);
+    font-size: 12.5px;
+    font-weight: 800;
+    text-decoration: none;
+}
+.kpi__unlock:hover { text-decoration: underline; }
+
+.panel--locked { position: relative; overflow: hidden; }
+
+.lock-veil {
+    position: relative;
+    min-height: 210px;
+    display: grid;
+    place-items: center;
+}
+
+.lock-veil__ghost {
+    position: absolute;
+    inset: 14px 6px 6px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    filter: blur(5px);
+    opacity: .5;
+}
+.lock-veil__ghost span {
+    flex: 1 1 0;
+    border-radius: 8px 8px 2px 2px;
+    background: linear-gradient(180deg, rgba(var(--copper-rgb), .55), rgba(var(--copper-rgb), .12));
+}
+.lock-veil__ghost span:nth-child(1) { height: 38%; }
+.lock-veil__ghost span:nth-child(2) { height: 62%; }
+.lock-veil__ghost span:nth-child(3) { height: 47%; }
+.lock-veil__ghost span:nth-child(4) { height: 80%; }
+.lock-veil__ghost span:nth-child(5) { height: 55%; }
+.lock-veil__ghost span:nth-child(6) { height: 70%; }
+.lock-veil__ghost span:nth-child(7) { height: 44%; }
+
+.lock-veil__card {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    max-width: 340px;
+    padding: 18px 20px;
+    border: 1px solid rgba(var(--copper-rgb), .35);
+    border-radius: var(--radius-lg);
+    background: var(--glass-on), rgba(30, 20, 14, .82);
+    box-shadow: var(--glass-on-edges);
+    text-align: center;
+}
+.lock-veil__card p { margin: 0; color: var(--cream-dim); font-size: 13.5px; line-height: 1.5; }
+.lock-veil__icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(var(--copper-rgb), .2);
+    color: var(--copper-light);
+    font-size: 17px;
+}
